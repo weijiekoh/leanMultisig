@@ -1,6 +1,6 @@
-<h1 align="center">Whirlaway 🐎</h1>
+<h1 align="center">♦ leanMultisig ♦</h1>
 
-In this branch lives a simple [zkVM](minimal_zkVM.pdf).
+XMSS + Simple [zkVM](minimal_zkVM.pdf) = PQ signatures, with unbounded aggregation
 
 ## AIR Proving System
 
@@ -47,5 +47,6 @@ The full recursion program is not finished yet. Instead, we prove validity of a 
 
 ## Credits
 
-- [Plonky3](https://github.com/Plonky3/Plonky3) for its finite field crates and poseidon2 AIR arithmetization.
+- [Plonky3](https://github.com/Plonky3/Plonky3) for its various performant crates (Finite fields, poseidon2 AIR etc)
 - [whir-p3](https://github.com/tcoratger/whir-p3): a Plonky3-compatible WHIR implementation
+- [Whirlaway](https://github.com/TomWambsgans/Whirlaway): Multilinear snark for AIR + minimal zkVM
