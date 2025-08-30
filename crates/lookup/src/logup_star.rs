@@ -264,15 +264,14 @@ pub fn compute_pushforward<F: PrimeField64, EF: ExtensionField<EF>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use p3_field::PrimeCharacteristicRing;
-    use p3_field::extension::BinomialExtensionField;
+    use p3_field::{extension::QuinticExtensionField, PrimeCharacteristicRing};
     use p3_koala_bear::KoalaBear;
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use utils::{build_challenger, init_tracing};
     use whir_p3::poly::evals::{EvaluationsList, eval_eq};
 
     type F = KoalaBear;
-    type EF = BinomialExtensionField<F, 8>;
+    type EF = QuinticExtensionField<KoalaBear>;
 
     #[test]
     fn test_logup_star() {

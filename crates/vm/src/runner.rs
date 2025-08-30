@@ -137,18 +137,23 @@ impl Memory {
         Ok(())
     }
 
-    pub fn get_vector(&self, index: usize) -> Result<[F; DIMENSION], RunnerError> {
+    pub fn get_vector(&self, index: usize) -> Result<[F; VECTOR_LEN], RunnerError> {
         Ok(self.get_vectorized_slice(index, 1)?.try_into().unwrap())
     }
 
-    pub fn get_extension(&self, index: usize) -> Result<EF, RunnerError> {
-        Ok(EF::from_basis_coefficients_slice(&self.get_vector(index)?).unwrap())
+    pub fn get_ef_element(&self, index: usize) -> Result<EF, RunnerError> {
+        // index: non vectorized pointer
+        let mut coeffs = [F::ZERO; DIMENSION];
+        for i in 0..DIMENSION {
+            coeffs[i] = self.get(index + i)?;
+        }
+        Ok(EF::from_basis_coefficients_slice(&coeffs).unwrap())
     }
 
     pub fn get_vectorized_slice(&self, index: usize, len: usize) -> Result<Vec<F>, RunnerError> {
-        let mut vector = Vec::with_capacity(len * DIMENSION);
-        for i in 0..len * DIMENSION {
-            vector.push(self.get(index * DIMENSION + i)?);
+        let mut vector = Vec::with_capacity(len * VECTOR_LEN);
+        for i in 0..len * VECTOR_LEN {
+            vector.push(self.get(index * VECTOR_LEN + i)?);
         }
         Ok(vector)
     }
@@ -174,18 +179,25 @@ impl Memory {
         Ok(vector)
     }
 
-    pub fn set_vector(&mut self, index: usize, value: [F; DIMENSION]) -> Result<(), RunnerError> {
+    pub fn set_ef_element(&mut self, index: usize, value: EF) -> Result<(), RunnerError> {
+        for (i, v) in value.as_basis_coefficients_slice().iter().enumerate() {
+            self.set(index + i, *v)?;
+        }
+        Ok(())
+    }
+
+    pub fn set_vector(&mut self, index: usize, value: [F; VECTOR_LEN]) -> Result<(), RunnerError> {
         for (i, v) in value.iter().enumerate() {
-            let idx = DIMENSION * index + i;
+            let idx = VECTOR_LEN * index + i;
             self.set(idx, *v)?;
         }
         Ok(())
     }
 
     pub fn set_vectorized_slice(&mut self, index: usize, value: &[F]) -> Result<(), RunnerError> {
-        assert!(value.len() % DIMENSION == 0);
+        assert!(value.len() % VECTOR_LEN == 0);
         for (i, v) in value.iter().enumerate() {
-            let idx = DIMENSION * index + i;
+            let idx = VECTOR_LEN * index + i;
             self.set(idx, *v)?;
         }
         Ok(())
@@ -240,19 +252,21 @@ pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
     public_memory[PUBLIC_INPUT_START..][..public_input.len()].copy_from_slice(public_input);
 
     // "zero" vector
-    for i in ZERO_VEC_PTR * 8..(ZERO_VEC_PTR + 2) * 8 {
+    for i in ZERO_VEC_PTR * VECTOR_LEN..(ZERO_VEC_PTR + 2) * VECTOR_LEN {
         public_memory[i] = F::ZERO;
     }
 
     // "one" vector
-    public_memory[ONE_VEC_PTR * 8] = F::ONE;
-    for i in ONE_VEC_PTR * 8 + 1..(ONE_VEC_PTR + 1) * 8 {
+    public_memory[ONE_VEC_PTR * VECTOR_LEN] = F::ONE;
+    for i in ONE_VEC_PTR * VECTOR_LEN + 1..(ONE_VEC_PTR + 1) * VECTOR_LEN {
         public_memory[i] = F::ZERO;
     }
 
-    public_memory[POSEIDON_16_NULL_HASH_PTR * 8..(POSEIDON_16_NULL_HASH_PTR + 2) * 8]
+    public_memory
+        [POSEIDON_16_NULL_HASH_PTR * VECTOR_LEN..(POSEIDON_16_NULL_HASH_PTR + 2) * VECTOR_LEN]
         .copy_from_slice(&get_poseidon16().permute([F::ZERO; 16]));
-    public_memory[POSEIDON_24_NULL_HASH_PTR * 8..(POSEIDON_24_NULL_HASH_PTR + 1) * 8]
+    public_memory
+        [POSEIDON_24_NULL_HASH_PTR * VECTOR_LEN..(POSEIDON_24_NULL_HASH_PTR + 1) * VECTOR_LEN]
         .copy_from_slice(&get_poseidon24().permute([F::ZERO; 24])[16..]);
     public_memory
 }
@@ -328,7 +342,7 @@ fn execute_bytecode_helper(
                     let size = size.read_value(&memory, fp)?.to_usize();
 
                     if *vectorized {
-                        // find the next multiple of 8
+                        // find the next multiple of VECTOR_LEN
                         memory.set(fp + *offset, F::from_usize(ap_vec))?;
                         ap_vec += size;
                     } else {
@@ -495,14 +509,14 @@ fn execute_bytecode_helper(
                 let arg0 = memory.get_vector(a_value.to_usize())?;
                 let arg1 = memory.get_vector(b_value.to_usize())?;
 
-                let mut input = [F::ZERO; DIMENSION * 2];
-                input[..DIMENSION].copy_from_slice(&arg0);
-                input[DIMENSION..].copy_from_slice(&arg1);
+                let mut input = [F::ZERO; VECTOR_LEN * 2];
+                input[..VECTOR_LEN].copy_from_slice(&arg0);
+                input[VECTOR_LEN..].copy_from_slice(&arg1);
 
                 poseidon_16.permute_mut(&mut input);
 
-                let res0: [F; DIMENSION] = input[..DIMENSION].try_into().unwrap();
-                let res1: [F; DIMENSION] = input[DIMENSION..].try_into().unwrap();
+                let res0: [F; VECTOR_LEN] = input[..VECTOR_LEN].try_into().unwrap();
+                let res1: [F; VECTOR_LEN] = input[VECTOR_LEN..].try_into().unwrap();
 
                 memory.set_vector(res_value.to_usize(), res0)?;
                 memory.set_vector(1 + res_value.to_usize(), res1)?;
@@ -520,14 +534,14 @@ fn execute_bytecode_helper(
                 let arg1 = memory.get_vector(1 + a_value.to_usize())?;
                 let arg2 = memory.get_vector(b_value.to_usize())?;
 
-                let mut input = [F::ZERO; DIMENSION * 3];
-                input[..DIMENSION].copy_from_slice(&arg0);
-                input[DIMENSION..2 * DIMENSION].copy_from_slice(&arg1);
-                input[2 * DIMENSION..].copy_from_slice(&arg2);
+                let mut input = [F::ZERO; VECTOR_LEN * 3];
+                input[..VECTOR_LEN].copy_from_slice(&arg0);
+                input[VECTOR_LEN..2 * VECTOR_LEN].copy_from_slice(&arg1);
+                input[2 * VECTOR_LEN..].copy_from_slice(&arg2);
 
                 poseidon_24.permute_mut(&mut input);
 
-                let res: [F; DIMENSION] = input[2 * DIMENSION..].try_into().unwrap();
+                let res: [F; VECTOR_LEN] = input[2 * VECTOR_LEN..].try_into().unwrap();
 
                 memory.set_vector(res_value.to_usize(), res)?;
 
@@ -545,19 +559,15 @@ fn execute_bytecode_helper(
                 let ptr_arg_1 = arg1.read_value(&memory, fp)?.to_usize();
                 let ptr_res = res.read_value(&memory, fp)?.to_usize();
 
-                let slice_0 = (ptr_arg_0..ptr_arg_0 + *size)
-                    .map(|i| Ok(EF::from_basis_coefficients_slice(&memory.get_vector(i)?).unwrap()))
-                    .collect::<Result<Vec<EF>, _>>()?;
+                let mut slice_0 = Vec::new();
+                let mut slice_1 = Vec::new();
+                for i in 0..*size {
+                    slice_0.push(memory.get_ef_element(ptr_arg_0 + i * DIMENSION)?);
+                    slice_1.push(memory.get_ef_element(ptr_arg_1 + i * DIMENSION)?);
+                }
 
-                let slice_1 = (ptr_arg_1..ptr_arg_1 + *size)
-                    .map(|i| Ok(EF::from_basis_coefficients_slice(&memory.get_vector(i)?).unwrap()))
-                    .collect::<Result<Vec<EF>, _>>()?;
-
-                let dot_product = dot_product::<EF, _, _>(slice_0.into_iter(), slice_1.into_iter())
-                    .as_basis_coefficients_slice()
-                    .try_into()
-                    .unwrap();
-                memory.set_vector(ptr_res, dot_product)?;
+                let dot_product = dot_product::<EF, _, _>(slice_0.into_iter(), slice_1.into_iter());
+                memory.set_ef_element(ptr_res, dot_product)?;
 
                 pc += 1;
             }
@@ -580,8 +590,9 @@ fn execute_bytecode_helper(
                     .collect::<Result<Vec<EF>, _>>()?;
 
                 let eval = slice_coeffs.evaluate(&MultilinearPoint(point.clone()));
-                let eval_base: [F; 8] = eval.as_basis_coefficients_slice().try_into().unwrap();
-                memory.set_vector(ptr_res, eval_base)?;
+                let mut eval_base = eval.as_basis_coefficients_slice().to_vec();
+                eval_base.resize(VECTOR_LEN, F::ZERO);
+                memory.set_vector(ptr_res, eval_base.try_into().unwrap())?;
 
                 pc += 1;
             }

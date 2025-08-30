@@ -1,8 +1,7 @@
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::PrimeCharacteristicRing;
-use p3_field::extension::BinomialExtensionField;
+use p3_field::{extension::QuinticExtensionField, PrimeCharacteristicRing};
 use p3_koala_bear::KoalaBear;
 use p3_matrix::Matrix;
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -14,7 +13,7 @@ use crate::{prove_many_air_2, table::AirTable, verify_many_air_2, witness::AirWi
 const UNIVARIATE_SKIPS: usize = 3;
 
 type F = KoalaBear;
-type EF = BinomialExtensionField<F, 8>;
+type EF = QuinticExtensionField<F>;
 
 struct ExampleStructuredAir<const N_COLUMNS: usize, const N_PREPROCESSED_COLUMNS: usize>;
 

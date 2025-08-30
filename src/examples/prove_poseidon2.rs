@@ -2,7 +2,7 @@ use air::table::AirTable;
 use air::witness::AirWitness;
 use p3_air::BaseAir;
 use p3_field::PrimeField64;
-use p3_field::extension::BinomialExtensionField;
+use p3_field::extension::QuinticExtensionField;
 use p3_koala_bear::KoalaBear;
 use p3_symmetric::Permutation;
 use p3_util::log2_ceil_usize;
@@ -20,9 +20,8 @@ use utils::{
 use whir_p3::dft::EvalsDft;
 use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfigBuilder};
 
-const EXTENSION_DEGREE: usize = 8;
 type F = KoalaBear;
-type EF = BinomialExtensionField<F, EXTENSION_DEGREE>;
+type EF = QuinticExtensionField<F>;
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2Benchmark {

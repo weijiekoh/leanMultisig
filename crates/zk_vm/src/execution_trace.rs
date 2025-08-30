@@ -4,6 +4,7 @@ use crate::{
     COL_INDEX_MEM_VALUE_A, COL_INDEX_MEM_VALUE_B, COL_INDEX_MEM_VALUE_C, COL_INDEX_PC,
     N_EXEC_COLUMNS, N_INSTRUCTION_COLUMNS,
 };
+use p3_field::BasedVectorSpace;
 use p3_field::Field;
 use p3_field::PrimeCharacteristicRing;
 use p3_symmetric::Permutation;
@@ -177,7 +178,8 @@ pub fn get_execution_trace(
                 let slice_1 = memory
                     .get_vectorized_slice_extension(addr_1, *size)
                     .unwrap();
-                let res = memory.get_extension(addr_res).unwrap();
+                let res = memory.get_ef_element(addr_res).unwrap();
+                todo!();
                 dot_products.push(WitnessDotProduct {
                     cycle,
                     addr_0,
@@ -201,7 +203,9 @@ pub fn get_execution_trace(
                 let point = memory
                     .get_vectorized_slice_extension(addr_point, *n_vars)
                     .unwrap();
-                let res = memory.get_extension(addr_res).unwrap();
+                let res = memory.get_vector(addr_res).unwrap();
+                assert!(res[DIMENSION..].iter().all(|&x| x.is_zero()));
+                let res = EF::from_basis_coefficients_slice(&res[..DIMENSION]).unwrap();
                 vm_multilinear_evals.push(WitnessMultilinearEval {
                     cycle,
                     addr_coeffs,

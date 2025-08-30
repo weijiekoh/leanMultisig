@@ -67,9 +67,9 @@ pub enum Instruction {
         res: MemOrFp, // vectorized pointer, of size 1 (3rd = last output) (The Fp would never be used in practice)
     },
     DotProductExtensionExtension {
-        arg0: MemOrConstant, // vectorized pointer
-        arg1: MemOrConstant, // vectorized pointer
-        res: MemOrFp,        // vectorized pointer, of size 1 (never Fp in practice)
+        arg0: MemOrConstant, // normal pointer, of size `size`
+        arg1: MemOrConstant, // normal pointer, of size `size`
+        res: MemOrFp,        // normal pointer, of size 1 (never Fp in practice)
         size: usize,
     },
     MultilinearEval {

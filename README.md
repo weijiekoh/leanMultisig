@@ -10,7 +10,7 @@ The core argument builds upon [SuperSpartan](https://eprint.iacr.org/2023/552.pd
 
 Key techniques:
 
-- AIR table committed as a single multilinear polynomial
+- AIR table committed as a single multilinear polynomial, using the [WHIR](https://eprint.iacr.org/2024/1586.pdf) PCS
 - Sumcheck + "Univariate Skip" from [Some Improvements for the PIOP for ZeroCheck](https://eprint.iacr.org/2024/108.pdf) (Angus Gruen)
 
 ## Benchmarks
@@ -18,6 +18,8 @@ Key techniques:
 cpu: i9-12900H, ram: 32 gb
 
 > TLDR: Very slow, **but there is hope** (cf [TODO](TODO.md))
+
+Conjecture: 4.12 of [WHIR](https://eprint.iacr.org/2024/1586.pdf), "up to capacity" (TODO: a version without any conjecture, requires degree 6 extension of KoalaBear)
 
 ### Poseidon2
 

@@ -464,13 +464,12 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use p3_field::extension::BinomialExtensionField;
+    use p3_field::extension::QuinticExtensionField;
     use p3_koala_bear::KoalaBear;
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use utils::{build_prover_state, build_verifier_state};
 
-    type F = KoalaBear;
-    type EF = BinomialExtensionField<F, 8>;
+    type EF = QuinticExtensionField<KoalaBear>;
 
     fn sum_all_quotients(layer: &[EF]) -> EF {
         (0..layer.num_evals() / 2)
@@ -502,7 +501,7 @@ mod tests {
 
         let time = Instant::now();
         let claim = Evaluation { point, value: eval };
-        prove_gkr_quotient_step_packed(&mut prover_state, &pack_extension(&big), &claim);
+        let _ = prove_gkr_quotient_step_packed(&mut prover_state, &pack_extension(&big), &claim);
         dbg!(time.elapsed());
 
         let mut verifier_state = build_verifier_state(&prover_state);
@@ -523,7 +522,7 @@ mod tests {
 
         let mut prover_state = build_prover_state();
 
-        prove_gkr_quotient(&mut prover_state, pack_extension(&layer));
+        let _ = prove_gkr_quotient(&mut prover_state, pack_extension(&layer));
 
         let mut verifier_state = build_verifier_state(&prover_state);
 

@@ -47,6 +47,7 @@ if __name__ == "__main__":
 
     create_duration_graph(data=[
         ('2025-08-27', 85000),
+        ('2025-08-30', 95000),
     ], target=300_000, target_label="Target (300.000 Poseidon2 / s)", title="Raw Poseidon2", y_legend= "Poseidons proven / s", file = "raw_poseidons")
 
     create_duration_graph(data=[

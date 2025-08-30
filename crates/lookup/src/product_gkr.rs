@@ -223,13 +223,12 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use p3_field::extension::BinomialExtensionField;
+    use p3_field::extension::QuinticExtensionField;
     use p3_koala_bear::KoalaBear;
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use utils::{assert_eq_many, build_prover_state, build_verifier_state, pack_extension};
 
-    type F = KoalaBear;
-    type EF = BinomialExtensionField<F, 8>;
+    type EF = QuinticExtensionField<KoalaBear>;
 
     #[test]
     fn test_gkr_product_step() {

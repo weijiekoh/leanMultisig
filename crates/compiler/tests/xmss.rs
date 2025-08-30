@@ -21,7 +21,15 @@ fn test_verify_merkle_path() {
         neighbours = private_input_start / 8;
         merkle_root = merkle_step(0, HEIGHT, thing_to_hash, are_left, neighbours);
         print_chunk_of_8(merkle_root);
-        dot_product(merkle_root, pointer_to_one_vector, claimed_merkle_root, 1);
+        assert_digest_eq(merkle_root,  claimed_merkle_root);
+        return;
+    }
+
+    fn assert_digest_eq(a, b) {
+        a_ptr = a * 8;
+        b_ptr = b * 8;
+        dot_product(a_ptr, pointer_to_one_vector * 8, b_ptr, 1);
+        dot_product(a_ptr + 3, pointer_to_one_vector * 8, b_ptr + 3, 1);
         return;
     }
 
@@ -44,6 +52,7 @@ fn test_verify_merkle_path() {
         res = merkle_step(next_step, height, hashed, next_are_left, next_neighbours);
         return res;
     }
+
     fn print_chunk_of_8(arr) {
         reindexed_arr = arr * 8;
         for i in 0..8 {
@@ -197,8 +206,16 @@ fn test_verify_wots_signature() {
         message_hash = wots_public_key_hash + 1;
         signature = private_input_start / 8;
         wots_public_key_hash_recovered = wots_recover_pub_key_hashed(message_hash, signature);
-        dot_product(wots_public_key_hash, pointer_to_one_vector, wots_public_key_hash_recovered, 1);
+        assert_digest_eq(wots_public_key_hash,  wots_public_key_hash_recovered);
         // print_chunk_of_8(wots_public_key_hash_recovered);
+        return;
+    }
+
+    fn assert_digest_eq(a, b) {
+        a_ptr = a * 8;
+        b_ptr = b * 8;
+        dot_product(a_ptr, pointer_to_one_vector * 8, b_ptr, 1);
+        dot_product(a_ptr + 3, pointer_to_one_vector * 8, b_ptr + 3, 1);
         return;
     }
 
@@ -271,8 +288,7 @@ fn test_verify_wots_signature() {
                     poseidon16(pointer_to_zero_vector, chain_hash_2 + 1, public_key + 4 * i);
                 } else {
                     if encoding[2 * i] == 3 {
-                        // trick: use the DOT_PRODUCT precompile to assert an equality between 2 chunks of 8 field elements
-                        dot_product(chain_tips + (2 * i), pointer_to_one_vector, (public_key + (4 * i + 1)), 1);
+                        assert_digest_eq(chain_tips + (2 * i), (public_key + (4 * i + 1)));
                     } else {
                         // encoding[2 * i] == 0
                         chain_hash_1 = malloc_vec(2);
@@ -295,8 +311,7 @@ fn test_verify_wots_signature() {
                     poseidon16(chain_hash_2, pointer_to_zero_vector, public_key + (4 * i) + 2);
                 } else {
                     if encoding[2 * i + 1] == 3 {
-                        // trick: use the DOT_PRODUCT precompile to assert an equality between 2 chunks of 8 field elements
-                        dot_product(chain_tips + (2 * i + 1), pointer_to_one_vector, (public_key + (4 * i + 2)), 1);
+                        assert_digest_eq(chain_tips + (2 * i + 1), (public_key + (4 * i + 2)));
                     } else {
                         // encoding[2 * i + 1] == 0
                         chain_hash_1 = malloc_vec(2);
@@ -377,7 +392,15 @@ fn test_verify_xmss_signature() {
         signature = private_input_start / 8;
         xmss_public_key_recovered = xmss_recover_pub_key(message_hash, signature);
         // print_chunk_of_8(xmss_public_key_recovered);
-        dot_product(xmss_public_key, pointer_to_one_vector, xmss_public_key_recovered, 1);
+        assert_digest_eq(xmss_public_key, xmss_public_key_recovered);
+        return;
+    }
+
+    fn assert_digest_eq(a, b) {
+        a_ptr = a * 8;
+        b_ptr = b * 8;
+        dot_product(a_ptr, pointer_to_one_vector * 8, b_ptr, 1);
+        dot_product(a_ptr + 3, pointer_to_one_vector * 8, b_ptr + 3, 1);
         return;
     }
 
@@ -453,7 +476,7 @@ fn test_verify_xmss_signature() {
                 } else {
                     if encoding[2 * i] == 3 {
                         // trick: use the DOT_PRODUCT precompile to assert an equality between 2 chunks of 8 field elements
-                        dot_product(chain_tips + (2 * i), pointer_to_one_vector, (public_key + (4 * i + 1)), 1);
+                        assert_digest_eq(chain_tips + (2 * i), (public_key + (4 * i + 1)));
                     } else {
                         // encoding[2 * i] == 0
                         chain_hash_1 = malloc_vec(2);
@@ -477,7 +500,7 @@ fn test_verify_xmss_signature() {
                 } else {
                     if encoding[2 * i + 1] == 3 {
                         // trick: use the DOT_PRODUCT precompile to assert an equality between 2 chunks of 8 field elements
-                        dot_product(chain_tips + (2 * i + 1), pointer_to_one_vector, (public_key + (4 * i + 2)), 1);
+                        assert_digest_eq(chain_tips + (2 * i + 1), (public_key + (4 * i + 2)));
                     } else {
                         // encoding[2 * i + 1] == 0
                         chain_hash_1 = malloc_vec(2);
@@ -530,12 +553,9 @@ fn test_verify_xmss_signature() {
 
    "#.to_string();
 
-   const LOG_LIFETIME: usize = 5;
+    const LOG_LIFETIME: usize = 5;
 
-    program = program.replace(
-        "LOG_LIFETIME_PLACE_HOLDER",
-        &LOG_LIFETIME.to_string(),
-    );
+    program = program.replace("LOG_LIFETIME_PLACE_HOLDER", &LOG_LIFETIME.to_string());
 
     let mut rng = StdRng::seed_from_u64(0);
     let message_hash: [F; 8] = rng.random();
