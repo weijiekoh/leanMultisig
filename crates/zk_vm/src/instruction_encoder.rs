@@ -56,7 +56,7 @@ pub fn field_representation(instr: &Instruction) -> [F; N_INSTRUCTION_COLUMNS] {
             dest,
             updated_fp,
         } => {
-            fields[9] = F::ONE; // JUZ = 1
+            fields[9] = F::ONE; // JUMP = 1
             set_nu_a(&mut fields, condition);
             set_nu_b(&mut fields, dest);
             set_nu_c(&mut fields, updated_fp);

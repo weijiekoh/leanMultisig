@@ -3,22 +3,24 @@ use std::{borrow::Borrow, ops::Range};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
-use vm::EF;
+use vm::{DIMENSION, EF};
 
 use crate::execution_trace::WitnessDotProduct;
 
 /*
-| StartFlag | Len | IndexA | IndexB | IndexRes | ValueA | ValueB | Res           | Computation                   |
-| --------- | --- | ------ | ------ | -------- | ------ | ------ | ------------- | ----------------------------- |
-| 1         | 4   | 90     | 211    | 74       | m[90]  | m[211] | m[74] = r3    | r3 = m[90] x m[211] + r2      |
-| 0         | 3   | 91     | 212    | 74       | m[90]  | m[212] | m[74]         | r2 = m[91] x m[212] + r1      |
-| 0         | 2   | 92     | 213    | 74       | m[90]  | m[213] | m[74]         | r1 = m[92] x m[213] + r0      |
-| 0         | 1   | 93     | 214    | 74       | m[90]  | m[214] | m[74]         | r0 = m[93] x m[214]           |
-| 1         | 10  | 1008   | 854    | 325      | m[90]  | m[854] | m[325] = r10' | r10' = m[1008] x m[854] + r9' |
-| 0         | 9   | 1009   | 855    | 325      | m[90]  | m[855] | m[325]        | r9' = m[1009] x m[855] + r8'  |
-| 0         | 8   | 1010   | 856    | 325      | m[90]  | m[856] | m[325]        | r8' = m[1010] x m[856] + r7'  |
-| 0         | 7   | 1011   | 857    | 325      | m[90]  | m[857] | m[325]        | r7' = m[1011] x m[857] + r6'  |
-| ...       | ... | ...    | ...    | ...      | ...    | ...    | ...           | ...                           |
+(DIMENSION = 5)
+
+| StartFlag | Len | IndexA | IndexB | IndexRes | ValueA        | ValueB      | Res                | Computation                              |
+| --------- | --- | ------ | ------ | -------- | ------------- | ----------- | ------------------ | ---------------------------------------- |
+| 1         | 4   | 90     | 211    | 74       | m[90..95]     | m[211..216] | m[74..79] = r3     | r3 = m[90..95] x m[211..216] + r2        |
+| 0         | 3   | 95     | 216    | 74       | m[95..100]    | m[216..221] | m[74..79]          | r2 = m[95..100] x m[216..221] + r1       |
+| 0         | 2   | 100    | 221    | 74       | m[100..105]   | m[221..226] | m[74..79]          | r1 = m[100..105] x m[221..226] + r0      |
+| 0         | 1   | 105    | 226    | 74       | m[105..110]   | m[226..231] | m[74..79]          | r0 = m[105..110] x m[226..231]           |
+| 1         | 10  | 1008   | 859    | 325      | m[1008..1013] | m[859..864] | m[325..330] = r10' | r10' = m[1008..1013] x m[859..864] + r9' |
+| 0         | 9   | 1013   | 864    | 325      | m[1013..1018] | m[864..869] | m[325..330]        | r9' = m[1013..1018] x m[864..869] + r8'  |
+| 0         | 8   | 1018   | 869    | 325      | m[1018..1023] | m[869..874] | m[325..330]        | r8' = m[1018..1023] x m[869..874] + r7'  |
+| 0         | 7   | 1023   | 874    | 325      | m[1023..1028] | m[874..879] | m[325..330]        | r7' = m[1023..1028] x m[874..879] + r6'  |
+| ...       | ... | ...    | ...    | ...      | ...           | ...         | ...                | ...                                      |
 */
 
 const DOT_PRODUCT_AIR_COLUMNS: usize = 9;
@@ -50,7 +52,7 @@ impl<AB: AirBuilder> Air<AB> for DotProductAir {
         assert_eq!(down.len(), DOT_PRODUCT_AIR_COLUMNS);
 
         let [
-            flag_up,
+            start_flag_up,
             len_up,
             index_a_up,
             index_b_up,
@@ -66,7 +68,7 @@ impl<AB: AirBuilder> Air<AB> for DotProductAir {
             .try_into()
             .unwrap();
         let [
-            flag_down,
+            start_flag_down,
             len_down,
             index_a_down,
             index_b_down,
@@ -82,27 +84,29 @@ impl<AB: AirBuilder> Air<AB> for DotProductAir {
             .try_into()
             .unwrap();
 
-        builder.assert_bool(flag_down.clone());
+        builder.assert_bool(start_flag_down.clone());
 
         let product_up = value_a_up * value_b_up;
-        let not_flag_down = AB::Expr::ONE - flag_down.clone();
+        let not_flag_down = AB::Expr::ONE - start_flag_down.clone();
         builder.assert_eq(
             computation_up.clone(),
-            flag_down.clone() * product_up.clone()
+            start_flag_down.clone() * product_up.clone()
                 + not_flag_down.clone() * (product_up + computation_down),
         );
         builder.assert_zero(
             not_flag_down.clone() * (len_up.clone() - (len_down.clone() + AB::Expr::ONE)),
         );
-        builder.assert_zero(flag_down.clone() * (len_up.clone() - AB::Expr::ONE));
+        builder.assert_zero(start_flag_down.clone() * (len_up.clone() - AB::Expr::ONE));
         builder.assert_zero(
-            not_flag_down.clone() * (index_a_up.clone() - (index_a_down.clone() - AB::Expr::ONE)),
+            not_flag_down.clone()
+                * (index_a_up.clone() - (index_a_down.clone() - AB::Expr::from_usize(DIMENSION))),
         );
         builder.assert_zero(
-            not_flag_down.clone() * (index_b_up.clone() - (index_b_down.clone() - AB::Expr::ONE)),
+            not_flag_down.clone()
+                * (index_b_up.clone() - (index_b_down.clone() - AB::Expr::from_usize(DIMENSION))),
         );
 
-        builder.assert_zero(flag_up.clone() * (computation_up - res_up));
+        builder.assert_zero(start_flag_up.clone() * (computation_up - res_up));
     }
 }
 
@@ -148,10 +152,10 @@ pub fn build_dot_product_columns(witness: &[WitnessDotProduct]) -> (Vec<Vec<EF>>
         flag.extend(EF::zero_vec(dot_product.len - 1));
         len.extend(((1..=dot_product.len).rev()).map(EF::from_usize));
         index_a.extend(
-            (dot_product.addr_0..(dot_product.addr_0 + dot_product.len)).map(EF::from_usize),
+            (0..dot_product.len).map(|i| EF::from_usize(dot_product.addr_0 + i * DIMENSION)),
         );
         index_b.extend(
-            (dot_product.addr_1..(dot_product.addr_1 + dot_product.len)).map(EF::from_usize),
+            (0..dot_product.len).map(|i| EF::from_usize(dot_product.addr_1 + i * DIMENSION)),
         );
         index_res.extend(vec![EF::from_usize(dot_product.addr_res); dot_product.len]);
         value_a.extend(dot_product.slice_0.clone());

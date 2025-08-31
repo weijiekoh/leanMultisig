@@ -41,7 +41,6 @@ The full recursion program is not finished yet. Instead, we prove validity of a 
 
 `RUSTFLAGS='-C target-cpu=native' NUM_XMSS_AGGREGATED='500' cargo test --release --package rec_aggregation --lib -- xmss_aggregate::test_xmss_aggregate --nocapture --ignored`
 
-
 500 XMSS aggregated. "Trivial encoding" (for now).
 
 ![Alt text](docs/benchmark_graphs/graphs/xmss_aggregated_time.svg)
@@ -52,3 +51,5 @@ The full recursion program is not finished yet. Instead, we prove validity of a 
 - [Plonky3](https://github.com/Plonky3/Plonky3) for its various performant crates (Finite fields, poseidon2 AIR etc)
 - [whir-p3](https://github.com/tcoratger/whir-p3): a Plonky3-compatible WHIR implementation
 - [Whirlaway](https://github.com/TomWambsgans/Whirlaway): Multilinear snark for AIR + minimal zkVM
+
+

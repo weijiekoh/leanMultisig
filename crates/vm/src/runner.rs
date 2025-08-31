@@ -1,5 +1,4 @@
 use p3_field::BasedVectorSpace;
-use p3_field::ExtensionField;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::dot_product;
 use rayon::prelude::*;
@@ -158,15 +157,14 @@ impl Memory {
         Ok(vector)
     }
 
-    pub fn get_vectorized_slice_extension<EF: ExtensionField<F>>(
+    pub fn get_continuous_slice_of_ef_elements(
         &self,
-        index: usize,
+        index: usize, // normal pointer
         len: usize,
     ) -> Result<Vec<EF>, RunnerError> {
         let mut vector = Vec::with_capacity(len);
         for i in 0..len {
-            let v = self.get_vector(index + i)?;
-            vector.push(EF::from_basis_coefficients_slice(&v).unwrap());
+            vector.push(self.get_ef_element(index + i * DIMENSION)?);
         }
         Ok(vector)
     }
@@ -559,12 +557,8 @@ fn execute_bytecode_helper(
                 let ptr_arg_1 = arg1.read_value(&memory, fp)?.to_usize();
                 let ptr_res = res.read_value(&memory, fp)?.to_usize();
 
-                let mut slice_0 = Vec::new();
-                let mut slice_1 = Vec::new();
-                for i in 0..*size {
-                    slice_0.push(memory.get_ef_element(ptr_arg_0 + i * DIMENSION)?);
-                    slice_1.push(memory.get_ef_element(ptr_arg_1 + i * DIMENSION)?);
-                }
+                let slice_0 = memory.get_continuous_slice_of_ef_elements(ptr_arg_0, *size)?;
+                let slice_1 = memory.get_continuous_slice_of_ef_elements(ptr_arg_1, *size)?;
 
                 let dot_product = dot_product::<EF, _, _>(slice_0.into_iter(), slice_1.into_iter());
                 memory.set_ef_element(ptr_res, dot_product)?;
@@ -585,11 +579,9 @@ fn execute_bytecode_helper(
                 let slice_coeffs = (ptr_coeffs << *n_vars..(1 + ptr_coeffs) << *n_vars)
                     .map(|i| memory.get(i))
                     .collect::<Result<Vec<F>, _>>()?;
-                let point = (ptr_point..ptr_point + *n_vars)
-                    .map(|i| Ok(EF::from_basis_coefficients_slice(&memory.get_vector(i)?).unwrap()))
-                    .collect::<Result<Vec<EF>, _>>()?;
+                let point = memory.get_continuous_slice_of_ef_elements(ptr_point, *n_vars)?;
 
-                let eval = slice_coeffs.evaluate(&MultilinearPoint(point.clone()));
+                let eval = slice_coeffs.evaluate(&MultilinearPoint(point));
                 let mut eval_base = eval.as_basis_coefficients_slice().to_vec();
                 eval_base.resize(VECTOR_LEN, F::ZERO);
                 memory.set_vector(ptr_res, eval_base.try_into().unwrap())?;

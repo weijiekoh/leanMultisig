@@ -14,9 +14,9 @@ use vm::*;
 
 pub struct WitnessDotProduct {
     pub cycle: usize,
-    pub addr_0: usize,   // vectorized pointer
-    pub addr_1: usize,   // vectorized pointer
-    pub addr_res: usize, // vectorized pointer
+    pub addr_0: usize,   // normal pointer
+    pub addr_1: usize,   // normal pointer
+    pub addr_res: usize, // normal pointer
     pub len: usize,
     pub slice_0: Vec<EF>,
     pub slice_1: Vec<EF>,
@@ -173,13 +173,12 @@ pub fn get_execution_trace(
                 let addr_1 = arg1.read_value(&memory, fp).unwrap().to_usize();
                 let addr_res = res.read_value(&memory, fp).unwrap().to_usize();
                 let slice_0 = memory
-                    .get_vectorized_slice_extension(addr_0, *size)
+                    .get_continuous_slice_of_ef_elements(addr_0, *size)
                     .unwrap();
                 let slice_1 = memory
-                    .get_vectorized_slice_extension(addr_1, *size)
+                    .get_continuous_slice_of_ef_elements(addr_1, *size)
                     .unwrap();
                 let res = memory.get_ef_element(addr_res).unwrap();
-                todo!();
                 dot_products.push(WitnessDotProduct {
                     cycle,
                     addr_0,
@@ -201,7 +200,7 @@ pub fn get_execution_trace(
                 let addr_point = point.read_value(&memory, fp).unwrap().to_usize();
                 let addr_res = res.read_value(&memory, fp).unwrap().to_usize();
                 let point = memory
-                    .get_vectorized_slice_extension(addr_point, *n_vars)
+                    .get_continuous_slice_of_ef_elements(addr_point, *n_vars)
                     .unwrap();
                 let res = memory.get_vector(addr_res).unwrap();
                 assert!(res[DIMENSION..].iter().all(|&x| x.is_zero()));

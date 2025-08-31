@@ -19,7 +19,7 @@ Bytecode columns:
 6: ADD
 7: MUL
 8: DEREF
-9: JUZ
+9: JUMP
 10: AUX
 
 Execution columns:
@@ -73,7 +73,7 @@ impl<AB: AirBuilder> Air<AB> for VMAir {
         let add: AB::Expr = up[COL_INDEX_ADD].clone().into();
         let mul: AB::Expr = up[COL_INDEX_MUL].clone().into();
         let deref: AB::Expr = up[COL_INDEX_DEREF].clone().into();
-        let juz: AB::Expr = up[COL_INDEX_JUZ].clone().into();
+        let jump: AB::Expr = up[COL_INDEX_JUMP].clone().into();
         let aux: AB::Expr = up[COL_INDEX_AUX].clone().into();
 
         let (value_a, value_b, value_c): (AB::Expr, AB::Expr, AB::Expr) = (
@@ -122,20 +122,20 @@ impl<AB: AirBuilder> Air<AB> for VMAir {
         );
 
         builder.assert_zero(
-            (AB::Expr::ONE - juz.clone()) * (next_pc.clone() - (pc.clone() + AB::Expr::ONE)),
+            (AB::Expr::ONE - jump.clone()) * (next_pc.clone() - (pc.clone() + AB::Expr::ONE)),
         );
-        builder.assert_zero((AB::Expr::ONE - juz.clone()) * (next_fp.clone() - fp.clone()));
+        builder.assert_zero((AB::Expr::ONE - jump.clone()) * (next_fp.clone() - fp.clone()));
 
-        builder.assert_zero(juz.clone() * nu_a.clone() * (AB::Expr::ONE - nu_a.clone()));
-        builder.assert_zero(juz.clone() * nu_a.clone() * (next_pc.clone() - nu_b.clone()));
-        builder.assert_zero(juz.clone() * nu_a.clone() * (next_fp.clone() - nu_c.clone()));
+        builder.assert_zero(jump.clone() * nu_a.clone() * (AB::Expr::ONE - nu_a.clone()));
+        builder.assert_zero(jump.clone() * nu_a.clone() * (next_pc.clone() - nu_b.clone()));
+        builder.assert_zero(jump.clone() * nu_a.clone() * (next_fp.clone() - nu_c.clone()));
         builder.assert_zero(
-            juz.clone()
+            jump.clone()
                 * (AB::Expr::ONE - nu_a.clone())
                 * (next_pc.clone() - (pc.clone() + AB::Expr::ONE)),
         );
         builder.assert_zero(
-            juz.clone() * (AB::Expr::ONE - nu_a.clone()) * (next_fp.clone() - fp.clone()),
+            jump.clone() * (AB::Expr::ONE - nu_a.clone()) * (next_fp.clone() - fp.clone()),
         );
     }
 }
