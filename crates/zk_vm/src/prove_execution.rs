@@ -119,10 +119,15 @@ pub fn prove_execution(
         .unwrap(),
     );
     let dot_product_computations: &[EF] = &dot_product_columns[8];
-    let dot_product_computations_base = dot_product_computations
-        .par_iter()
-        .flat_map(|ef| <EF as BasedVectorSpace<PF<EF>>>::as_basis_coefficients_slice(ef).to_vec())
-        .collect::<Vec<_>>();
+    let mut dot_product_computations_base = (0..DIMENSION).map(|_| Vec::new()).collect::<Vec<_>>();
+    for row in dot_product_computations {
+        for (j, coeff) in <EF as BasedVectorSpace<PF<EF>>>::as_basis_coefficients_slice(row)
+            .iter()
+            .enumerate()
+        {
+            dot_product_computations_base[j].push(*coeff);
+        }
+    }
 
     let exec_memory_addresses = padd_with_zero_to_next_power_of_two(
         &full_trace[COL_INDEX_MEM_ADDRESS_A..=COL_INDEX_MEM_ADDRESS_C].concat(),
@@ -250,8 +255,11 @@ pub fn prove_execution(
                 dot_product_flags.as_slice(),
                 dot_product_lengths.as_slice(),
                 dot_product_indexes.as_slice(),
-                dot_product_computations_base.as_slice(),
             ],
+            dot_product_computations_base
+                .iter()
+                .map(Vec::as_slice)
+                .collect(),
             private_memory_commited_chunks.clone(),
         ]
         .concat(),
@@ -967,27 +975,23 @@ pub fn prove_execution(
     let (initial_pc_statement, final_pc_statement) =
         intitial_and_final_pc_conditions(bytecode, log_n_cycles);
 
-    let dot_product_computation_column_evals = fold_multilinear_in_large_field(
-        &dot_product_computations_base,
-        &eval_eq(&dot_product_evals_to_prove[4].point),
-    );
+    let dot_product_computation_column_evals = dot_product_computations_base
+        .par_iter()
+        .map(|slice| slice.evaluate(&dot_product_evals_to_prove[4].point))
+        .collect::<Vec<_>>();
     assert_eq!(
         dot_product_with_base(&dot_product_computation_column_evals),
         dot_product_evals_to_prove[4].value
     );
     prover_state.add_extension_scalars(&dot_product_computation_column_evals);
-    let dot_product_computation_mixing_challenges = prover_state.sample_vec(3);
-    let dot_product_computation_column_challenge = Evaluation {
-        point: MultilinearPoint(
-            [
-                dot_product_evals_to_prove[4].point.0.clone(),
-                dot_product_computation_mixing_challenges.clone(),
-            ]
-            .concat(),
-        ),
-        value: dot_product_computation_column_evals
-            .evaluate(&MultilinearPoint(dot_product_computation_mixing_challenges)),
-    };
+    let dot_product_computation_column_statements = (0..DIMENSION)
+        .map(|i| {
+            vec![Evaluation {
+                point: dot_product_evals_to_prove[4].point.clone(),
+                value: dot_product_computation_column_evals[i],
+            }]
+        })
+        .collect::<Vec<_>>();
 
     // First Opening
     let global_statements_base = packed_pcs_global_statements(
@@ -1022,8 +1026,8 @@ pub fn prove_execution(
                     dot_product_logup_star_statements.on_indexes,
                     grand_product_dot_product_table_indexes_statement,
                 ], // dot product: indexes
-                vec![dot_product_computation_column_challenge],
             ],
+            dot_product_computation_column_statements,
             private_memory_statements,
         ]
         .concat(),

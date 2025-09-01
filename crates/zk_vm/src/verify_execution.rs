@@ -204,8 +204,8 @@ pub fn verify_execution(
             table_dot_products_log_n_rows, // dot product: (start) flag
             table_dot_products_log_n_rows, // dot product: length
             table_dot_products_log_n_rows + 2, // dot product: indexes
-            table_dot_products_log_n_rows + log2_ceil_usize(DIMENSION), // dot product: computation
         ],
+        vec![table_dot_products_log_n_rows; DIMENSION], // dot product: computation
         vars_private_memory,
     ]
     .concat();
@@ -727,18 +727,14 @@ pub fn verify_execution(
     {
         return Err(ProofError::InvalidProof);
     }
-    let dot_product_computation_mixing_challenges = verifier_state.sample_vec(3);
-    let dot_product_computation_column_challenge = Evaluation {
-        point: MultilinearPoint(
-            [
-                dot_product_evals_to_verify[4].point.0.clone(),
-                dot_product_computation_mixing_challenges.clone(),
-            ]
-            .concat(),
-        ),
-        value: dot_product_computation_column_evals
-            .evaluate(&MultilinearPoint(dot_product_computation_mixing_challenges)),
-    };
+    let dot_product_computation_column_statements = (0..DIMENSION)
+        .map(|i| {
+            vec![Evaluation {
+                point: dot_product_evals_to_verify[4].point.clone(),
+                value: dot_product_computation_column_evals[i],
+            }]
+        })
+        .collect::<Vec<_>>();
 
     let global_statements_base = packed_pcs_global_statements(
         &parsed_commitment_base.tree,
@@ -772,8 +768,8 @@ pub fn verify_execution(
                     dot_product_logup_star_statements.on_indexes,
                     grand_product_dot_product_table_indexes_statement,
                 ], // dot product: indexes
-                vec![dot_product_computation_column_challenge],
             ],
+            dot_product_computation_column_statements,
             private_memory_statements,
         ]
         .concat(),
