@@ -1,6 +1,5 @@
 use crate::common::*;
-use crate::dot_product_air::DOT_PRODUCT_AIR_COLUMN_GROUPS;
-use crate::dot_product_air::DotProductAir;
+use crate::*;
 use ::air::table::AirTable;
 use ::air::verify_many_air_2;
 use lookup::verify_gkr_product;
@@ -21,8 +20,7 @@ use vm::*;
 use whir_p3::fiat_shamir::{errors::ProofError, verifier::VerifierState};
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::multilinear::MultilinearPoint;
-
-use crate::{air::VMAir, *};
+use zk_vm_air::*;
 
 pub fn verify_execution(
     bytecode: &Bytecode,

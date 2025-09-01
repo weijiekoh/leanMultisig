@@ -1,7 +1,5 @@
 use compiler::*;
-use p3_field::BasedVectorSpace;
 use p3_symmetric::Permutation;
-use rand::{Rng, SeedableRng as _, rngs::StdRng};
 use utils::{get_poseidon16, get_poseidon24};
 use vm::*;
 
@@ -241,7 +239,7 @@ fn test_mini_program_3() {
     compile_and_run(program, &public_input, &[]);
 
     get_poseidon16().permute_mut(&mut public_input);
-    dbg!(public_input);
+    let _ = dbg!(public_input);
 }
 
 #[test]

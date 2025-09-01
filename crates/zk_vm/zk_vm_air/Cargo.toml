@@ -1,5 +1,5 @@
 [package]
-name = "zk_vm"
+name = "zk_vm_air"
 version.workspace = true
 edition.workspace = true
 
@@ -31,4 +31,3 @@ sumcheck.workspace = true
 vm.workspace = true
 compiler.workspace = true
 zk_vm_trace.workspace = true
-zk_vm_air.workspace = true

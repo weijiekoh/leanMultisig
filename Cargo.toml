@@ -8,7 +8,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "crates/zk_vm/zk_vm_trace", "crates/zk_vm/zk_vm_air"]
 
 [workspace.lints.clippy]
 # These are some of clippy's nursery (i.e., experimental) lints that we like.
@@ -110,6 +110,8 @@ lookup = { path = "crates/lookup" }
 compiler = { path = "crates/compiler" }
 zk_vm = { path = "crates/zk_vm" }
 rec_aggregation = { path = "crates/rec_aggregation" }
+zk_vm_trace = { path = "crates/zk_vm/zk_vm_trace" }
+zk_vm_air = { path = "crates/zk_vm/zk_vm_air" }
 
 # External
 rand = "0.9.2"

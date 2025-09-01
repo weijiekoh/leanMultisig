@@ -3,8 +3,8 @@ use std::borrow::Borrow;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
+use zk_vm_trace::*;
 
-use crate::*;
 
 /*
 

@@ -4,8 +4,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 use vm::{DIMENSION, EF};
-
-use crate::execution_trace::WitnessDotProduct;
+use zk_vm_trace::WitnessDotProduct;
 
 /*
 (DIMENSION = 5)

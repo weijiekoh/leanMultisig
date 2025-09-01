@@ -1,12 +1,5 @@
 use crate::common::*;
-use crate::dot_product_air::DOT_PRODUCT_AIR_COLUMN_GROUPS;
-use crate::dot_product_air::DotProductAir;
-use crate::dot_product_air::build_dot_product_columns;
-use crate::execution_trace::ExecutionTrace;
-use crate::execution_trace::get_execution_trace;
-use crate::poseidon_tables::build_poseidon_columns;
-use crate::poseidon_tables::*;
-use crate::{air::VMAir, *};
+use crate::*;
 use ::air::prove_many_air_2;
 use ::air::{table::AirTable, witness::AirWitness};
 use lookup::prove_gkr_product;
@@ -37,6 +30,7 @@ use whir_p3::dft::EvalsDft;
 use whir_p3::poly::evals::{eval_eq, fold_multilinear};
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 use whir_p3::utils::compute_eval_eq;
+use zk_vm_air::*;
 
 pub fn prove_execution(
     bytecode: &Bytecode,
@@ -618,10 +612,8 @@ pub fn prove_execution(
     let p16_evals_to_prove = &poseidon_evals_to_prove[0];
     let p24_evals_to_prove = &poseidon_evals_to_prove[1];
 
-    let dot_product_evals_to_prove =
-         info_span!("Dot Product AIR proof").in_scope(|| {
-             dot_product_table.prove_extension(&mut prover_state, 1, dot_product_witness)
-         });
+    let dot_product_evals_to_prove = info_span!("Dot Product AIR proof")
+        .in_scope(|| dot_product_table.prove_extension(&mut prover_state, 1, dot_product_witness));
 
     // Main memory lookup
     let exec_memory_indexes = padd_with_zero_to_next_power_of_two(
