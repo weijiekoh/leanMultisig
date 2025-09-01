@@ -5,6 +5,3 @@ mod recursion;
 
 #[cfg(test)]
 mod xmss_aggregate;
-
-#[cfg(test)]
-pub mod common;

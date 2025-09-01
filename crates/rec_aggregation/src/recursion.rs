@@ -21,10 +21,9 @@ use whir_p3::{
         verifier::*,
     },
 };
+use zk_vm::build_batch_pcs;
 use zk_vm::prove_execution::prove_execution;
 use zk_vm::verify_execution::verify_execution;
-
-use crate::common::build_batch_pcs;
 
 #[test]
 pub fn test_whir_recursion() {

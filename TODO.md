@@ -24,6 +24,7 @@
 - Sumcheckcheck, case z = 0, no need to fold, only keep first half of the values (done in PR 33 by Lambda) (and also in WHIR?)
 - Custom AVX2 / AVX512 / Neon implem in Plonky3 for all of the finite field operations (done for degree 4 extension, but not degree 5)
 - leanISA compiler: inlined function
+- batch the logup* in basefield. We should have only 2 logup* in memory (not 3)
 
 ## Not Perf
 
