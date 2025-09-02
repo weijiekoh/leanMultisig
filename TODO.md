@@ -25,6 +25,7 @@
 - Custom AVX2 / AVX512 / Neon implem in Plonky3 for all of the finite field operations (done for degree 4 extension, but not degree 5)
 - leanISA compiler: inlined function
 - batch the logup* in basefield. We should have only 2 logup* in memory (not 3)
+- the 2 executions of the program, before generating the validity proof, can be merged, using some kind of placeholders
 
 ## Not Perf
 

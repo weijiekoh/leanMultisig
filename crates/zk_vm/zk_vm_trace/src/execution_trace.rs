@@ -200,7 +200,7 @@ pub fn get_execution_trace(
                 let addr_point = point.read_value(&memory, fp).unwrap().to_usize();
                 let addr_res = res.read_value(&memory, fp).unwrap().to_usize();
                 let point = memory
-                    .get_continuous_slice_of_ef_elements(addr_point, *n_vars)
+                    .get_ef_elements_aligned_by_8(addr_point, *n_vars)
                     .unwrap();
                 let res = memory.get_vector(addr_res).unwrap();
                 assert!(res[DIMENSION..].iter().all(|&x| x.is_zero()));

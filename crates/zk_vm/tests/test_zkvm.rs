@@ -9,28 +9,47 @@ use zk_vm::{
 fn test_zk_vm() {
     // Public input:  message_hash | all_public_keys | bitield
     // Private input: signatures = (randomness | chain_tips | merkle_path)
-    let  program = r#"
-
+    let program = r#"
+    
     fn main() {
+        for i in 0..1000 unroll {  if 1 == 0 {  return; } } // increase bytecode size artificially
+
         for i in 0..1000 {
             x = malloc_vec(6);
             poseidon16(i + 3, i, x);
             poseidon24(i + 3, i, x + 2);
-            dot_product(i*5, i, (x + 3) * 8, 1);
-            dot_product(i*4, i + 7, (x + 4) * 8, 2);
+            dot_product(i*2, i, (x + 3) * 8, 1);
+            dot_product(i*3, i + 7, (x + 4) * 8, 2);
         }
-        for i in 0..1000 unroll {
-            if 1 == 0 {
-                return;
-            }
+        
+        point = malloc_vec(10);
+        point_ptr = 8 * point;
+        for i in 0..10 {
+            point_ptr[8*i] = 785 + i;
+            point_ptr[1 + 8*i] = 4152 - i;
+            point_ptr[2 + 8*i] = 471*82 + i*i;
+            point_ptr[3 + 8*i] = 7577 + i;
+            point_ptr[4 + 8*i] = 676 - i;
+            point_ptr[5 + 8*i] = 0;
+            point_ptr[6 + 8*i] = 0;
+            point_ptr[7 + 8*i] = 0;
         }
+
+        res1 = malloc_vec(1);
+        multilinear_eval(2**3, point, res1, 10);
+
+        res2 = malloc_vec(1);
+        multilinear_eval(3, point, res2, 7);
+
         return;
     }
-   "#.to_string();
+   "#
+    .to_string();
 
-    let public_input = F::zero_vec(1 << 14);
 
-    let private_input = vec![];
+    let public_input = (0..(1 << 13) - PUBLIC_INPUT_START).map(|i| F::from_usize(i)).collect::<Vec<_>>();
+
+    let private_input = (0..1 << 13).map(|i| F::from_usize(i).square()).collect::<Vec<_>>();
 
     // utils::init_tracing();
     let bytecode = compile_program(&program);

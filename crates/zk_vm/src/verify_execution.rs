@@ -129,9 +129,11 @@ pub fn verify_execution(
             .chain(std::iter::once((addr_res, row_multilinear_eval.res)))
         {
             let mixing_scalars_res =
-                MultilinearPoint(verifier_state.sample_vec(log2_strict_usize(DIMENSION)));
-            let eval = <EF as BasedVectorSpace<PF<EF>>>::as_basis_coefficients_slice(&value)
-                .evaluate(&mixing_scalars_res);
+                MultilinearPoint(verifier_state.sample_vec(log2_ceil_usize(DIMENSION)));
+            let eval = padd_with_zero_to_next_power_of_two(
+                <EF as BasedVectorSpace<PF<EF>>>::as_basis_coefficients_slice(&value),
+            )
+            .evaluate(&mixing_scalars_res);
             assert!(addr < 1 << (log_memory - 3));
             let memory_chunk_index =
                 addr >> (log_memory - 3 - log2_ceil_usize(n_private_memory_chunks + 1));

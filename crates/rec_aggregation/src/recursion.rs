@@ -342,6 +342,7 @@ pub fn test_whir_recursion() {
         folds = malloc_vec(num_queries);
         if is_first_round == 1 {
             for i in 0..num_queries {
+                // TODO!!!!! Add zero padding at inside the point (folding_randomness), and also TODO the indexing of the multilinear evals has changed
                 multilinear_eval((answers[i] * 8) / 2**FOLDING_FACTOR_0, folding_randomness, folds + i, FOLDING_FACTOR_0); // TODO batching: use a single call to multilinear eval
             }
         } else {
