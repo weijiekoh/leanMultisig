@@ -7,7 +7,9 @@ use rayon::prelude::*;
 
 use vm::*;
 use xmss::{PhonyXmssSecretKey, V, XmssSignature};
-use zk_vm::{build_batch_pcs, prove_execution::prove_execution, verify_execution::verify_execution};
+use zk_vm::{
+    build_batch_pcs, prove_execution::prove_execution, verify_execution::verify_execution,
+};
 
 #[test]
 #[ignore]

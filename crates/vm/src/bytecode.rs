@@ -74,8 +74,8 @@ pub enum Instruction {
     },
     MultilinearEval {
         coeffs: MemOrConstant, // vectorized pointer, chunk size = 2^n_vars
-        point: MemOrConstant,  // vectorized pointer, pointing to `n_vars` extension field elements (each EF value is padded with 8 - DIMENSION zeros at its right)
-        res: MemOrFp,          // vectorized pointer, of size 1 (never fp in practice), points to 1 EF, padded with 8 - DIMENSION zeros at its right
+        point: MemOrConstant, // vectorized pointer, pointing to `n_vars` extension field elements (each EF value is padded with 8 - DIMENSION zeros at its right)
+        res: MemOrFp, // vectorized pointer, of size 1 (never fp in practice), points to 1 EF, padded with 8 - DIMENSION zeros at its right
         n_vars: usize,
     },
 }

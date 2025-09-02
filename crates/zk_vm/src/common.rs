@@ -16,7 +16,7 @@ use whir_p3::{
     },
 };
 
-use crate::{ *};
+use crate::*;
 use vm::*;
 
 pub fn poseidon_16_column_groups(poseidon_16_air: &Poseidon16Air) -> Vec<Range<usize>> {

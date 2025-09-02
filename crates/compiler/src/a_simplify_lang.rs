@@ -1,5 +1,5 @@
 use crate::{
-    F,
+    Counter, F,
     intermediate_bytecode::HighLevelOperation,
     lang::{
         Boolean, ConstExpression, ConstMallocLabel, Expression, Function, Line, Program,
@@ -81,7 +81,7 @@ pub enum SimpleLine {
     },
     RawAccess {
         res: SimpleExpr,
-        index: Var,
+        index: SimpleExpr,
         shift: ConstExpression,
     }, // res = memory[index + shift]
     IfNotZero {
@@ -129,6 +129,7 @@ pub enum SimpleLine {
 }
 
 pub fn simplify_program(mut program: Program) -> SimpleProgram {
+    handle_inlined_functions(&mut program);
     handle_const_arguments(&mut program);
     let mut new_functions = BTreeMap::new();
     let mut counters = Counters::default();
@@ -177,8 +178,8 @@ struct Counters {
 #[derive(Debug, Clone, Default)]
 struct ArrayManager {
     counter: usize,
-    aux_vars: BTreeMap<(Var, Expression), Var>, // (array, index) -> aux_var
-    valid: BTreeSet<Var>,                       // currently valid aux vars
+    aux_vars: BTreeMap<(SimpleExpr, Expression), Var>, // (array, index) -> aux_var
+    valid: BTreeSet<Var>,                              // currently valid aux vars
 }
 
 #[derive(Debug, Clone, Default)]
@@ -189,7 +190,7 @@ pub struct ConstMalloc {
 }
 
 impl ArrayManager {
-    fn get_aux_var(&mut self, array: &Var, index: &Expression) -> Var {
+    fn get_aux_var(&mut self, array: &SimpleExpr, index: &Expression) -> Var {
         if let Some(var) = self.aux_vars.get(&(array.clone(), index.clone())) {
             return var.clone();
         }
@@ -626,13 +627,15 @@ fn simplify_expr(
     match expr {
         Expression::Value(value) => return value.simplify_if_const(),
         Expression::ArrayAccess { array, index } => {
-            if let Some(label) = const_malloc.map.get(array) {
-                if let Ok(mut offset) = ConstExpression::try_from(*index.clone()) {
-                    offset = offset.try_naive_simplification();
-                    return SimpleExpr::ConstMallocAccess {
-                        malloc_label: *label,
-                        offset,
-                    };
+            if let SimpleExpr::Var(array_var) = array {
+                if let Some(label) = const_malloc.map.get(array_var) {
+                    if let Ok(mut offset) = ConstExpression::try_from(*index.clone()) {
+                        offset = offset.try_naive_simplification();
+                        return SimpleExpr::ConstMallocAccess {
+                            malloc_label: *label,
+                            offset,
+                        };
+                    }
                 }
             }
 
@@ -802,6 +805,162 @@ pub fn find_variable_usage(lines: &[Line]) -> (BTreeSet<Var>, BTreeSet<Var>) {
     (internal_vars, external_vars)
 }
 
+fn inline_simple_expr(
+    simple_expr: &mut SimpleExpr,
+    args: &BTreeMap<Var, SimpleExpr>,
+    inlining_count: usize,
+) {
+    if let SimpleExpr::Var(var) = simple_expr {
+        if let Some(replacement) = args.get(var) {
+            *simple_expr = replacement.clone();
+        } else {
+            *var = format!("@inlined_var_{}_{}", inlining_count, var);
+        }
+    }
+}
+
+fn inline_expr(expr: &mut Expression, args: &BTreeMap<Var, SimpleExpr>, inlining_count: usize) {
+    match expr {
+        Expression::Value(value) => {
+            inline_simple_expr(value, args, inlining_count);
+        }
+        Expression::ArrayAccess { array, index } => {
+            inline_simple_expr(array, args, inlining_count);
+            inline_expr(index, args, inlining_count);
+        }
+        Expression::Binary { left, right, .. } => {
+            inline_expr(left, args, inlining_count);
+            inline_expr(right, args, inlining_count);
+        }
+    }
+}
+
+pub fn inline_lines(
+    lines: &mut Vec<Line>,
+    args: &BTreeMap<Var, SimpleExpr>,
+    res: &[Var],
+    inlining_count: usize,
+) {
+    let inline_condition = |condition: &mut Boolean| {
+        let (Boolean::Equal { left, right } | Boolean::Different { left, right }) = condition;
+        inline_expr(left, args, inlining_count);
+        inline_expr(right, args, inlining_count);
+    };
+
+    let inline_internal_var = |var: &mut Var| {
+        assert!(
+            !args.contains_key(var),
+            "Variable {} is both an argument and assigned in the inlined function",
+            var
+        );
+        *var = format!("@inlined_var_{}_{}", inlining_count, var);
+    };
+
+    let mut lines_to_replace = vec![];
+    for (i, line) in lines.iter_mut().enumerate() {
+        match line {
+            Line::Assignment { var, value } => {
+                inline_expr(value, args, inlining_count);
+                inline_internal_var(var);
+            }
+            Line::IfCondition {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                inline_condition(condition);
+
+                inline_lines(then_branch, args, &res, inlining_count);
+                inline_lines(else_branch, args, &res, inlining_count);
+            }
+            Line::FunctionCall {
+                args: func_args,
+                return_data,
+                ..
+            } => {
+                for arg in func_args {
+                    inline_expr(arg, args, inlining_count);
+                }
+                for return_var in return_data {
+                    inline_internal_var(return_var);
+                }
+            }
+            Line::Assert(condition) => {
+                inline_condition(condition);
+            }
+            Line::FunctionRet { return_data } => {
+                assert_eq!(return_data.len(), res.len());
+
+                for expr in return_data.iter_mut() {
+                    inline_expr(expr, args, inlining_count);
+                }
+                lines_to_replace.push((
+                    i,
+                    res.iter()
+                        .zip(return_data)
+                        .map(|(res_var, expr)| Line::Assignment {
+                            var: res_var.clone(),
+                            value: expr.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                ));
+            }
+            Line::MAlloc { var, size, .. } => {
+                inline_expr(size, args, inlining_count);
+                inline_internal_var(var);
+            }
+            Line::Precompile {
+                precompile: _,
+                args: precompile_args,
+            } => {
+                for arg in precompile_args {
+                    inline_expr(arg, args, inlining_count);
+                }
+            }
+            Line::Print { content, .. } => {
+                for var in content {
+                    inline_expr(var, args, inlining_count);
+                }
+            }
+            Line::DecomposeBits { var, to_decompose } => {
+                for expr in to_decompose {
+                    inline_expr(expr, args, inlining_count);
+                }
+                inline_internal_var(var);
+            }
+            Line::CounterHint { var } => {
+                inline_internal_var(var);
+            }
+            Line::ForLoop {
+                iterator,
+                start,
+                end,
+                body,
+                rev: _,
+                unroll: _,
+            } => {
+                inline_lines(body, args, res, inlining_count);
+                inline_internal_var(iterator);
+                inline_expr(start, args, inlining_count);
+                inline_expr(end, args, inlining_count);
+            }
+            Line::ArrayAssign {
+                array,
+                index,
+                value,
+            } => {
+                inline_simple_expr(array, args, inlining_count);
+                inline_expr(index, args, inlining_count);
+                inline_expr(value, args, inlining_count);
+            }
+            Line::Panic | Line::Break => {}
+        }
+    }
+    for (i, new_lines) in lines_to_replace.into_iter().rev() {
+        lines.splice(i..=i, new_lines);
+    }
+}
+
 fn vars_in_expression(expr: &Expression) -> BTreeSet<Var> {
     let mut vars = BTreeSet::new();
     match expr {
@@ -811,7 +970,9 @@ fn vars_in_expression(expr: &Expression) -> BTreeSet<Var> {
             }
         }
         Expression::ArrayAccess { array, index } => {
-            vars.insert(array.clone());
+            if let SimpleExpr::Var(array) = array {
+                vars.insert(array.clone());
+            }
             vars.extend(vars_in_expression(index));
         }
         Expression::Binary { left, right, .. } => {
@@ -831,7 +992,7 @@ pub enum ArrayAccessType {
 fn handle_array_assignment(
     counters: &mut Counters,
     res: &mut Vec<SimpleLine>,
-    array: Var,
+    array: SimpleExpr,
     index: &Expression,
     access_type: ArrayAccessType,
     array_manager: &mut ArrayManager,
@@ -840,25 +1001,27 @@ fn handle_array_assignment(
     let simplified_index = simplify_expr(index, res, counters, array_manager, const_malloc);
 
     if let SimpleExpr::Constant(offset) = simplified_index.clone() {
-        if let Some(label) = const_malloc.map.get(&array) {
-            if let ArrayAccessType::ArrayIsAssigned(Expression::Binary {
-                left,
-                operation,
-                right,
-            }) = access_type
-            {
-                let arg0 = simplify_expr(&left, res, counters, array_manager, const_malloc);
-                let arg1 = simplify_expr(&right, res, counters, array_manager, const_malloc);
-                res.push(SimpleLine::Assignment {
-                    var: VarOrConstMallocAccess::ConstMallocAccess {
-                        malloc_label: label.clone(),
-                        offset,
-                    },
+        if let SimpleExpr::Var(array_var) = &array {
+            if let Some(label) = const_malloc.map.get(array_var) {
+                if let ArrayAccessType::ArrayIsAssigned(Expression::Binary {
+                    left,
                     operation,
-                    arg0,
-                    arg1,
-                });
-                return;
+                    right,
+                }) = access_type
+                {
+                    let arg0 = simplify_expr(&left, res, counters, array_manager, const_malloc);
+                    let arg1 = simplify_expr(&right, res, counters, array_manager, const_malloc);
+                    res.push(SimpleLine::Assignment {
+                        var: VarOrConstMallocAccess::ConstMallocAccess {
+                            malloc_label: label.clone(),
+                            offset,
+                        },
+                        operation,
+                        arg0,
+                        arg1,
+                    });
+                    return;
+                }
             }
         }
     }
@@ -884,13 +1047,13 @@ fn handle_array_assignment(
                 arg0: array.clone().into(),
                 arg1: simplified_index.into(),
             });
-            (ptr_var, ConstExpression::zero())
+            (SimpleExpr::Var(ptr_var), ConstExpression::zero())
         }
     };
 
     res.push(SimpleLine::RawAccess {
-        res: value_simplified.into(),
-        index: index_var.into(),
+        res: value_simplified,
+        index: index_var,
         shift,
     });
 }
@@ -970,10 +1133,17 @@ fn replace_vars_for_unroll_in_expr(
             SimpleExpr::Constant(_) | SimpleExpr::ConstMallocAccess { .. } => {}
         },
         Expression::ArrayAccess { array, index } => {
-            assert!(array != iterator, "Weird");
-            if internal_vars.contains(array) {
-                *array = format!("@unrolled_{}_{}_{}", unroll_index, iterator_value, array).into();
+            if let SimpleExpr::Var(array_var) = array {
+                assert!(array_var != iterator, "Weird");
+                if internal_vars.contains(array_var) {
+                    *array_var = format!(
+                        "@unrolled_{}_{}_{}",
+                        unroll_index, iterator_value, array_var
+                    )
+                    .into();
+                }
             }
+
             replace_vars_for_unroll_in_expr(
                 index,
                 iterator,
@@ -1027,10 +1197,15 @@ fn replace_vars_for_unroll(
                 index,
                 value,
             } => {
-                assert!(array != iterator, "Weird");
-                if internal_vars.contains(array) {
-                    *array =
-                        format!("@unrolled_{}_{}_{}", unroll_index, iterator_value, array).into();
+                if let SimpleExpr::Var(array_var) = array {
+                    assert!(array_var != iterator, "Weird");
+                    if internal_vars.contains(array_var) {
+                        *array_var = format!(
+                            "@unrolled_{}_{}_{}",
+                            unroll_index, iterator_value, array_var
+                        )
+                        .into();
+                    }
                 }
                 replace_vars_for_unroll_in_expr(
                     index,
@@ -1228,6 +1403,128 @@ fn replace_vars_for_unroll(
     }
 }
 
+fn handle_inlined_functions(program: &mut Program) {
+    let inlined_functions = program
+        .functions
+        .iter()
+        .filter(|(_, func)| func.inlined)
+        .map(|(name, func)| (name.clone(), func.clone()))
+        .collect::<BTreeMap<_, _>>();
+
+    for func in inlined_functions.values() {
+        assert!(
+            !func.has_const_arguments(),
+            "Inlined functions with constant arguments are not supported yet"
+        );
+    }
+
+    for func in program.functions.values_mut() {
+        if func.inlined {
+            let mut func_called = Vec::new();
+            get_function_called(&func.body, &mut func_called);
+            for func_called in func_called {
+                assert!(
+                    !inlined_functions.contains_key(&func_called),
+                    "Inlined functions calling other inlined functions are not supported yet"
+                );
+            }
+        } else {
+            handle_inlined_functions_helper(
+                &mut func.body,
+                &inlined_functions,
+                &mut Counter::new(),
+                &mut Counter::new(),
+            );
+        }
+    }
+
+    for func in inlined_functions.keys() {
+        program.functions.remove(func);
+    }
+}
+
+fn handle_inlined_functions_helper(
+    lines: &mut Vec<Line>,
+    inlined_functions: &BTreeMap<String, Function>,
+    inlined_var_counter: &mut Counter,
+    total_inlined_counter: &mut Counter,
+) {
+    for i in (0..lines.len()).rev() {
+        match &mut lines[i] {
+            Line::FunctionCall {
+                function_name,
+                args,
+                return_data,
+            } => {
+                if let Some(func) = inlined_functions.get(&*function_name) {
+                    let mut inlined_lines = vec![];
+
+                    let mut simplified_args = vec![];
+                    for arg in args {
+                        if let Expression::Value(simple_expr) = arg {
+                            simplified_args.push(simple_expr.clone());
+                        } else {
+                            let aux_var = format!("@inlined_var_{}", inlined_var_counter.next());
+                            inlined_lines.push(Line::Assignment {
+                                var: aux_var.clone(),
+                                value: arg.clone(),
+                            });
+                            simplified_args.push(SimpleExpr::Var(aux_var));
+                        }
+                    }
+                    assert_eq!(simplified_args.len(), func.arguments.len());
+                    let inlined_args = func
+                        .arguments
+                        .iter()
+                        .zip(&simplified_args)
+                        .map(|((var, _), expr)| (var.clone(), expr.clone()))
+                        .collect::<BTreeMap<_, _>>();
+                    let mut func_body = func.body.clone();
+                    inline_lines(
+                        &mut func_body,
+                        &inlined_args,
+                        &return_data,
+                        total_inlined_counter.next(),
+                    );
+                    inlined_lines.extend(func_body);
+
+                    lines.remove(i); // remove the call to the inlined function
+                    lines.splice(i..i, inlined_lines);
+                }
+            }
+            Line::IfCondition {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                handle_inlined_functions_helper(
+                    then_branch,
+                    inlined_functions,
+                    inlined_var_counter,
+                    total_inlined_counter,
+                );
+                handle_inlined_functions_helper(
+                    else_branch,
+                    inlined_functions,
+                    inlined_var_counter,
+                    total_inlined_counter,
+                );
+            }
+            Line::ForLoop {
+                body, unroll: _, ..
+            } => {
+                handle_inlined_functions_helper(
+                    body,
+                    inlined_functions,
+                    inlined_var_counter,
+                    total_inlined_counter,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
 fn handle_const_arguments(program: &mut Program) {
     // TODO this doesnt suupport const functions calling other const functions
     let mut new_functions = BTreeMap::<String, Function>::new();
@@ -1314,6 +1611,7 @@ fn handle_const_arguments_helper(
                                 .filter(|(_, is_const)| !is_const)
                                 .cloned()
                                 .collect(),
+                            inlined: false,
                             body: new_body,
                             n_returned_vars: func.n_returned_vars,
                         },
@@ -1353,12 +1651,50 @@ fn replace_vars_by_const_in_expr(expr: &mut Expression, map: &BTreeMap<Var, F>) 
             SimpleExpr::Constant(_) => {}
         },
         Expression::ArrayAccess { array, index } => {
-            assert!(!map.contains_key(array), "Array {} is a constant", array);
+            if let SimpleExpr::Var(array_var) = array {
+                assert!(
+                    !map.contains_key(array_var),
+                    "Array {} is a constant",
+                    array_var
+                );
+            }
             replace_vars_by_const_in_expr(index, map);
         }
         Expression::Binary { left, right, .. } => {
             replace_vars_by_const_in_expr(left, map);
             replace_vars_by_const_in_expr(right, map);
+        }
+    }
+}
+
+fn get_function_called(lines: &[Line], function_called: &mut Vec<String>) {
+    for line in lines {
+        match line {
+            Line::FunctionCall { function_name, .. } => {
+                function_called.push(function_name.clone());
+            }
+            Line::IfCondition {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                get_function_called(then_branch, function_called);
+                get_function_called(else_branch, function_called);
+            }
+            Line::ForLoop { body, .. } => {
+                get_function_called(body, function_called);
+            }
+            Line::Assignment { .. }
+            | Line::ArrayAssign { .. }
+            | Line::Assert { .. }
+            | Line::FunctionRet { .. }
+            | Line::Precompile { .. }
+            | Line::Print { .. }
+            | Line::DecomposeBits { .. }
+            | Line::CounterHint { .. }
+            | Line::MAlloc { .. }
+            | Line::Panic
+            | Line::Break => {}
         }
     }
 }
@@ -1375,7 +1711,13 @@ fn replace_vars_by_const_in_lines(lines: &mut [Line], map: &BTreeMap<Var, F>) {
                 index,
                 value,
             } => {
-                assert!(!map.contains_key(array), "Array {} is a constant", array);
+                if let SimpleExpr::Var(array_var) = array {
+                    assert!(
+                        !map.contains_key(array_var),
+                        "Array {} is a constant",
+                        array_var
+                    );
+                }
                 replace_vars_by_const_in_expr(index, map);
                 replace_vars_by_const_in_expr(value, map);
             }

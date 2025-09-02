@@ -66,7 +66,11 @@ impl WotsSignature {
         let encoding = wots_encode(message_hash, &signature.randomness)?;
         let mut public_key = [Default::default(); V];
         for i in 0..V {
-            public_key[i] = iterate_hash(&signature.chain_tips[i], W - 1 - encoding[i] as usize, i % 2 == 1);
+            public_key[i] = iterate_hash(
+                &signature.chain_tips[i],
+                W - 1 - encoding[i] as usize,
+                i % 2 == 1,
+            );
         }
         Some(WotsPublicKey(public_key))
     }

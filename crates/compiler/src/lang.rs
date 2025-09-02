@@ -14,6 +14,7 @@ pub struct Program {
 pub struct Function {
     pub name: String,
     pub arguments: Vec<(Var, bool)>, // (name, is_const)
+    pub inlined: bool,
     pub n_returned_vars: usize,
     pub body: Vec<Line>,
 }
@@ -207,7 +208,7 @@ impl From<ConstantValue> for ConstExpression {
 pub enum Expression {
     Value(SimpleExpr),
     ArrayAccess {
-        array: Var,
+        array: SimpleExpr,
         index: Box<Expression>,
     },
     Binary {
@@ -240,7 +241,7 @@ impl Expression {
     pub fn eval_with<ValueFn, ArrayFn>(&self, value_fn: &ValueFn, array_fn: &ArrayFn) -> Option<F>
     where
         ValueFn: Fn(&SimpleExpr) -> Option<F>,
-        ArrayFn: Fn(&Var, F) -> Option<F>,
+        ArrayFn: Fn(&SimpleExpr, F) -> Option<F>,
     {
         match self {
             Expression::Value(value) => value_fn(value),
@@ -267,7 +268,7 @@ pub enum Line {
     },
     ArrayAssign {
         // array[index] = value
-        array: Var,
+        array: SimpleExpr,
         index: Expression,
         value: Expression,
     },
@@ -323,7 +324,7 @@ impl ToString for Expression {
         match self {
             Expression::Value(val) => val.to_string(),
             Expression::ArrayAccess { array, index } => {
-                format!("{}[{}]", array, index.to_string())
+                format!("{}[{}]", array.to_string(), index.to_string())
             }
             Expression::Binary {
                 left,

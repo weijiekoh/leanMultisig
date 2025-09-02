@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{extension::QuinticExtensionField, PrimeCharacteristicRing};
+use p3_field::{PrimeCharacteristicRing, extension::QuinticExtensionField};
 use p3_koala_bear::KoalaBear;
 use p3_matrix::Matrix;
 use rand::{Rng, SeedableRng, rngs::StdRng};

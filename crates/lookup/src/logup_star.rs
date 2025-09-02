@@ -264,7 +264,7 @@ pub fn compute_pushforward<F: PrimeField64, EF: ExtensionField<EF>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use p3_field::{extension::QuinticExtensionField, PrimeCharacteristicRing};
+    use p3_field::{PrimeCharacteristicRing, extension::QuinticExtensionField};
     use p3_koala_bear::KoalaBear;
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use utils::{build_challenger, init_tracing};

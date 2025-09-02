@@ -41,8 +41,8 @@ pub fn compile_and_run(program: &str, public_input: &[vm::F], private_input: &[v
     execute_bytecode(&bytecode, &public_input, private_input);
 }
 
-pub fn build_batch_pcs()
--> WhirBatchPcs<F, EF, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS> {
+pub fn build_batch_pcs() -> WhirBatchPcs<F, EF, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>
+{
     let base_pcs = WhirConfigBuilder {
         folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
         soundness_type: SecurityAssumption::CapacityBound,

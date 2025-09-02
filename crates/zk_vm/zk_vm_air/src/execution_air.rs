@@ -5,7 +5,6 @@ use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 use zk_vm_trace::*;
 
-
 /*
 
 Bytecode columns:

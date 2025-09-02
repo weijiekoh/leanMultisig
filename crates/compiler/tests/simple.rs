@@ -268,3 +268,80 @@ fn test_mini_program_4() {
     get_poseidon24().permute_mut(&mut public_input);
     dbg!(&public_input[16..]);
 }
+
+#[test]
+fn test_inlined() {
+    let program = r#"
+    fn main() {
+        x = 1;
+        y = 2;
+        i, j, k = func_1(x, y);
+        assert i == 2;
+        assert j == 3;
+        assert k == 2130706432;
+
+        g = malloc_vec(1);
+        h = malloc_vec(1);
+        g_ptr = g * 8;
+        h_ptr = h * 8;
+        for i in 0..8 {
+            g_ptr[i] = i;
+        }
+        for i in 0..8 unroll {
+            h_ptr[i] = i;
+        }
+        assert_vectorized_eq_1(g, h);
+        assert_vectorized_eq_2(g, h);
+        assert_vectorized_eq_3(g, h);
+        assert_vectorized_eq_4(g, h);
+        assert_vectorized_eq_5(g, h);
+        return;
+    }
+
+    fn func_1(a, b) inline -> 3 {
+        x = a * b;
+        y = a + b;
+        return x, y, a - b;
+    }
+
+    fn assert_vectorized_eq_1(x, y) {
+        x_ptr = x * 8;
+        y_ptr = y * 8;
+        for i in 0..4 unroll {
+            assert x_ptr[i] == y_ptr[i];
+        }
+        for i in 4..8 {
+            assert x_ptr[i] == y_ptr[i];
+        }
+        return;
+    }
+
+    fn assert_vectorized_eq_2(x, y) inline {
+        x_ptr = x * 8;
+        y_ptr = y * 8;
+        for i in 0..4 unroll {
+            assert x_ptr[i] == y_ptr[i];
+        }
+        for i in 4..8 {
+            assert x_ptr[i] == y_ptr[i];
+        }
+        return;
+    }
+    fn assert_vectorized_eq_3(x, y) inline {
+        u = x + 7;
+        assert_vectorized_eq_1(u-7, y * 7 / 7);
+        return;
+    }
+    fn assert_vectorized_eq_4(x, y) {
+        dot_product(x * 8, pointer_to_one_vector * 8, y * 8, 1);
+        dot_product(x * 8 + 3, pointer_to_one_vector * 8, y * 8 + 3, 1);
+        return;
+    }
+    fn assert_vectorized_eq_5(x, y) inline {
+        dot_product(x * 8, pointer_to_one_vector * 8, y * 8, 1);
+        dot_product(x * 8 + 3, pointer_to_one_vector * 8, y * 8 + 3, 1);
+        return;
+    }
+   "#;
+    compile_and_run(program, &[], &[]);
+}

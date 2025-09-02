@@ -108,6 +108,7 @@ fn parse_function(
 
     let mut arguments = Vec::new();
     let mut n_returned_vars = 0;
+    let mut inlined = false;
     let mut body = Vec::new();
 
     for pair in inner {
@@ -119,6 +120,9 @@ fn parse_function(
                         arguments.push(parameter_name);
                     }
                 }
+            }
+            Rule::inlined_statement => {
+                inlined = true;
             }
             Rule::return_count => {
                 let count_str = pair.into_inner().next().unwrap().as_str();
@@ -138,6 +142,7 @@ fn parse_function(
     Ok(Function {
         name,
         arguments,
+        inlined,
         n_returned_vars,
         body,
     })
@@ -233,7 +238,7 @@ fn parse_array_assign(
     let index = parse_expression(inner.next().unwrap(), constants)?;
     let value = parse_expression(inner.next().unwrap(), constants)?;
     Ok(Line::ArrayAssign {
-        array,
+        array: array.into(),
         index,
         value,
     })
@@ -317,7 +322,7 @@ fn parse_array_access(
     let array = inner.next().unwrap().as_str().to_string();
     let index = parse_expression(inner.next().unwrap(), constants)?;
     Ok(Expression::ArrayAccess {
-        array,
+        array: array.into(),
         index: Box::new(index),
     })
 }

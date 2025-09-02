@@ -46,10 +46,13 @@ fn test_zk_vm() {
    "#
     .to_string();
 
+    let public_input = (0..(1 << 13) - PUBLIC_INPUT_START)
+        .map(|i| F::from_usize(i))
+        .collect::<Vec<_>>();
 
-    let public_input = (0..(1 << 13) - PUBLIC_INPUT_START).map(|i| F::from_usize(i)).collect::<Vec<_>>();
-
-    let private_input = (0..1 << 13).map(|i| F::from_usize(i).square()).collect::<Vec<_>>();
+    let private_input = (0..1 << 13)
+        .map(|i| F::from_usize(i).square())
+        .collect::<Vec<_>>();
 
     // utils::init_tracing();
     let bytecode = compile_program(&program);

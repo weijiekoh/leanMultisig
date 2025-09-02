@@ -309,12 +309,16 @@ fn compile_lines(
             }
 
             SimpleLine::RawAccess { res, index, shift } => {
-                validate_vars_declared(&[SimpleExpr::Var(index.clone())], declared_vars)?;
+                validate_vars_declared(&[index.clone()], declared_vars)?;
                 if let SimpleExpr::Var(var) = res {
                     declared_vars.insert(var.clone());
                 }
+                let shift_0 = match index {
+                    SimpleExpr::Constant(c) => c.clone(),
+                    _ => compiler.get_offset(&index.clone().try_into().unwrap()),
+                };
                 instructions.push(IntermediateInstruction::Deref {
-                    shift_0: compiler.get_offset(&index.clone().into()),
+                    shift_0,
                     shift_1: shift.clone(),
                     res: res.into_mem_after_fp_or_constant(compiler),
                 });

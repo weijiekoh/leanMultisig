@@ -30,3 +30,17 @@ pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F]) {
     let bytecode = compile_program(program);
     execute_bytecode(&bytecode, &public_input, private_input);
 }
+
+struct Counter(usize);
+
+impl Counter {
+    fn next(&mut self) -> usize {
+        let val = self.0;
+        self.0 += 1;
+        val
+    }
+
+    fn new() -> Self {
+        Counter(0)
+    }
+}
