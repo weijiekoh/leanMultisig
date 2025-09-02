@@ -262,6 +262,10 @@ impl Expression {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Line {
+    Match {
+        value: Expression,
+        arms: Vec<(usize, Vec<Self>)>,
+    },
     Assignment {
         var: Var,
         value: Expression,
@@ -346,6 +350,21 @@ impl Line {
     fn to_string_with_indent(&self, indent: usize) -> String {
         let spaces = "    ".repeat(indent);
         let line_str = match self {
+            Line::Match { value, arms } => {
+                let arms_str = arms
+                    .iter()
+                    .map(|(const_expr, body)| {
+                        let body_str = body
+                            .iter()
+                            .map(|line| line.to_string_with_indent(indent + 1))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        format!("{} => {{\n{}\n{}}}", const_expr.to_string(), body_str, spaces)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                format!("match {} {{\n{}\n{}}}", value.to_string(), arms_str, spaces)
+            }
             Line::Assignment { var, value } => {
                 format!("{} = {}", var.to_string(), value.to_string())
             }

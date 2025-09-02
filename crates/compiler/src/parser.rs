@@ -175,6 +175,7 @@ fn parse_statement(
         Rule::array_assign => parse_array_assign(inner, constants),
         Rule::if_statement => parse_if_statement(inner, constants, trash_var_count),
         Rule::for_statement => parse_for_statement(inner, constants, trash_var_count),
+        Rule::match_statement => parse_match_statement(inner, constants, trash_var_count),
         Rule::return_statement => parse_return_statement(inner, constants),
         Rule::function_call => parse_function_call(inner, constants, trash_var_count),
         Rule::assert_eq_statement => parse_assert_eq(inner, constants),
@@ -182,6 +183,65 @@ fn parse_statement(
         Rule::break_statement => Ok(Line::Break),
         Rule::continue_statement => todo!("Continue statement not implemented yet"),
         _ => Err(ParseError::SemanticError("Unknown statement".to_string())),
+    }
+}
+
+fn parse_match_statement(
+    pair: Pair<Rule>,
+    constants: &BTreeMap<String, usize>,
+    trash_var_count: &mut usize,
+) -> Result<Line, ParseError> {
+    let mut inner = pair.into_inner();
+    let value = parse_expression(inner.next().unwrap(), constants)?;
+
+    let mut arms = Vec::new();
+
+    for arm_pair in inner {
+        assert_eq!(arm_pair.as_rule(), Rule::match_arm);
+        let mut arm_inner = arm_pair.into_inner();
+        let const_expr = arm_inner.next().unwrap();
+        let pattern = parse_const_expr(const_expr, constants)?;
+
+        let mut statements = Vec::new();
+        for stmt in arm_inner {
+            if stmt.as_rule() == Rule::statement {
+                statements.push(parse_statement(stmt, constants, trash_var_count)?);
+            }
+        }
+
+        arms.push((pattern, statements));
+    }
+
+    Ok(Line::Match { value, arms })
+}
+
+fn parse_const_expr(
+    pair: Pair<Rule>,
+    constants: &BTreeMap<String, usize>,
+) -> Result<usize, ParseError> {
+    let inner = pair.into_inner().next().unwrap();
+
+    match inner.as_rule() {
+        Rule::constant_value => match inner.as_str() {
+            "public_input_start" => Err(ParseError::SemanticError(
+                "public_input_start cannot be used as match pattern".to_string(),
+            )),
+            text => {
+                if let Some(value) = constants.get(text) {
+                    Ok(*value)
+                } else if let Ok(value) = text.parse::<usize>() {
+                    Ok(value)
+                } else {
+                    Err(ParseError::SemanticError(format!(
+                        "Invalid constant expression in match pattern: {}",
+                        text
+                    )))
+                }
+            }
+        },
+        _ => Err(ParseError::SemanticError(
+            "Only constant values are allowed in match patterns".to_string(),
+        )),
     }
 }
 

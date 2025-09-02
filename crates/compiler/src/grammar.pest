@@ -20,6 +20,7 @@ statement = {
     array_assign |
     if_statement |
     for_statement |
+    match_statement |
     return_statement |
     break_statement |
     continue_statement |
@@ -48,6 +49,9 @@ else_clause = { "else" ~ "{" ~ statement* ~ "}" }
 for_statement = { "for" ~ identifier ~ "in" ~ rev_clause? ~ expression ~ ".." ~ expression ~ unroll_clause? ~ "{" ~ statement* ~ "}" }
 rev_clause = { "rev" }
 unroll_clause = { "unroll" }
+
+match_statement = { "match" ~ expression ~ "{" ~ match_arm* ~ "}" }
+match_arm = { constant_value ~ "=>" ~ "{" ~ statement* ~ "}" }
 
 function_call = { function_res? ~ identifier ~ "(" ~ tuple_expression? ~ ")" ~ ";" }
 function_res = { var_list ~ "=" }

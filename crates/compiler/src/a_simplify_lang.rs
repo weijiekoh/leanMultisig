@@ -73,6 +73,10 @@ impl From<Var> for VarOrConstMallocAccess {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleLine {
+    Match {
+        value: SimpleExpr,
+        arms: Vec<Vec<Self>>, // patterns = 0, 1, ...
+    },
     Assignment {
         var: VarOrConstMallocAccess,
         operation: HighLevelOperation,
@@ -213,6 +217,29 @@ fn simplify_lines(
     let mut res = Vec::new();
     for line in lines {
         match line {
+            Line::Match { value, arms } => {
+                let simple_value =
+                    simplify_expr(value, &mut res, counters, array_manager, const_malloc);
+                let mut simple_arms = vec![];
+                for (i, (pattern, statements)) in arms.iter().enumerate() {
+                    assert_eq!(
+                        *pattern, i,
+                        "match patterns should be consecutive, starting from 0"
+                    );
+                    simple_arms.push(simplify_lines(
+                        statements,
+                        counters,
+                        new_functions,
+                        in_a_loop,
+                        array_manager,
+                        const_malloc,
+                    ));
+                }
+                res.push(SimpleLine::Match {
+                    value: simple_value,
+                    arms: simple_arms,
+                });
+            }
             Line::Assignment { var, value } => match value {
                 Expression::Value(value) => {
                     res.push(SimpleLine::Assignment {
@@ -710,6 +737,18 @@ pub fn find_variable_usage(lines: &[Line]) -> (BTreeSet<Var>, BTreeSet<Var>) {
 
     for line in lines {
         match line {
+            Line::Match { value, arms } => {
+                on_new_expr(value, &internal_vars, &mut external_vars);
+                for (_, statements) in arms {
+                    let (stmt_internal, stmt_external) = find_variable_usage(statements);
+                    internal_vars.extend(stmt_internal);
+                    external_vars.extend(
+                        stmt_external
+                            .into_iter()
+                            .filter(|v| !internal_vars.contains(v)),
+                    );
+                }
+            }
             Line::Assignment { var, value } => {
                 on_new_expr(value, &internal_vars, &mut external_vars);
                 internal_vars.insert(var.clone());
@@ -859,6 +898,12 @@ pub fn inline_lines(
     let mut lines_to_replace = vec![];
     for (i, line) in lines.iter_mut().enumerate() {
         match line {
+            Line::Match { value, arms } => {
+                inline_expr(value, args, inlining_count);
+                for (_, statements) in arms {
+                    inline_lines(statements, args, &res, inlining_count);
+                }
+            }
             Line::Assignment { var, value } => {
                 inline_expr(value, args, inlining_count);
                 inline_internal_var(var);
@@ -1180,6 +1225,24 @@ fn replace_vars_for_unroll(
 ) {
     for line in lines {
         match line {
+            Line::Match { value, arms } => {
+                replace_vars_for_unroll_in_expr(
+                    value,
+                    iterator,
+                    unroll_index,
+                    iterator_value,
+                    internal_vars,
+                );
+                for (_, statements) in arms {
+                    replace_vars_for_unroll(
+                        statements,
+                        iterator,
+                        unroll_index,
+                        iterator_value,
+                        internal_vars,
+                    );
+                }
+            }
             Line::Assignment { var, value } => {
                 assert!(var != iterator, "Weird");
                 *var = format!("@unrolled_{}_{}_{}", unroll_index, iterator_value, var).into();
@@ -1670,6 +1733,11 @@ fn replace_vars_by_const_in_expr(expr: &mut Expression, map: &BTreeMap<Var, F>) 
 fn get_function_called(lines: &[Line], function_called: &mut Vec<String>) {
     for line in lines {
         match line {
+            Line::Match { value: _, arms } => {
+                for (_, statements) in arms {
+                    get_function_called(statements, function_called);
+                }
+            }
             Line::FunctionCall { function_name, .. } => {
                 function_called.push(function_name.clone());
             }
@@ -1702,6 +1770,12 @@ fn get_function_called(lines: &[Line], function_called: &mut Vec<String>) {
 fn replace_vars_by_const_in_lines(lines: &mut [Line], map: &BTreeMap<Var, F>) {
     for line in lines {
         match line {
+            Line::Match { value, arms } => {
+                replace_vars_by_const_in_expr(value, map);
+                for (_, statements) in arms {
+                    replace_vars_by_const_in_lines(statements, map);
+                }
+            }
             Line::Assignment { var, value } => {
                 assert!(!map.contains_key(var), "Variable {} is a constant", var);
                 replace_vars_by_const_in_expr(value, map);
@@ -1826,6 +1900,25 @@ impl SimpleLine {
     fn to_string_with_indent(&self, indent: usize) -> String {
         let spaces = "    ".repeat(indent);
         let line_str = match self {
+            SimpleLine::Match { value, arms } => {
+                let arms_str = arms
+                    .iter()
+                    .enumerate()
+                    .map(|(pattern, stmt)| {
+                        format!(
+                            "{} => {}",
+                            pattern.to_string(),
+                            stmt.iter()
+                                .map(|line| line.to_string_with_indent(indent + 1))
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                format!("match {} {{\n{}\n{}}}", value.to_string(), arms_str, spaces)
+            }
             SimpleLine::Assignment {
                 var,
                 operation,
