@@ -39,8 +39,7 @@ fn test_xmss_aggregate() {
                 signature = signatures_start + sig_index * XMSS_SIG_SIZE;
 
                 xmss_public_key_recovered = xmss_recover_pub_key(message_hash, signature);
-
-                dot_product(xmss_public_key, pointer_to_one_vector, xmss_public_key_recovered, 1);
+                assert_eq_vec(xmss_public_key, xmss_public_key_recovered);
             }
         }
         return;
@@ -106,6 +105,10 @@ fn test_xmss_aggregate() {
         // We know for sure that each number n of the encoding is < W. We can use a JUMP to a + n * b (a, b two constants).
 
         public_key = malloc_vec(V * 2);
+
+        chain_tips_ptr = 8 * chain_tips;
+        public_key_ptr = 8 * public_key;
+
         for i in 0..V / 2 unroll {
             if encoding[2 * i] == 2 {
                 poseidon16(pointer_to_zero_vector, chain_tips + 2 * i, public_key + 4 * i);
@@ -116,8 +119,7 @@ fn test_xmss_aggregate() {
                     poseidon16(pointer_to_zero_vector, chain_hash_2 + 1, public_key + 4 * i);
                 } else {
                     if encoding[2 * i] == 3 {
-                        // trick: use the DOT_PRODUCT precompile to assert an equality between 2 chunks of 8 field elements
-                        dot_product(chain_tips + (2 * i), pointer_to_one_vector, (public_key + (4 * i + 1)), 1);
+                        assert_eq_vec_deref(chain_tips_ptr + ((2 * i) * 8), public_key_ptr + ((4 * i + 1) * 8));
                     } else {
                         // encoding[2 * i] == 0
                         chain_hash_1 = malloc_vec(2);
@@ -140,8 +142,7 @@ fn test_xmss_aggregate() {
                     poseidon16(chain_hash_2, pointer_to_zero_vector, public_key + (4 * i) + 2);
                 } else {
                     if encoding[2 * i + 1] == 3 {
-                        // trick: use the DOT_PRODUCT precompile to assert an equality between 2 chunks of 8 field elements
-                        dot_product(chain_tips + (2 * i + 1), pointer_to_one_vector, (public_key + (4 * i + 2)), 1);
+                        assert_eq_vec_deref(chain_tips_ptr + ((2 * i + 1) * 8), public_key_ptr + ((4 * i + 2) * 8));
                     } else {
                         // encoding[2 * i + 1] == 0
                         chain_hash_1 = malloc_vec(2);
@@ -181,6 +182,22 @@ fn test_xmss_aggregate() {
         }
 
         return merkle_hashes + (LOG_LIFETIME * 2 - 2);
+    }
+
+    fn assert_eq_vec(x, y) inline {
+        // x and y are vectorized pointer of len 1 each
+        ptr_x = x * 8;
+        ptr_y = y * 8;
+        dot_product(ptr_x, pointer_to_one_vector * 8, ptr_y, 1);
+        dot_product(ptr_x + 3, pointer_to_one_vector * 8, ptr_y + 3, 1);
+        return;
+    }
+
+    fn assert_eq_vec_deref(x, y) inline {
+        // x and y are normal pointer of len 8 each
+        dot_product(x, pointer_to_one_vector * 8, y, 1);
+        dot_product(x + 3, pointer_to_one_vector * 8, y + 3, 1);
+        return;
     }
    "#.to_string();
 

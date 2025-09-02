@@ -16,7 +16,7 @@ mod common;
 pub mod prove_execution;
 pub mod verify_execution;
 
-const UNIVARIATE_SKIPS: usize = 4;
+const UNIVARIATE_SKIPS: usize = 3;
 
 fn exec_column_groups() -> Vec<Range<usize>> {
     [

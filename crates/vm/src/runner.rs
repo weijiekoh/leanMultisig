@@ -14,7 +14,7 @@ use crate::*;
 use p3_field::Field;
 use p3_symmetric::Permutation;
 
-const MAX_MEMORY_SIZE: usize = 1 << 23;
+const MAX_MEMORY_SIZE: usize = 1 << 24;
 
 #[derive(Debug, Clone)]
 pub enum RunnerError {

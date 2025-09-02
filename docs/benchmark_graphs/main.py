@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 
+# uv run python main.py
 
 def create_duration_graph(data, target, target_label, title, y_legend, file):
     dates = []
@@ -56,6 +57,7 @@ if __name__ == "__main__":
 
     create_duration_graph(data=[
         ('2025-08-27', 14.2),
+        ('2025-09-02', 13.5)
     ], target=0.5, target_label = "Target (0.5 s)", title="500 XMSS aggregated: proving time", y_legend= "Proving time (s)", file = "xmss_aggregated_time")
 
     create_duration_graph(data=[

@@ -15,7 +15,8 @@ Key techniques:
 
 ## Benchmarks
 
-cpu: i9-12900H, ram: 32 gb
+commit: 8948b85
+cpu: cpu: i9-12900H, ram: 32 gb
 
 > TLDR: Very slow, **but there is hope** (cf [TODO](TODO.md))
 
