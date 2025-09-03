@@ -7,8 +7,10 @@ use std::{
 use utils::ToUsize;
 use vm::*;
 
+#[derive(Default)]
 struct Compiler {
     bytecode: BTreeMap<Label, Vec<IntermediateInstruction>>,
+    match_blocks: Vec<Vec<Vec<IntermediateInstruction>>>, // each match = many bytecode blocks, each bytecode block = many instructions
     if_counter: usize,
     call_counter: usize,
     func_name: String,
@@ -19,19 +21,6 @@ struct Compiler {
 }
 
 impl Compiler {
-    fn new() -> Self {
-        Self {
-            var_positions: BTreeMap::new(),
-            stack_size: 0,
-            bytecode: BTreeMap::new(),
-            func_name: String::new(),
-            args_count: 0,
-            if_counter: 0,
-            call_counter: 0,
-            const_mallocs: BTreeMap::new(),
-        }
-    }
-
     fn get_offset(&self, var: &VarOrConstMallocAccess) -> ConstExpression {
         match var {
             VarOrConstMallocAccess::Var(var) => (*self
@@ -115,7 +104,7 @@ impl IntermediateValue {
 pub fn compile_to_intermediate_bytecode(
     simple_program: SimpleProgram,
 ) -> Result<IntermediateBytecode, String> {
-    let mut compiler = Compiler::new();
+    let mut compiler = Compiler::default();
     let mut memory_sizes = BTreeMap::new();
 
     for function in simple_program.functions.values() {
@@ -128,6 +117,7 @@ pub fn compile_to_intermediate_bytecode(
 
     Ok(IntermediateBytecode {
         bytecode: compiler.bytecode,
+        match_blocks: compiler.match_blocks,
         memory_size_per_function: memory_sizes,
     })
 }
@@ -192,6 +182,75 @@ fn compile_lines(
                 if let VarOrConstMallocAccess::Var(var) = var {
                     declared_vars.insert(var.clone());
                 }
+            }
+
+            SimpleLine::Match { value, arms } => {
+                let match_index = compiler.match_blocks.len();
+                let end_label = format!("@match_end_{}", match_index);
+
+                let value_simplified = IntermediateValue::from_simple_expr(value, compiler);
+
+                let mut compiled_arms = vec![];
+                let original_stack_size = compiler.stack_size;
+                let mut new_stack_size = original_stack_size;
+                for (i, arm) in arms.into_iter().enumerate() {
+                    let mut arm_declared_vars = declared_vars.clone();
+                    compiler.stack_size = original_stack_size;
+                    let arm_instructions = compile_lines(
+                        &arm,
+                        compiler,
+                        Some(end_label.clone()),
+                        &mut arm_declared_vars,
+                    )?;
+                    compiled_arms.push(arm_instructions);
+                    new_stack_size = compiler.stack_size.max(new_stack_size);
+                    *declared_vars = if i == 0 {
+                        arm_declared_vars
+                    } else {
+                        declared_vars
+                            .intersection(&arm_declared_vars)
+                            .cloned()
+                            .collect()
+                    };
+                }
+                compiler.stack_size = new_stack_size;
+                compiler.match_blocks.push(compiled_arms);
+
+                let value_scaled_offset = IntermediateValue::MemoryAfterFp {
+                    offset: compiler.stack_size.into(),
+                };
+                compiler.stack_size += 1;
+                instructions.push(IntermediateInstruction::Computation {
+                    operation: Operation::Mul,
+                    arg_a: value_simplified.clone(),
+                    arg_c: ConstExpression::Value(ConstantValue::MatchBlockSize { match_index })
+                        .into(),
+                    res: value_scaled_offset.clone(),
+                });
+
+                let jump_dest_offset = IntermediateValue::MemoryAfterFp {
+                    offset: compiler.stack_size.into(),
+                };
+                compiler.stack_size += 1;
+                instructions.push(IntermediateInstruction::Computation {
+                    operation: Operation::Add,
+                    arg_a: value_scaled_offset.clone(),
+                    arg_c: ConstExpression::Value(ConstantValue::MatchFirstBlockStart {
+                        match_index,
+                    })
+                    .into(),
+                    res: jump_dest_offset.clone(),
+                });
+                instructions.push(IntermediateInstruction::Jump {
+                    dest: jump_dest_offset,
+                    updated_fp: None,
+                });
+
+                let remaining =
+                    compile_lines(&lines[i + 1..], compiler, final_jump, declared_vars)?;
+                compiler.bytecode.insert(end_label, remaining);
+
+                return Ok(instructions);
             }
 
             SimpleLine::IfNotZero {
@@ -655,6 +714,11 @@ fn find_internal_vars(lines: &[SimpleLine]) -> BTreeSet<Var> {
     let mut internal_vars = BTreeSet::new();
     for line in lines {
         match line {
+            SimpleLine::Match { arms, .. } => {
+                for arm in arms {
+                    internal_vars.extend(find_internal_vars(arm));
+                }
+            }
             SimpleLine::Assignment { var, .. } => {
                 if let VarOrConstMallocAccess::Var(var) = var {
                     internal_vars.insert(var.clone());

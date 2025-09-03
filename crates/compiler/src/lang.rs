@@ -105,6 +105,8 @@ pub enum ConstantValue {
     PointerToOneVector,  // In the memory of chunks of 8 field elements
     FunctionSize { function_name: Label },
     Label(Label),
+    MatchBlockSize { match_index: usize },
+    MatchFirstBlockStart { match_index: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -359,7 +361,12 @@ impl Line {
                             .map(|line| line.to_string_with_indent(indent + 1))
                             .collect::<Vec<_>>()
                             .join("\n");
-                        format!("{} => {{\n{}\n{}}}", const_expr.to_string(), body_str, spaces)
+                        format!(
+                            "{} => {{\n{}\n{}}}",
+                            const_expr.to_string(),
+                            body_str,
+                            spaces
+                        )
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
@@ -551,6 +558,12 @@ impl ToString for ConstantValue {
                 format!("@function_size_{}", function_name)
             }
             ConstantValue::Label(label) => label.to_string(),
+            ConstantValue::MatchFirstBlockStart { match_index } => {
+                format!("@match_first_block_start_{}", match_index)
+            }
+            ConstantValue::MatchBlockSize { match_index } => {
+                format!("@match_block_size_{}", match_index)
+            }
         }
     }
 }

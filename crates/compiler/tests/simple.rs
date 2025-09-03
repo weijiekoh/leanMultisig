@@ -345,3 +345,42 @@ fn test_inlined() {
    "#;
     compile_and_run(program, &[], &[]);
 }
+
+#[test]
+fn test_match() {
+    let program = r#"
+    fn main() {
+        for x in 0..4 unroll {
+            func_match(x);
+        }
+        return;
+    }
+
+    fn func_match(x) inline {
+        match x {
+            0 => {
+                print(41);
+            }
+            1 => {
+                y = func_1(x);
+                print(y + 1);
+            }
+            2 => {
+                y = 10 * x;
+                z = 10 * y;
+                print(z);
+            }
+            3 => {
+                y = 10 * x;
+                print(y);
+            }
+        }
+        return;
+    }
+
+    fn func_1(x) -> 1 {
+        return x * x * x * x;
+    }
+   "#;
+    compile_and_run(program, &[], &[]);
+}

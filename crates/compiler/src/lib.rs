@@ -31,6 +31,7 @@ pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F]) {
     execute_bytecode(&bytecode, &public_input, private_input);
 }
 
+#[derive(Debug, Clone, Default)]
 struct Counter(usize);
 
 impl Counter {

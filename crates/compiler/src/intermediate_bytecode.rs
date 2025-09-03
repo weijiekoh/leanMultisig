@@ -9,6 +9,7 @@ use vm::*;
 #[derive(Debug, Clone)]
 pub struct IntermediateBytecode {
     pub bytecode: BTreeMap<Label, Vec<IntermediateInstruction>>,
+    pub match_blocks: Vec<Vec<Vec<IntermediateInstruction>>>,
     pub memory_size_per_function: BTreeMap<String, usize>,
 }
 
@@ -368,6 +369,15 @@ impl ToString for IntermediateBytecode {
             res.push_str(&format!("\n{}:\n", label));
             for instruction in instructions {
                 res.push_str(&format!("  {}\n", instruction.to_string()));
+            }
+        }
+        for (i, match_blocks) in self.match_blocks.iter().enumerate() {
+            res.push_str(&format!("\nMatch {}:\n", i));
+            for (j, case) in match_blocks.iter().enumerate() {
+                res.push_str(&format!("  Case {}:\n", j));
+                for instruction in case {
+                    res.push_str(&format!("    {}\n", instruction.to_string()));
+                }
             }
         }
         res.push_str("\nMemory size per function:\n");

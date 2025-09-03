@@ -239,9 +239,10 @@ fn parse_const_expr(
                 }
             }
         },
-        _ => Err(ParseError::SemanticError(
-            "Only constant values are allowed in match patterns".to_string(),
-        )),
+        _ => Err(ParseError::SemanticError(format!(
+            "Only constant values are allowed in match patterns: {}",
+            inner.as_str()
+        ))),
     }
 }
 
