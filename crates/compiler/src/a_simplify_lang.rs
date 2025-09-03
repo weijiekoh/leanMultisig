@@ -1583,6 +1583,16 @@ fn handle_inlined_functions_helper(
                     total_inlined_counter,
                 );
             }
+            Line::Match { arms, .. } => {
+                for (_, arm) in arms {
+                    handle_inlined_functions_helper(
+                        arm,
+                        inlined_functions,
+                        inlined_var_counter,
+                        total_inlined_counter,
+                    );
+                }
+            }
             _ => {}
         }
     }
