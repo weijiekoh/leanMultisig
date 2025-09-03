@@ -110,47 +110,47 @@ fn test_xmss_aggregate() {
         public_key_ptr = 8 * public_key;
 
         for i in 0..V / 2 unroll {
-            if encoding[2 * i] == 2 {
-                poseidon16(pointer_to_zero_vector, chain_tips + 2 * i, public_key + 4 * i);
-            } else {
-                if encoding[2 * i] == 1 {
+            match encoding[2 * i] {
+                0 => {
+                    chain_hash_1 = malloc_vec(2);
+                    chain_hash_2 = malloc_vec(2);
+                    poseidon16(pointer_to_zero_vector, chain_tips + 2 * i, chain_hash_1);
+                    poseidon16(pointer_to_zero_vector, chain_hash_1 + 1, chain_hash_2);
+                    poseidon16(pointer_to_zero_vector, chain_hash_2 + 1, public_key + 4 * i);
+                }
+                1 => {
                     chain_hash_2 = malloc_vec(2);
                     poseidon16(pointer_to_zero_vector, chain_tips +  2 * i, chain_hash_2);
                     poseidon16(pointer_to_zero_vector, chain_hash_2 + 1, public_key + 4 * i);
-                } else {
-                    if encoding[2 * i] == 3 {
-                        assert_eq_vec_deref(chain_tips_ptr + ((2 * i) * 8), public_key_ptr + ((4 * i + 1) * 8));
-                    } else {
-                        // encoding[2 * i] == 0
-                        chain_hash_1 = malloc_vec(2);
-                        chain_hash_2 = malloc_vec(2);
-                        poseidon16(pointer_to_zero_vector, chain_tips + 2 * i, chain_hash_1);
-                        poseidon16(pointer_to_zero_vector, chain_hash_1 + 1, chain_hash_2);
-                        poseidon16(pointer_to_zero_vector, chain_hash_2 + 1, public_key + 4 * i);
-                    }
+                }
+                2 => {
+                    poseidon16(pointer_to_zero_vector, chain_tips + 2 * i, public_key + 4 * i);
+                }
+                3 => {
+                    assert_eq_vec_deref(chain_tips_ptr + ((2 * i) * 8), public_key_ptr + ((4 * i + 1) * 8));
                 }
             }
         }
 
         for i in 0..V / 2 unroll {
-            if encoding[2 * i + 1] == 2 {
-                poseidon16(chain_tips + 2 * i + 1, pointer_to_zero_vector, public_key + 4 * i + 2);
-            } else {
-                if encoding[2 * i + 1] == 1 {
+            match encoding[2 * i + 1] {
+                0 => {
+                    chain_hash_1 = malloc_vec(2);
+                    chain_hash_2 = malloc_vec(2);
+                    poseidon16(chain_tips + 2 * i + 1, pointer_to_zero_vector, chain_hash_1);
+                    poseidon16(chain_hash_1, pointer_to_zero_vector, chain_hash_2);
+                    poseidon16(chain_hash_2, pointer_to_zero_vector, public_key + 4 * i + 2);
+                }
+                1 => {
                     chain_hash_2 = malloc_vec(2);
                     poseidon16(chain_tips +  2 * i + 1, pointer_to_zero_vector, chain_hash_2);
                     poseidon16(chain_hash_2, pointer_to_zero_vector, public_key + (4 * i) + 2);
-                } else {
-                    if encoding[2 * i + 1] == 3 {
-                        assert_eq_vec_deref(chain_tips_ptr + ((2 * i + 1) * 8), public_key_ptr + ((4 * i + 2) * 8));
-                    } else {
-                        // encoding[2 * i + 1] == 0
-                        chain_hash_1 = malloc_vec(2);
-                        chain_hash_2 = malloc_vec(2);
-                        poseidon16(chain_tips + 2 * i + 1, pointer_to_zero_vector, chain_hash_1);
-                        poseidon16(chain_hash_1, pointer_to_zero_vector, chain_hash_2);
-                        poseidon16(chain_hash_2, pointer_to_zero_vector, public_key + 4 * i + 2);
-                    }
+                }
+                2 => {
+                    poseidon16(chain_tips + 2 * i + 1, pointer_to_zero_vector, public_key + 4 * i + 2);
+                }
+                3 => {
+                    assert_eq_vec_deref(chain_tips_ptr + ((2 * i + 1) * 8), public_key_ptr + ((4 * i + 2) * 8));
                 }
             }
         }
@@ -274,18 +274,21 @@ fn test_xmss_aggregate() {
         );
         private_input.extend(F::zero_vec(LOG_LIFETIME.next_multiple_of(8) - LOG_LIFETIME));
     }
-
-    utils::init_tracing();
-    let bytecode = compile_program(&program);
-    let batch_pcs = build_batch_pcs();
-    let time = Instant::now();
-    let proof_data = prove_execution(&bytecode, &public_input, &private_input, &batch_pcs);
-    let proving_time = time.elapsed();
-    verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
-    println!(
-        "XMSS aggregation (n_signatures = {}, lifetime = 2^{})",
-        n_public_keys / INV_BITFIELD_DENSITY,
-        LOG_LIFETIME
-    );
-    println!("Proving time: {:?}", proving_time);
+    if env::var("PROVE_XMSS_AGGREGATED").unwrap_or("true".to_string()) == "true" {
+        utils::init_tracing();
+        let bytecode = compile_program(&program);
+        let batch_pcs = build_batch_pcs();
+        let time = Instant::now();
+        let proof_data = prove_execution(&bytecode, &public_input, &private_input, &batch_pcs);
+        let proving_time = time.elapsed();
+        verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
+        println!(
+            "XMSS aggregation (n_signatures = {}, lifetime = 2^{})",
+            n_public_keys / INV_BITFIELD_DENSITY,
+            LOG_LIFETIME
+        );
+        println!("Proving time: {:?}", proving_time);
+    } else {
+        compile_and_run(&program, &public_input, &private_input);
+    }
 }

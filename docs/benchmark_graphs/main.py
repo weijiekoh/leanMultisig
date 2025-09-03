@@ -57,9 +57,12 @@ if __name__ == "__main__":
 
     create_duration_graph(data=[
         ('2025-08-27', 14.2),
-        ('2025-09-02', 13.5)
+        ('2025-09-02', 13.5),
+        ('2025-09-03', 9.4)
     ], target=0.5, target_label = "Target (0.5 s)", title="500 XMSS aggregated: proving time", y_legend= "Proving time (s)", file = "xmss_aggregated_time")
 
     create_duration_graph(data=[
             ('2025-08-27', 14.2 / 0.92),
+            ('2025-09-02', 13.5 / 0.82),
+            ('2025-09-03', 9.4 / 0.82),
         ], target=2.0, target_label = "Target (2x)", title="500 XMSS aggregated: zkVM overhead vs raw Poseidons", y_legend= "", file = "xmss_aggregated_overhead")

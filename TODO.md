@@ -26,6 +26,7 @@
 - leanISA compiler: inlined function
 - batch the logup* in basefield. We should have only 2 logup* in memory (not 3)
 - the 2 executions of the program, before generating the validity proof, can be merged, using some kind of placeholders
+- XMSS aggregation program has 40% of unused memory!! -> TODO improve the compiler to reduce memory fragmentation
 
 ## Not Perf
 
