@@ -27,40 +27,40 @@ use zk_vm::verify_execution::verify_execution;
 
 #[test]
 pub fn test_whir_recursion() {
-    let program_str = r#"
+    let mut program_str = r#"
 
-    // 1 OOD QUERY PER ROUND, 0 GRINDING
+    // 1 OOD QUERY PER ROUND
+    // 0 GRINDING IN SUMCHECK -> TODO
 
-    const W = 3; // in the extension field, X^8 = 3
     const F_BITS = 31; // koala-bear = 31 bits
 
-    const N_VARS = 25;
-    const LOG_INV_RATE = 2; 
+    const N_VARS = N_VARS_PLACEHOLDER;
+    const LOG_INV_RATE = LOG_INV_RATE_PLACEHOLDER; 
     const N_ROUNDS = 3;
     
-    const PADDING_FOR_INITIAL_MERKLE_LEAVES = 6;
+    const PADDING_FOR_INITIAL_MERKLE_LEAVES = PADDING_FOR_INITIAL_MERKLE_LEAVES_PLACEHOLDER;
 
-    const FOLDING_FACTOR_0 = 7;
-    const FOLDING_FACTOR_1 = 4;
-    const FOLDING_FACTOR_2 = 4;
-    const FOLDING_FACTOR_3 = 4;
+    const FOLDING_FACTOR_0 = FOLDING_FACTOR_0_PLACEHOLDER;
+    const FOLDING_FACTOR_1 = FOLDING_FACTOR_1_PLACEHOLDER;
+    const FOLDING_FACTOR_2 = FOLDING_FACTOR_2_PLACEHOLDER;
+    const FOLDING_FACTOR_3 = FOLDING_FACTOR_3_PLACEHOLDER;
 
     const FINAL_VARS = N_VARS - (FOLDING_FACTOR_0 + FOLDING_FACTOR_1 + FOLDING_FACTOR_2 + FOLDING_FACTOR_3);
 
-    const RS_REDUCTION_FACTOR_0 = 3;
+    const RS_REDUCTION_FACTOR_0 = RS_REDUCTION_FACTOR_0_PLACEHOLDER;
     const RS_REDUCTION_FACTOR_1 = 1;
     const RS_REDUCTION_FACTOR_2 = 1;
     const RS_REDUCTION_FACTOR_3 = 1;
 
-    const NUM_QUERIES_0 = 58;
-    const NUM_QUERIES_1 = 19;
-    const NUM_QUERIES_2 = 13;
-    const NUM_QUERIES_3 = 10;
+    const NUM_QUERIES_0 = NUM_QUERIES_0_PLACEHOLDER;
+    const NUM_QUERIES_1 = NUM_QUERIES_1_PLACEHOLDER;
+    const NUM_QUERIES_2 = NUM_QUERIES_2_PLACEHOLDER;
+    const NUM_QUERIES_3 = NUM_QUERIES_3_PLACEHOLDER;
 
-    const GRINDING_BITS_0 = 16;
-    const GRINDING_BITS_1 = 15;
-    const GRINDING_BITS_2 = 11;
-    const GRINDING_BITS_3 = 8;
+    const GRINDING_BITS_0 = GRINDING_BITS_0_PLACEHOLDER;
+    const GRINDING_BITS_1 = GRINDING_BITS_1_PLACEHOLDER;
+    const GRINDING_BITS_2 = GRINDING_BITS_2_PLACEHOLDER;
+    const GRINDING_BITS_3 = GRINDING_BITS_3_PLACEHOLDER;
 
     const TWO_ADICITY = 24;
     const ROOT = 1791270792; // of order 2^TWO_ADICITY
@@ -825,25 +825,6 @@ pub fn test_whir_recursion() {
         return c;
     }
 
-    // fn mul_extension(a, b, c) {
-    //     // c = a * b
-
-    //     ap = a * 8;
-    //     bp = b * 8;
-    //     cp = c * 8;
-       
-    //     cp[0] = (ap[0] * bp[0]) + W * ((ap[1] * bp[7]) + (ap[2] * bp[6]) + (ap[3] * bp[5]) + (ap[4] * bp[4]) + (ap[5] * bp[3]) + (ap[6] * bp[2]) + (ap[7] * bp[1]));
-    //     cp[1] = (ap[1] * bp[0]) + (ap[0] * bp[1]) + W * ((ap[2] * bp[7]) + (ap[3] * bp[6]) + (ap[4] * bp[5]) + (ap[5] * bp[4]) + (ap[6] * bp[3]) + (ap[7] * bp[2]));
-    //     cp[2] = (ap[2] * bp[0]) + (ap[1] * bp[1]) + (ap[0] * bp[2]) + W * ((ap[3] * bp[7]) + (ap[4] * bp[6]) + (ap[5] * bp[5]) + (ap[6] * bp[4]) + (ap[7] * bp[3]));
-    //     cp[3] = (ap[3] * bp[0]) + (ap[2] * bp[1]) + (ap[1] * bp[2]) + (ap[0] * bp[3]) + W * ((ap[4] * bp[7]) + (ap[5] * bp[6]) + (ap[6] * bp[5]) + (ap[7] * bp[4]));
-    //     cp[4] = (ap[4] * bp[0]) + (ap[3] * bp[1]) + (ap[2] * bp[2]) + (ap[1] * bp[3]) + (ap[0] * bp[4]) + W * ((ap[5] * bp[7]) + (ap[6] * bp[6]) + (ap[7] * bp[5]));
-    //     cp[5] = (ap[5] * bp[0]) + (ap[4] * bp[1]) + (ap[3] * bp[2]) + (ap[2] * bp[3]) + (ap[1] * bp[4]) + (ap[0] * bp[5]) + W * ((ap[6] * bp[7]) + (ap[7] * bp[6]));
-    //     cp[6] = (ap[6] * bp[0]) + (ap[5] * bp[1]) + (ap[4] * bp[2]) + (ap[3] * bp[3]) + (ap[2] * bp[4]) + (ap[1] * bp[5]) + (ap[0] * bp[6]) + W * (ap[7] * bp[7]);
-    //     cp[7] = (ap[7] * bp[0]) + (ap[6] * bp[1]) + (ap[5] * bp[2]) + (ap[4] * bp[3]) + (ap[3] * bp[4]) + (ap[2] * bp[5]) + (ap[1] * bp[6]) + (ap[0] * bp[7]);
-
-    //     return;
-    // }
-
     fn mul_extension(a, b, c) {
         // c = a * b
         dot_product(a, b, c, 1);
@@ -903,9 +884,9 @@ pub fn test_whir_recursion() {
         return;
     }
 
-   "#;
+   "#.to_string();
 
-    let num_variables = 25;
+    let num_variables = 23;
     let recursion_config_builder = WhirConfigBuilder {
         max_num_variables_to_send_coeffs: 6,
         security_level: 128,
@@ -931,10 +912,44 @@ pub fn test_whir_recursion() {
             "Round {}: {} queries, pow: {} bits",
             i, round.num_queries, round.pow_bits
         );
+        program_str = program_str
+            .replace(
+                &format!("NUM_QUERIES_{}_PLACEHOLDER", i),
+                &round.num_queries.to_string(),
+            )
+            .replace(
+                &format!("GRINDING_BITS_{}_PLACEHOLDER", i),
+                &round.pow_bits.to_string(),
+            );
     }
     println!(
         "Final round: {} queries, pow: {} bits",
         recursion_config.final_queries, recursion_config.final_pow_bits
+    );
+    program_str = program_str
+        .replace(
+            &format!("NUM_QUERIES_{}_PLACEHOLDER", recursion_config.n_rounds()),
+            &recursion_config.final_queries.to_string(),
+        )
+        .replace(
+            &format!("GRINDING_BITS_{}_PLACEHOLDER", recursion_config.n_rounds()),
+            &recursion_config.final_pow_bits.to_string(),
+        );
+    assert_eq!(recursion_config.n_rounds(), 3); // this is hardcoded in the program above
+    for round in 0..=recursion_config.n_rounds() {
+        program_str = program_str.replace(
+            &format!("FOLDING_FACTOR_{}_PLACEHOLDER", round),
+            &recursion_config_builder
+                .folding_factor
+                .at_round(round)
+                .to_string(),
+        );
+    }
+    program_str = program_str.replace(
+        "RS_REDUCTION_FACTOR_0_PLACEHOLDER",
+        &recursion_config_builder
+            .rs_domain_initial_reduction_factor
+            .to_string(),
     );
 
     let mut rng = StdRng::seed_from_u64(0);
@@ -982,12 +997,14 @@ pub fn test_whir_recursion() {
         .unwrap();
 
     let first_folding_factor = recursion_config_builder.folding_factor.at_round(0);
-    let mut proof_data_padding = (1 << first_folding_factor)
+
+    // to align the first merkle leaves (in base field) (required to appropriately call the precompile multilinear_eval)
+    let proof_data_padding = (1 << first_folding_factor)
         - ((PUBLIC_INPUT_START
             + public_input.len()
             + {
                 // sumcheck polys
-                first_folding_factor * 3 * DIMENSION
+                first_folding_factor * 3 * VECTOR_LEN
             }
             + {
                 // merkle root
@@ -999,16 +1016,22 @@ pub fn test_whir_recursion() {
             }
             + {
                 // ood answer
-                DIMENSION
+                VECTOR_LEN
             })
             % (1 << first_folding_factor));
     assert_eq!(proof_data_padding % 8, 0);
-    proof_data_padding /= 8;
-    println!(
-        "1st merkle leaf padding: {} (vectorized)",
-        proof_data_padding
-    ); // to align the first merkle leaves (in base field)
-    public_input.extend(F::zero_vec(proof_data_padding * 8));
+    program_str = program_str
+        .replace(
+            "PADDING_FOR_INITIAL_MERKLE_LEAVES_PLACEHOLDER",
+            &proof_data_padding.to_string(),
+        )
+        .replace("N_VARS_PLACEHOLDER", &num_variables.to_string())
+        .replace(
+            "LOG_INV_RATE_PLACEHOLDER",
+            &recursion_config_builder.starting_log_inv_rate.to_string(),
+        );
+
+    public_input.extend(F::zero_vec(proof_data_padding));
 
     public_input.extend(prover_state.proof_data()[commitment_size..].to_vec());
 
@@ -1025,7 +1048,7 @@ pub fn test_whir_recursion() {
         .unwrap();
 
     // utils::init_tracing();
-    let bytecode = compile_program(program_str);
+    let bytecode = compile_program(&program_str);
     let batch_pcs = build_batch_pcs();
     let time = Instant::now();
     let proof_data = prove_execution(&bytecode, &public_input, &[], &batch_pcs);
