@@ -16,7 +16,7 @@ use zk_vm::{
 fn test_xmss_aggregate() {
     // Public input:  message_hash | all_public_keys | bitield
     // Private input: signatures = (randomness | chain_tips | merkle_path)
-    let mut program = r#"
+    let mut program_str = r#"
 
     const V = 68;
     const W = 4;
@@ -207,7 +207,7 @@ fn test_xmss_aggregate() {
     let n_public_keys: usize = env::var("NUM_XMSS_AGGREGATED").unwrap().parse().unwrap();
 
     let xmss_signature_size_padded = (V + 1 + LOG_LIFETIME) + LOG_LIFETIME.div_ceil(8);
-    program = program
+    program_str = program_str
         .replace("LOG_LIFETIME_PLACE_HOLDER", &LOG_LIFETIME.to_string())
         .replace("N_PUBLIC_KEYS_PLACE_HOLDER", &n_public_keys.to_string())
         .replace(
@@ -276,10 +276,16 @@ fn test_xmss_aggregate() {
     }
     if env::var("PROVE_XMSS_AGGREGATED").unwrap_or("true".to_string()) == "true" {
         utils::init_tracing();
-        let bytecode = compile_program(&program);
+        let bytecode = compile_program(&program_str);
         let batch_pcs = build_batch_pcs();
         let time = Instant::now();
-        let proof_data = prove_execution(&bytecode, &public_input, &private_input, &batch_pcs);
+        let proof_data = prove_execution(
+            &bytecode,
+            &program_str,
+            &public_input,
+            &private_input,
+            &batch_pcs,
+        );
         let proving_time = time.elapsed();
         verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
         println!(
@@ -289,6 +295,6 @@ fn test_xmss_aggregate() {
         );
         println!("Proving time: {:?}", proving_time);
     } else {
-        compile_and_run(&program, &public_input, &private_input);
+        compile_and_run(&program_str, &public_input, &private_input);
     }
 }

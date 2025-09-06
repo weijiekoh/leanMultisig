@@ -9,6 +9,7 @@ use crate::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use utils::ToUsize;
+use vm::LocationInSourceCode;
 
 #[derive(Debug, Clone)]
 pub struct SimpleProgram {
@@ -129,6 +130,10 @@ pub enum SimpleLine {
         var: Var,
         size: ConstExpression,
         label: ConstMallocLabel,
+    },
+    // noop, debug purpose only
+    LocationReport {
+        location: LocationInSourceCode,
     },
 }
 
@@ -638,6 +643,11 @@ fn simplify_lines(
             Line::Panic => {
                 res.push(SimpleLine::Panic);
             }
+            Line::LocationReport { location } => {
+                res.push(SimpleLine::LocationReport {
+                    location: *location,
+                });
+            }
         }
     }
 
@@ -837,7 +847,7 @@ pub fn find_variable_usage(lines: &[Line]) -> (BTreeSet<Var>, BTreeSet<Var>) {
                 on_new_expr(index, &internal_vars, &mut external_vars);
                 on_new_expr(value, &internal_vars, &mut external_vars);
             }
-            Line::Panic | Line::Break => {}
+            Line::Panic | Line::Break | Line::LocationReport { .. } => {}
         }
     }
 
@@ -998,7 +1008,7 @@ pub fn inline_lines(
                 inline_expr(index, args, inlining_count);
                 inline_expr(value, args, inlining_count);
             }
-            Line::Panic | Line::Break => {}
+            Line::Panic | Line::Break | Line::LocationReport { .. } => {}
         }
     }
     for (i, new_lines) in lines_to_replace.into_iter().rev() {
@@ -1415,8 +1425,6 @@ fn replace_vars_for_unroll(
                     );
                 }
             }
-            Line::Break => {}
-            Line::Panic => {}
             Line::Print { line_info, content } => {
                 // Print statements are not unrolled, so we don't need to change them
                 *line_info += &format!(" (unrolled {} {})", unroll_index, iterator_value);
@@ -1462,6 +1470,7 @@ fn replace_vars_for_unroll(
             Line::CounterHint { var } => {
                 *var = format!("@unrolled_{}_{}_{}", unroll_index, iterator_value, var).into();
             }
+            Line::Break | Line::Panic | Line::LocationReport { .. } => {}
         }
     }
 }
@@ -1772,7 +1781,8 @@ fn get_function_called(lines: &[Line], function_called: &mut Vec<String>) {
             | Line::CounterHint { .. }
             | Line::MAlloc { .. }
             | Line::Panic
-            | Line::Break => {}
+            | Line::Break
+            | Line::LocationReport { .. } => {}
         }
     }
 }
@@ -1877,7 +1887,7 @@ fn replace_vars_by_const_in_lines(lines: &mut [Line], map: &BTreeMap<Var, F>) {
                 assert!(!map.contains_key(var), "Variable {} is a constant", var);
                 replace_vars_by_const_in_expr(size, map);
             }
-            Line::Panic | Line::Break => {}
+            Line::Panic | Line::Break | Line::LocationReport { .. } => {}
         }
     }
 }
@@ -2075,6 +2085,7 @@ impl SimpleLine {
                 format!("{} = malloc({})", var.to_string(), size.to_string())
             }
             SimpleLine::Panic => "panic".to_string(),
+            SimpleLine::LocationReport { .. } => Default::default(),
         };
         format!("{}{}", spaces, line_str)
     }

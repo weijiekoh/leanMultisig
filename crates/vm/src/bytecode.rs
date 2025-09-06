@@ -1,4 +1,4 @@
-use crate::F;
+use crate::{F, LocationInSourceCode};
 use p3_field::PrimeCharacteristicRing;
 use std::collections::BTreeMap;
 
@@ -123,6 +123,9 @@ pub enum Hint {
     Print {
         line_info: String,
         content: Vec<MemOrConstant>,
+    },
+    LocationReport {
+        location: LocationInSourceCode, // debug purpose
     },
 }
 
@@ -318,6 +321,7 @@ impl ToString for Hint {
             Self::Inverse { arg, res_offset } => {
                 format!("m[fp + {}] = inverse({})", res_offset, arg.to_string())
             }
+            Self::LocationReport { .. } => Default::default(),
         }
     }
 }

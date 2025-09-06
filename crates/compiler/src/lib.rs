@@ -28,7 +28,7 @@ pub fn compile_program(program: &str) -> Bytecode {
 
 pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F]) {
     let bytecode = compile_program(program);
-    execute_bytecode(&bytecode, &public_input, private_input);
+    execute_bytecode(&bytecode, &public_input, private_input, program);
 }
 
 #[derive(Debug, Clone, Default)]

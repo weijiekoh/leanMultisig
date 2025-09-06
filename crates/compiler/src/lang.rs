@@ -323,6 +323,10 @@ pub enum Line {
     CounterHint {
         var: Var,
     },
+    // noop, debug purpose only
+    LocationReport {
+        location: LocationInSourceCode,
+    },
 }
 
 impl ToString for Expression {
@@ -352,6 +356,10 @@ impl Line {
     fn to_string_with_indent(&self, indent: usize) -> String {
         let spaces = "    ".repeat(indent);
         let line_str = match self {
+            Line::LocationReport { .. } => {
+                // print nothing
+                Default::default()
+            }
             Line::Match { value, arms } => {
                 let arms_str = arms
                     .iter()

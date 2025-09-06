@@ -5,9 +5,10 @@ use compiler::compile_program;
 use p3_field::BasedVectorSpace;
 use p3_field::PrimeCharacteristicRing;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use utils::padd_with_zero_to_next_power_of_two;
 use utils::{
-    MY_DIGEST_ELEMS, MyMerkleCompress, MyMerkleHash, build_merkle_compress, build_merkle_hash,
-    build_prover_state, build_verifier_state,
+    MyMerkleCompress, MyMerkleHash, build_merkle_compress, build_merkle_hash, build_prover_state,
+    build_verifier_state,
 };
 use vm::*;
 use whir_p3::{
@@ -36,7 +37,7 @@ pub fn test_whir_recursion() {
 
     const N_VARS = N_VARS_PLACEHOLDER;
     const LOG_INV_RATE = LOG_INV_RATE_PLACEHOLDER; 
-    const N_ROUNDS = 3;
+    const N_ROUNDS = 3; // TODO make it a parameter
     
     const PADDING_FOR_INITIAL_MERKLE_LEAVES = PADDING_FOR_INITIAL_MERKLE_LEAVES_PLACEHOLDER;
 
@@ -491,24 +492,6 @@ pub fn test_whir_recursion() {
         panic();
     }
 
-    // fn dot_product(a, b, res, const n) {
-    //     prods = malloc_vec(n);
-    //     for i in 0..n unroll {
-    //         mul_extension(a + i, b + i, prods + i);
-    //     }
-
-    //     sums = malloc_vec(n);
-    //     copy_chunk_vec(prods, sums);
-    //     for i in 0..n - 1 unroll {
-    //         add_extension(sums + i, prods + i + 1, sums + i + 1);
-    //     }
-
-    //     copy_chunk_vec(sums + n - 1, res);
-
-    //     return;
-    // }
-
-
     fn dot_product_base_extension(a, b, res, const n) {
         // a is a pointer to n base field elements
         // b is a pointer to n extension field elements
@@ -644,8 +627,8 @@ pub fn test_whir_recursion() {
 
     fn parse_commitment(fs_state) -> 4 {
         fs_state_1, root = fs_receive(fs_state, 1); // vectorized pointer of len 1
-        fs_state_2, ood_point = fs_sample_ef(fs_state_1);  // vectorized pointer of len 1
-        fs_state_3, ood_eval = fs_receive(fs_state_2, 1); // vectorized pointer of len 1
+        fs_state_2, ood_point = fs_sample_ef(fs_state_1);
+        fs_state_3, ood_eval = fs_receive_ef(fs_state_2, 1);
         return fs_state_3, root, ood_point, ood_eval;
     }
     
@@ -701,24 +684,18 @@ pub fn test_whir_recursion() {
         return new_fs_state;
     }
 
-    fn less_than_8(a) -> 1 {
+    fn less_than_8(a) inline -> 1 {
         if a * (a - 1) * (a - 2) * (a - 3) * (a - 4) * (a - 5) * (a - 6) * (a - 7) == 0 {
             return 1; // a < 8
         }
         return 0; // a >= 8
     }
 
-    fn fs_sample(fs_state, n) -> 2 {
-        // return the updated fs_state, and a pointer to n field elements
-        res = malloc(n);
-        new_fs_state = fs_sample_helper(fs_state, n, res);
-        return new_fs_state, res;
-    }
-
     fn fs_sample_ef(fs_state) -> 2 {
-        // return the updated fs_state, and a vectorized pointer to 1 chunk of 8 field elements
-        res = malloc_vec(1);
-        new_fs_state = fs_sample_helper(fs_state, 8, res * 8);
+        // return the updated fs_state, and a normal pointer to 1 EF element
+        res = malloc(8);
+        new_fs_state = fs_sample_helper(fs_state, 8, res);
+        assert res[5] == 0; assert res[6] == 0; assert res[7] == 0;
         return new_fs_state, res;
     }
 
@@ -777,6 +754,25 @@ pub fn test_whir_recursion() {
         new_fs_state[2] = fs_state[2];
         new_fs_state[3] = fs_state[3];
         return new_fs_state, res; 
+    }
+
+    fn fs_receive_ef(fs_state, n) -> 2 {
+        // return the updated fs_state, and a (normal) pointer to n consecutive EF elements
+
+        final_fs_state = fs_observe(fs_state, n);
+        res = malloc(n * 5);
+        // TODO optimize with dot_product
+        for i in 0..n { // TODO unroll in most cases
+            ptr = (fs_state[0] + i) * 8;
+            for j in 0..5 unroll {
+                res[i * 5 + j] = ptr[j];
+            }
+            for j in 5..8 unroll {
+                assert ptr[j] == 0;
+            }
+        }
+
+        return final_fs_state, res;
     }
 
     fn fs_receive(fs_state, n) -> 2 {
@@ -886,12 +882,12 @@ pub fn test_whir_recursion() {
 
    "#.to_string();
 
-    let num_variables = 23;
+    let num_variables = 22;
     let recursion_config_builder = WhirConfigBuilder {
         max_num_variables_to_send_coeffs: 6,
         security_level: 128,
         pow_bits: 17,
-        folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
+        folding_factor: FoldingFactor::ConstantFromSecondRound(5, 4),
         merkle_hash: build_merkle_hash(),
         merkle_compress: build_merkle_compress(),
         soundness_type: SecurityAssumption::CapacityBound,
@@ -901,10 +897,19 @@ pub fn test_whir_recursion() {
         extension_field: PhantomData,
     };
 
-    let recursion_config = WhirConfig::<F, EF, MyMerkleHash, MyMerkleCompress, 8>::new(
+    let mut recursion_config = WhirConfig::<F, EF, MyMerkleHash, MyMerkleCompress, 8>::new(
         recursion_config_builder.clone(),
         num_variables,
     );
+
+    // TODO remove overriding this
+    {
+        recursion_config.committment_ood_samples = 1;
+        for round in recursion_config.round_parameters.iter_mut() {
+            round.ood_samples = 1;
+        }
+    }
+
     assert_eq!(recursion_config.committment_ood_samples, 1);
     // println!("Whir parameters: {}", params.to_string());
     for (i, round) in recursion_config.round_parameters.iter().enumerate() {
@@ -977,12 +982,14 @@ pub fn test_whir_recursion() {
     let mut public_input = prover_state.proof_data().to_vec();
     let commitment_size = public_input.len();
     assert_eq!(commitment_size, 16);
-    public_input.extend(
-        point
-            .iter()
-            .flat_map(|x| <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(x).to_vec()),
-    );
-    public_input.extend(<EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(&eval).to_vec());
+    public_input.extend(point.iter().flat_map(|x| {
+        padd_with_zero_to_next_power_of_two(
+            <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(x),
+        )
+    }));
+    public_input.extend(padd_with_zero_to_next_power_of_two(
+        <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(&eval),
+    ));
 
     let prover = Prover(&recursion_config);
 
@@ -1008,11 +1015,11 @@ pub fn test_whir_recursion() {
             }
             + {
                 // merkle root
-                MY_DIGEST_ELEMS
+                VECTOR_LEN
             }
             + {
                 // grinding witness
-                MY_DIGEST_ELEMS
+                VECTOR_LEN
             }
             + {
                 // ood answer
@@ -1051,7 +1058,7 @@ pub fn test_whir_recursion() {
     let bytecode = compile_program(&program_str);
     let batch_pcs = build_batch_pcs();
     let time = Instant::now();
-    let proof_data = prove_execution(&bytecode, &public_input, &[], &batch_pcs);
+    let proof_data = prove_execution(&bytecode, &program_str, &public_input, &[], &batch_pcs);
     println!("WHIR recursion, proving time: {:?}", time.elapsed());
     verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
 }

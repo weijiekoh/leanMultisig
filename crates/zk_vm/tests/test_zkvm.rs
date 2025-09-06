@@ -9,7 +9,7 @@ use zk_vm::{
 fn test_zk_vm() {
     // Public input:  message_hash | all_public_keys | bitield
     // Private input: signatures = (randomness | chain_tips | merkle_path)
-    let program = r#"
+    let program_str = r#"
     
     fn main() {
         for i in 0..1000 unroll {  if 1 == 0 {  return; } } // increase bytecode size artificially
@@ -55,8 +55,14 @@ fn test_zk_vm() {
         .collect::<Vec<_>>();
 
     // utils::init_tracing();
-    let bytecode = compile_program(&program);
+    let bytecode = compile_program(&program_str);
     let batch_pcs = build_batch_pcs();
-    let proof_data = prove_execution(&bytecode, &public_input, &private_input, &batch_pcs);
+    let proof_data = prove_execution(
+        &bytecode,
+        &program_str,
+        &public_input,
+        &private_input,
+        &batch_pcs,
+    );
     verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
 }

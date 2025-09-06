@@ -6,6 +6,8 @@ mod runner;
 pub use bytecode::*;
 pub use runner::*;
 
+pub type LocationInSourceCode = usize;
+
 pub const DIMENSION: usize = 5;
 pub const VECTOR_LEN: usize = 8;
 pub type F = KoalaBear;

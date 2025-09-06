@@ -34,6 +34,7 @@ use zk_vm_air::*;
 
 pub fn prove_execution(
     bytecode: &Bytecode,
+    source_code: &str, // debug purpose
     public_input: &[F],
     private_input: &[F],
     pcs: &impl BatchPCS<PF<EF>, EF, EF>,
@@ -49,7 +50,8 @@ pub fn prove_execution(
         public_memory_size,
         memory,
     } = info_span!("Witness generation").in_scope(|| {
-        let execution_result = execute_bytecode(&bytecode, &public_input, private_input);
+        let execution_result =
+            execute_bytecode(&bytecode, &public_input, private_input, source_code);
         get_execution_trace(&bytecode, &execution_result)
     });
 

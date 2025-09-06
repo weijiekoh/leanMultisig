@@ -8,6 +8,7 @@ use pest_derive::Parser;
 use std::collections::BTreeMap;
 use utils::ToUsize;
 use vm::F;
+use vm::LocationInSourceCode;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -133,7 +134,10 @@ fn parse_function(
                     .ok_or_else(|| ParseError::SemanticError("Invalid return count".to_string()))?;
             }
             Rule::statement => {
-                body.push(parse_statement(pair, constants, trash_var_count)?);
+                on_new_located_line(
+                    &mut body,
+                    parse_statement(pair, constants, trash_var_count)?,
+                );
             }
             _ => {}
         }
@@ -163,14 +167,20 @@ fn parse_parameter(pair: Pair<Rule>) -> Result<(String, bool), ParseError> {
     Ok((first.as_str().to_string(), false))
 }
 
+fn on_new_located_line(lines: &mut Vec<Line>, line_and_location: (Line, LocationInSourceCode)) {
+    let (line, location) = line_and_location;
+    lines.push(Line::LocationReport { location });
+    lines.push(line);
+}
+
 fn parse_statement(
     pair: Pair<Rule>,
     constants: &BTreeMap<String, usize>,
     trash_var_count: &mut usize,
-) -> Result<Line, ParseError> {
+) -> Result<(Line, LocationInSourceCode), ParseError> {
+    let location = pair.line_col().0;
     let inner = pair.into_inner().next().unwrap();
-
-    match inner.as_rule() {
+    let line = match inner.as_rule() {
         Rule::single_assignment => parse_assignment(inner, constants),
         Rule::array_assign => parse_array_assign(inner, constants),
         Rule::if_statement => parse_if_statement(inner, constants, trash_var_count),
@@ -183,7 +193,8 @@ fn parse_statement(
         Rule::break_statement => Ok(Line::Break),
         Rule::continue_statement => todo!("Continue statement not implemented yet"),
         _ => Err(ParseError::SemanticError("Unknown statement".to_string())),
-    }
+    }?;
+    Ok((line, location))
 }
 
 fn parse_match_statement(
@@ -205,7 +216,10 @@ fn parse_match_statement(
         let mut statements = Vec::new();
         for stmt in arm_inner {
             if stmt.as_rule() == Rule::statement {
-                statements.push(parse_statement(stmt, constants, trash_var_count)?);
+                on_new_located_line(
+                    &mut statements,
+                    parse_statement(stmt, constants, trash_var_count)?,
+                );
             }
         }
 
@@ -259,11 +273,17 @@ fn parse_if_statement(
 
     for item in inner {
         match item.as_rule() {
-            Rule::statement => then_branch.push(parse_statement(item, constants, trash_var_count)?),
+            Rule::statement => on_new_located_line(
+                &mut then_branch,
+                parse_statement(item, constants, trash_var_count)?,
+            ),
             Rule::else_clause => {
                 for else_item in item.into_inner() {
                     if else_item.as_rule() == Rule::statement {
-                        else_branch.push(parse_statement(else_item, constants, trash_var_count)?);
+                        on_new_located_line(
+                            &mut else_branch,
+                            parse_statement(else_item, constants, trash_var_count)?,
+                        );
                     }
                 }
             }
@@ -330,7 +350,10 @@ fn parse_for_statement(
                 unroll = true;
             }
             Rule::statement => {
-                body.push(parse_statement(item, constants, trash_var_count)?);
+                on_new_located_line(
+                    &mut body,
+                    parse_statement(item, constants, trash_var_count)?,
+                );
             }
             _ => {}
         }

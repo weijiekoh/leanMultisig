@@ -142,6 +142,10 @@ pub enum IntermediateInstruction {
         line_info: String, // information about the line where the print occurs
         content: Vec<IntermediateValue>, // values to print
     },
+    // noop, debug purpose only
+    LocationReport {
+        location: LocationInSourceCode,
+    },
 }
 
 impl IntermediateInstruction {
@@ -346,6 +350,7 @@ impl ToString for IntermediateInstruction {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            Self::LocationReport { .. } => Default::default(),
         }
     }
 }

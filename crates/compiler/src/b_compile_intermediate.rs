@@ -557,6 +557,11 @@ fn compile_lines(
                         .collect(),
                 });
             }
+            SimpleLine::LocationReport { location } => {
+                instructions.push(IntermediateInstruction::LocationReport {
+                    location: *location,
+                });
+            }
         }
     }
 
@@ -749,7 +754,8 @@ fn find_internal_vars(lines: &[SimpleLine]) -> BTreeSet<Var> {
             SimpleLine::Panic
             | SimpleLine::Print { .. }
             | SimpleLine::FunctionRet { .. }
-            | SimpleLine::Precompile { .. } => {}
+            | SimpleLine::Precompile { .. }
+            | SimpleLine::LocationReport { .. } => {}
         }
     }
     internal_vars

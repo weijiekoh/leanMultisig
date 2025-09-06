@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use p3_field::BasedVectorSpace;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::dot_product;
@@ -15,6 +17,7 @@ use p3_field::Field;
 use p3_symmetric::Permutation;
 
 const MAX_MEMORY_SIZE: usize = 1 << 24;
+const STACK_TRACE_LEN: usize = 15;
 
 #[derive(Debug, Clone)]
 pub enum RunnerError {
@@ -223,12 +226,23 @@ impl Memory {
     }
 }
 
+fn pretty_stack_trace(source_code: &str, stack_trace: &VecDeque<LocationInSourceCode>) -> String {
+    let lines: Vec<&str> = source_code.lines().collect();
+    let mut result = String::new();
+    for &location in stack_trace.iter() {
+        result.push_str(&format!("{}: \"{}\"\n", location + 1, lines[location]));
+    }
+    result
+}
+
 pub fn execute_bytecode(
     bytecode: &Bytecode,
     public_input: &[F],
     private_input: &[F],
+    source_code: &str, // debug purpose
 ) -> ExecutionResult {
     let mut std_out = String::new();
+    let mut stack_trace = VecDeque::new();
     let first_exec = match execute_bytecode_helper(
         bytecode,
         public_input,
@@ -236,12 +250,15 @@ pub fn execute_bytecode(
         MAX_MEMORY_SIZE / 2,
         false,
         &mut std_out,
+        &mut stack_trace,
     ) {
         Ok(first_exec) => first_exec,
         Err(err) => {
             if !std_out.is_empty() {
                 print!("{}", std_out);
             }
+            println!("\nLast executed instructions:");
+            println!("{}\n", pretty_stack_trace(source_code, &stack_trace));
             panic!("Error during bytecode execution: {}", err.to_string());
         }
     };
@@ -252,6 +269,7 @@ pub fn execute_bytecode(
         first_exec.no_vec_runtime_memory,
         true,
         &mut String::new(),
+        &mut stack_trace,
     )
     .unwrap()
 }
@@ -297,6 +315,7 @@ fn execute_bytecode_helper(
     no_vec_runtime_memory: usize,
     final_execution: bool,
     std_out: &mut String,
+    stack_trace: &mut VecDeque<LocationInSourceCode>,
 ) -> Result<ExecutionResult, RunnerError> {
     let poseidon_16 = get_poseidon16(); // TODO avoid rebuilding each time
     let poseidon_24 = get_poseidon24();
@@ -432,6 +451,12 @@ fn execute_bytecode_helper(
                     let line_info = line_info.replace(";", "");
                     *std_out += &format!("\"{}\" -> {}\n", line_info, values.join(", "));
                     // does not increase PC
+                }
+                Hint::LocationReport { location } => {
+                    stack_trace.push_back(*location);
+                    if stack_trace.len() > STACK_TRACE_LEN {
+                        stack_trace.pop_front();
+                    }
                 }
             }
         }

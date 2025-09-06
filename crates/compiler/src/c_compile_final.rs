@@ -11,7 +11,8 @@ impl IntermediateInstruction {
             | Self::Print { .. }
             | Self::DecomposeBits { .. }
             | Self::CounterHint { .. }
-            | Self::Inverse { .. } => true,
+            | Self::Inverse { .. }
+            | Self::LocationReport { .. } => true,
             Self::Computation { .. }
             | Self::Panic
             | Self::Deref { .. }
@@ -321,6 +322,10 @@ fn compile_block(
                         .map(|c| try_as_mem_or_constant(&c).unwrap())
                         .collect(),
                 };
+                hints.entry(pc).or_insert_with(Vec::new).push(hint);
+            }
+            IntermediateInstruction::LocationReport { location } => {
+                let hint = Hint::LocationReport { location };
                 hints.entry(pc).or_insert_with(Vec::new).push(hint);
             }
         }
