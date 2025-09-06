@@ -19,7 +19,6 @@
 - Avoid embedding overhead on the flag, len, and index columns in the AIR table for dot products
 - reduce to only 2 logup*, one vectorized, one not
 - Batched logup*: when computing the eq() factor we can opti if the points contain boolean factor
-- Recursion program: batch the initial leaf evals in a single multilineae evaluation (+ only 1 statement on the point per vm multilinear eval (instead of `n_vars` ones))
 - Lev's trick to skip some low-level modular reduction
 - Sumcheckcheck, case z = 0, no need to fold, only keep first half of the values (done in PR 33 by Lambda) (and also in WHIR?)
 - Custom AVX2 / AVX512 / Neon implem in Plonky3 for all of the finite field operations (done for degree 4 extension, but not degree 5)
@@ -35,6 +34,8 @@
 - verify correctness of the Grand Product check
 - Proof size: replace all equality checks in the verifier algo by value deduction
 - WIR recursion: batch the multilinear_eval calls on initial merkle leaves
+- multilinear_eval precompile: we can reduce the number of sparse equality constraints required to verify the correctness of point / res into the memory
+
 - KoalaBear extension of degree 5: only AVX2 has been tested and benchmarked. TODO: AVX512 / Neon
 - KoalaBear extension of degree 6: in order to use the (proven) Johnson bound in WHIR
 

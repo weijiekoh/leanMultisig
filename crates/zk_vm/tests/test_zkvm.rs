@@ -7,8 +7,6 @@ use zk_vm::{
 
 #[test]
 fn test_zk_vm() {
-    // Public input:  message_hash | all_public_keys | bitield
-    // Private input: signatures = (randomness | chain_tips | merkle_path)
     let program_str = r#"
     
     fn main() {
@@ -22,24 +20,29 @@ fn test_zk_vm() {
             dot_product(i*3, i + 7, (x + 4) * 8, 2);
         }
         
-        point = malloc_vec(10);
-        point_ptr = 8 * point;
+        point_1 = malloc(10 * 5);
         for i in 0..10 {
-            point_ptr[8*i] = 785 + i;
-            point_ptr[1 + 8*i] = 4152 - i;
-            point_ptr[2 + 8*i] = 471*82 + i*i;
-            point_ptr[3 + 8*i] = 7577 + i;
-            point_ptr[4 + 8*i] = 676 - i;
-            point_ptr[5 + 8*i] = 0;
-            point_ptr[6 + 8*i] = 0;
-            point_ptr[7 + 8*i] = 0;
+            point_1[i*5 + 0] = 785 + i;
+            point_1[i*5 + 1] = 4152 - i;
+            point_1[i*5 + 2] = 471*82 + i*i;
+            point_1[i*5 + 3] = 7577 + i;
+            point_1[i*5 + 4] = 676 - i;
         }
 
-        res1 = malloc_vec(1);
-        multilinear_eval(2**3, point, res1, 10);
+        res1 = malloc(5);
+        multilinear_eval(2**3, point_1, res1, 10);
 
-        res2 = malloc_vec(1);
-        multilinear_eval(3, point, res2, 7);
+        point_2 = 785;
+        res2 = malloc(5);
+        multilinear_eval(1, point_2, res2, 7);
+
+        point_3 = 785;
+        res3 = malloc(5);
+        multilinear_eval(2, point_3, res3, 7);
+
+        print(res3[0], res2[0]);
+
+        assert res3[0] == res2[0] + 2**7;
 
         return;
     }

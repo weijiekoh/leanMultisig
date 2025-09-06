@@ -149,23 +149,6 @@ impl Memory {
         Ok(self.get_vectorized_slice(index, 1)?.try_into().unwrap())
     }
 
-    pub fn get_ef_elements_aligned_by_8(
-        &self,
-        ptr: usize,
-        len: usize,
-    ) -> Result<Vec<EF>, RunnerError> {
-        // ptr: vectorized pointer
-        let mut slice = Vec::new();
-        for i in 0..len {
-            let v = self.get_vector(ptr + i)?;
-            if v[DIMENSION..].iter().any(|&x| x != F::ZERO) {
-                return Err(RunnerError::MultilinearEvalPointNotPadded);
-            }
-            slice.push(EF::from_basis_coefficients_slice(&v[..DIMENSION]).unwrap());
-        }
-        Ok(slice)
-    }
-
     pub fn get_ef_element(&self, index: usize) -> Result<EF, RunnerError> {
         // index: non vectorized pointer
         let mut coeffs = [F::ZERO; DIMENSION];
@@ -796,12 +779,12 @@ fn execute_bytecode_helper(
                 let slice_coeffs = (ptr_coeffs << *n_vars..(1 + ptr_coeffs) << *n_vars)
                     .map(|i| memory.get(i))
                     .collect::<Result<Vec<F>, _>>()?;
-                let point = memory.get_ef_elements_aligned_by_8(ptr_point, *n_vars)?;
+                let point = (0..*n_vars)
+                    .map(|i| memory.get_ef_element(ptr_point + i * DIMENSION))
+                    .collect::<Result<Vec<EF>, _>>()?;
 
                 let eval = slice_coeffs.evaluate(&MultilinearPoint(point));
-                let mut eval_base = eval.as_basis_coefficients_slice().to_vec();
-                eval_base.resize(VECTOR_LEN, F::ZERO);
-                memory.set_vector(ptr_res, eval_base.try_into().unwrap())?;
+                memory.set_ef_element(ptr_res, eval)?;
 
                 pc += 1;
             }

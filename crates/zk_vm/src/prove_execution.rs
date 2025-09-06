@@ -185,37 +185,37 @@ pub fn prove_execution(
         let addr_res = multilinear_eval.addr_res;
 
         // TODO only 1 statement for the evaluation point (instead of `n_vars` ones)
-        for (addr, value) in multilinear_eval
+        // TODO we can group together most of the equality constraints (by chuncks alligned on powers of 2)
+        for (ef_addr, ef_value) in multilinear_eval
             .point
             .iter()
             .enumerate()
-            .map(|(i, p)| (addr_point + i, *p))
+            .map(|(i, p)| (addr_point + i * DIMENSION, *p))
             .chain(std::iter::once((addr_res, multilinear_eval.res)))
         {
-            let mixing_scalars =
-                MultilinearPoint(prover_state.sample_vec(log2_ceil_usize(DIMENSION)));
-            let eval = padd_with_zero_to_next_power_of_two(
-                <EF as BasedVectorSpace<PF<EF>>>::as_basis_coefficients_slice(&value),
-            )
-            .evaluate(&mixing_scalars);
-            assert!(addr < 1 << (log_memory - 3));
-            let memory_chunk_index =
-                addr >> (log_memory - 3 - log2_ceil_usize(n_private_memory_chunks + 1));
-            let addr_bits = &to_big_endian_bits(
-                addr,
-                log_memory - 3 - log2_ceil_usize(n_private_memory_chunks + 1),
-            );
-            let mut memory_sparse_point = addr_bits
-                .iter()
-                .map(|&x| EF::from_bool(x))
-                .collect::<Vec<_>>();
-            memory_sparse_point.extend(mixing_scalars.0);
-            let statement = Evaluation {
-                point: MultilinearPoint(memory_sparse_point),
-                value: eval,
-            };
-            if memory_chunk_index != 0 {
-                private_memory_statements[memory_chunk_index - 1].push(statement);
+            for (f_address, f_value) in
+                <EF as BasedVectorSpace<PF<EF>>>::as_basis_coefficients_slice(&ef_value)
+                    .iter()
+                    .enumerate()
+                    .map(|(a, v)| (ef_addr + a, *v))
+            {
+                let memory_chunk_index =
+                    f_address >> (log_memory - log2_ceil_usize(n_private_memory_chunks + 1));
+                let addr_bits = &to_big_endian_bits(
+                    f_address,
+                    log_memory - log2_ceil_usize(n_private_memory_chunks + 1),
+                );
+                let memory_sparse_point = addr_bits
+                    .iter()
+                    .map(|&x| EF::from_bool(x))
+                    .collect::<Vec<_>>();
+                let statement = Evaluation {
+                    point: MultilinearPoint(memory_sparse_point),
+                    value: EF::from(f_value), // TODO avoid embedding
+                };
+                if memory_chunk_index != 0 {
+                    private_memory_statements[memory_chunk_index - 1].push(statement);
+                }
             }
         }
 
