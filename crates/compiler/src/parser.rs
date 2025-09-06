@@ -37,7 +37,7 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-pub fn parse_program(input: &str) -> Result<Program, ParseError> {
+pub fn parse_program(input: &str) -> Result<(Program, BTreeMap<usize, String>), ParseError> {
     let input = remove_comments(input);
     let mut pairs = LangParser::parse(Rule::program, &input)?;
     let program_pair = pairs.next().unwrap();
@@ -46,6 +46,8 @@ pub fn parse_program(input: &str) -> Result<Program, ParseError> {
     let mut functions = BTreeMap::new();
     let mut trash_var_count = 0;
 
+    let mut function_locations = BTreeMap::new();
+
     for pair in program_pair.into_inner() {
         match pair.as_rule() {
             Rule::constant_declaration => {
@@ -53,7 +55,9 @@ pub fn parse_program(input: &str) -> Result<Program, ParseError> {
                 constants.insert(name, value);
             }
             Rule::function => {
+                let location = pair.line_col().0;
                 let function = parse_function(pair, &constants, &mut trash_var_count)?;
+                function_locations.insert(location, function.name.clone());
                 functions.insert(function.name.clone(), function);
             }
             Rule::EOI => break,
@@ -61,7 +65,7 @@ pub fn parse_program(input: &str) -> Result<Program, ParseError> {
         }
     }
 
-    Ok(Program { functions })
+    Ok((Program { functions }, function_locations))
 }
 
 fn remove_comments(input: &str) -> String {

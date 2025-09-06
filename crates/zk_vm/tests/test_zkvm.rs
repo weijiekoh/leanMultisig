@@ -55,11 +55,12 @@ fn test_zk_vm() {
         .collect::<Vec<_>>();
 
     // utils::init_tracing();
-    let bytecode = compile_program(&program_str);
+    let (bytecode, function_locations) = compile_program(&program_str);
     let batch_pcs = build_batch_pcs();
     let proof_data = prove_execution(
         &bytecode,
         &program_str,
+        &function_locations,
         &public_input,
         &private_input,
         &batch_pcs,

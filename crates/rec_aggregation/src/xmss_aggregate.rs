@@ -276,12 +276,13 @@ fn test_xmss_aggregate() {
     }
     if env::var("PROVE_XMSS_AGGREGATED").unwrap_or("true".to_string()) == "true" {
         utils::init_tracing();
-        let bytecode = compile_program(&program_str);
+        let (bytecode, function_locations) = compile_program(&program_str);
         let batch_pcs = build_batch_pcs();
         let time = Instant::now();
         let proof_data = prove_execution(
             &bytecode,
             &program_str,
+            &function_locations,
             &public_input,
             &private_input,
             &batch_pcs,

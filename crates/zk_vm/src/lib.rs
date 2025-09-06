@@ -37,8 +37,8 @@ fn exec_column_groups() -> Vec<Range<usize>> {
 }
 
 pub fn compile_and_run(program: &str, public_input: &[vm::F], private_input: &[vm::F]) {
-    let bytecode = compile_program(program);
-    execute_bytecode(&bytecode, &public_input, private_input, program);
+    let (bytecode, function_locations) = compile_program(program);
+    execute_bytecode(&bytecode, &public_input, private_input, program, &function_locations);
 }
 
 pub fn build_batch_pcs() -> WhirBatchPcs<F, EF, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>

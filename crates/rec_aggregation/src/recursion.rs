@@ -205,10 +205,17 @@ pub fn test_whir_recursion() {
         .unwrap();
 
     // utils::init_tracing();
-    let bytecode = compile_program(&program_str);
+    let (bytecode, function_locations) = compile_program(&program_str);
     let batch_pcs = build_batch_pcs();
     let time = Instant::now();
-    let proof_data = prove_execution(&bytecode, &program_str, &public_input, &[], &batch_pcs);
+    let proof_data = prove_execution(
+        &bytecode,
+        &program_str,
+        &function_locations,
+        &public_input,
+        &[],
+        &batch_pcs,
+    );
     println!("WHIR recursion, proving time: {:?}", time.elapsed());
     verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
 }

@@ -12,6 +12,7 @@ use p3_util::{log2_ceil_usize, log2_strict_usize};
 use pcs::num_packed_vars_for_pols;
 use pcs::{BatchPCS, packed_pcs_commit, packed_pcs_global_statements};
 use rayon::prelude::*;
+use std::collections::BTreeMap;
 use sumcheck::MleGroupRef;
 use tracing::info_span;
 use utils::ToUsize;
@@ -34,7 +35,8 @@ use zk_vm_air::*;
 
 pub fn prove_execution(
     bytecode: &Bytecode,
-    source_code: &str, // debug purpose
+    source_code: &str,                            // debug purpose
+    function_locations: &BTreeMap<usize, String>, // debug purpose
     public_input: &[F],
     private_input: &[F],
     pcs: &impl BatchPCS<PF<EF>, EF, EF>,
@@ -50,8 +52,13 @@ pub fn prove_execution(
         public_memory_size,
         memory,
     } = info_span!("Witness generation").in_scope(|| {
-        let execution_result =
-            execute_bytecode(&bytecode, &public_input, private_input, source_code);
+        let execution_result = execute_bytecode(
+            &bytecode,
+            &public_input,
+            private_input,
+            source_code,
+            function_locations,
+        );
         get_execution_trace(&bytecode, &execution_result)
     });
 

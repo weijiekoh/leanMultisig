@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use vm::*;
 
 use crate::{
@@ -14,8 +16,8 @@ mod parser;
 mod precompiles;
 pub use precompiles::PRECOMPILES;
 
-pub fn compile_program(program: &str) -> Bytecode {
-    let parsed_program = parse_program(program).unwrap();
+pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
+    let (parsed_program, function_locations) = parse_program(program).unwrap();
     // println!("Parsed program: {}", parsed_program.to_string());
     let simple_program = simplify_program(parsed_program);
     // println!("Simplified program: {}", simple_program.to_string());
@@ -23,12 +25,12 @@ pub fn compile_program(program: &str) -> Bytecode {
     // println!("Intermediate Bytecode:\n\n{}", intermediate_bytecode.to_string());
     let compiled = compile_to_low_level_bytecode(intermediate_bytecode).unwrap();
     // println!("Compiled Program:\n\n{}", compiled.to_string());
-    compiled
+    (compiled, function_locations)
 }
 
 pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F]) {
-    let bytecode = compile_program(program);
-    execute_bytecode(&bytecode, &public_input, private_input, program);
+    let (bytecode, function_locations) = compile_program(program);
+    execute_bytecode(&bytecode, &public_input, private_input, program, &function_locations);
 }
 
 #[derive(Debug, Clone, Default)]

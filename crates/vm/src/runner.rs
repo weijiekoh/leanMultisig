@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::VecDeque;
 
 use p3_field::BasedVectorSpace;
@@ -17,7 +18,8 @@ use p3_field::Field;
 use p3_symmetric::Permutation;
 
 const MAX_MEMORY_SIZE: usize = 1 << 24;
-const STACK_TRACE_LEN: usize = 20;
+const STACK_TRACE_INSTRUCTIONS: usize = 200;
+const STACK_TRACE_MAX_LINES_PER_FUNCTION: usize = 5;
 
 #[derive(Debug, Clone)]
 pub enum RunnerError {
@@ -226,23 +228,187 @@ impl Memory {
     }
 }
 
-fn pretty_stack_trace(source_code: &str, stack_trace: &VecDeque<LocationInSourceCode>) -> String {
-    let lines: Vec<&str> = source_code.lines().collect();
+fn pretty_stack_trace(
+    source_code: &str,
+    latest_instructions: &VecDeque<LocationInSourceCode>,
+    function_locations: &BTreeMap<usize, String>,
+) -> String {
+    let source_lines: Vec<&str> = source_code.lines().collect();
     let mut result = String::new();
-    for &location in stack_trace.iter() {
-        result.push_str(&format!("{}: {}\n", location + 1, lines[location]));
+    let mut call_stack: Vec<(usize, String)> = Vec::new(); // (line_number, function_name)
+    let mut prev_function: Option<String> = None;
+    let mut skipped_lines: usize = 0; // Track skipped lines for current function
+
+    result.push_str("╔══════════════════════════════════════════════════════════════╗\n");
+    result.push_str("║                       STACK TRACE                            ║\n");
+    result.push_str("╚══════════════════════════════════════════════════════════════╝\n\n");
+
+    for (idx, &line_num) in latest_instructions.iter().enumerate() {
+        // Find which function this line belongs to
+        let current_function = find_function_for_line(line_num, function_locations);
+
+        // Detect function changes
+        match (&prev_function, &current_function) {
+            (None, Some(func)) => {
+                // Initial function entry
+                call_stack.push((line_num, func.clone()));
+                result.push_str(&format!("┌─ {} (line {})\n", func, line_num));
+                skipped_lines = 0;
+            }
+            (Some(prev), Some(curr)) if prev != curr => {
+                // Show skipped lines message if any were skipped
+                if skipped_lines > 0 {
+                    let indent = "│ ".repeat(call_stack.len());
+                    result.push_str(&format!(
+                        "{}├─ ... ({} lines skipped) ...\n",
+                        indent, skipped_lines
+                    ));
+                }
+
+                // Check if we're returning to a previous function or calling a new one
+                if let Some(pos) = call_stack.iter().position(|(_, f)| f == curr) {
+                    // Returning to a previous function - pop the stack
+                    while call_stack.len() > pos + 1 {
+                        call_stack.pop();
+                        let indent = "│ ".repeat(call_stack.len());
+                        result.push_str(&format!("{}└─ [return]\n", indent));
+                    }
+                    skipped_lines = 0;
+                } else {
+                    // Calling a new function
+                    let indent = "│ ".repeat(call_stack.len());
+
+                    // Show the calling instruction
+                    if idx > 0 {
+                        let caller_line = latest_instructions[idx - 1];
+                        let code_line = source_lines
+                            .get(caller_line.saturating_sub(1))
+                            .unwrap_or(&"<line not found>")
+                            .trim();
+                        result.push_str(&format!(
+                            "{}├─ line {}: {}\n",
+                            indent, caller_line, code_line
+                        ));
+                    }
+
+                    // Add the new function to the stack
+                    call_stack.push((line_num, curr.clone()));
+                    let indent = "│ ".repeat(call_stack.len() - 1);
+                    result.push_str(&format!("{}├─ {} (line {})\n", indent, curr, line_num));
+                    skipped_lines = 0;
+                }
+            }
+            _ => {
+                // Same function, continue
+            }
+        }
+
+        // Display the current instruction
+        if current_function.is_some() {
+            // Determine if we should show this line
+            let should_show = if idx == latest_instructions.len() - 1 {
+                // Always show the last line (error location)
+                true
+            } else {
+                // Count remaining lines in this function
+                let remaining_in_function = count_remaining_lines_in_function(
+                    idx,
+                    latest_instructions,
+                    function_locations,
+                    &current_function,
+                );
+
+                // Show if within the last MAX_LINES_PER_FUNCTION lines of this function
+                remaining_in_function < STACK_TRACE_MAX_LINES_PER_FUNCTION
+            };
+
+            if should_show {
+                // Show skipped lines message if transitioning from skipping to showing
+                if skipped_lines > 0 {
+                    let indent = "│ ".repeat(call_stack.len());
+                    result.push_str(&format!(
+                        "{}├─ ... ({} lines skipped) ...\n",
+                        indent, skipped_lines
+                    ));
+                    skipped_lines = 0;
+                }
+
+                let indent = "│ ".repeat(call_stack.len());
+                let code_line = source_lines
+                    .get(line_num.saturating_sub(1))
+                    .unwrap_or(&"<line not found>")
+                    .trim();
+
+                if idx == latest_instructions.len() - 1 {
+                    result.push_str(&format!(
+                        "{}├─ line {} : {} ⚠️\n",
+                        indent, line_num, code_line
+                    ));
+                } else {
+                    result.push_str(&format!("{}├─ line {}: {}\n", indent, line_num, code_line));
+                }
+            } else {
+                skipped_lines += 1;
+            }
+        }
+
+        prev_function = current_function;
     }
+
+    // Add summary
+    result.push_str("\n");
+    result.push_str("═══════════════════════════════════════════════════════════════\n");
+
+    if !call_stack.is_empty() {
+        result.push_str("\nCall stack:\n");
+        for (i, (line, func)) in call_stack.iter().enumerate() {
+            result.push_str(&format!("  {}. {} (line {})\n", i + 1, func, line));
+        }
+    }
+
     result
+}
+
+fn find_function_for_line(
+    line_num: usize,
+    function_locations: &BTreeMap<usize, String>,
+) -> Option<String> {
+    function_locations
+        .range(..=line_num)
+        .next_back()
+        .map(|(_, func_name)| func_name.clone())
+}
+
+fn count_remaining_lines_in_function(
+    current_idx: usize,
+    latest_instructions: &VecDeque<LocationInSourceCode>,
+    function_locations: &BTreeMap<usize, String>,
+    current_function: &Option<String>,
+) -> usize {
+    let mut count = 0;
+
+    for i in (current_idx + 1)..latest_instructions.len() {
+        let line_num = latest_instructions[i];
+        let func = find_function_for_line(line_num, function_locations);
+
+        if &func != current_function {
+            break;
+        }
+        count += 1;
+    }
+
+    count
 }
 
 pub fn execute_bytecode(
     bytecode: &Bytecode,
     public_input: &[F],
     private_input: &[F],
-    source_code: &str, // debug purpose
+    source_code: &str,                            // debug purpose
+    function_locations: &BTreeMap<usize, String>, // debug purpose
 ) -> ExecutionResult {
     let mut std_out = String::new();
-    let mut stack_trace = VecDeque::new();
+    let mut latest_instructions = VecDeque::new();
     let first_exec = match execute_bytecode_helper(
         bytecode,
         public_input,
@@ -250,15 +416,20 @@ pub fn execute_bytecode(
         MAX_MEMORY_SIZE / 2,
         false,
         &mut std_out,
-        &mut stack_trace,
+        &mut latest_instructions,
     ) {
         Ok(first_exec) => first_exec,
         Err(err) => {
+            println!(
+                "\n{}",
+                pretty_stack_trace(source_code, &latest_instructions, function_locations)
+            );
             if !std_out.is_empty() {
+                println!("╔══════════════════════════════════════════════════════════════╗");
+                println!("║                         STD-OUT                              ║");
+                println!("╚══════════════════════════════════════════════════════════════╝\n");
                 print!("{}", std_out);
             }
-            println!("\nLast executed instructions:");
-            println!("{}\n", pretty_stack_trace(source_code, &stack_trace));
             panic!("Error during bytecode execution: {}", err.to_string());
         }
     };
@@ -269,7 +440,7 @@ pub fn execute_bytecode(
         first_exec.no_vec_runtime_memory,
         true,
         &mut String::new(),
-        &mut stack_trace,
+        &mut latest_instructions,
     )
     .unwrap()
 }
@@ -315,7 +486,7 @@ fn execute_bytecode_helper(
     no_vec_runtime_memory: usize,
     final_execution: bool,
     std_out: &mut String,
-    stack_trace: &mut VecDeque<LocationInSourceCode>,
+    latest_instructions: &mut VecDeque<LocationInSourceCode>,
 ) -> Result<ExecutionResult, RunnerError> {
     let poseidon_16 = get_poseidon16(); // TODO avoid rebuilding each time
     let poseidon_24 = get_poseidon24();
@@ -453,9 +624,9 @@ fn execute_bytecode_helper(
                     // does not increase PC
                 }
                 Hint::LocationReport { location } => {
-                    stack_trace.push_back(*location);
-                    if stack_trace.len() > STACK_TRACE_LEN {
-                        stack_trace.pop_front();
+                    latest_instructions.push_back(*location);
+                    if latest_instructions.len() > STACK_TRACE_INSTRUCTIONS {
+                        latest_instructions.pop_front();
                     }
                 }
             }
@@ -643,6 +814,9 @@ fn execute_bytecode_helper(
 
     if final_execution {
         if !std_out.is_empty() {
+            println!("╔══════════════════════════════════════════════════════════════╗");
+            println!("║                         STD-OUT                              ║");
+            println!("╚══════════════════════════════════════════════════════════════╝\n");
             print!("{}", std_out);
         }
         let runtime_memory_size = memory.0.len() - (PUBLIC_INPUT_START + public_input.len());
