@@ -51,7 +51,7 @@ pub fn field_representation(instr: &Instruction) -> [F; N_INSTRUCTION_COLUMNS] {
                 }
             }
         }
-        Instruction::JumpIfNotZero {
+        Instruction::Jump {
             condition,
             dest,
             updated_fp,

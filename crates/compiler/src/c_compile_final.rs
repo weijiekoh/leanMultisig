@@ -222,14 +222,14 @@ fn compile_block(
                 let updated_fp = updated_fp
                     .map(|fp| try_as_mem_or_fp(&fp).unwrap())
                     .unwrap_or(MemOrFp::Fp);
-                low_level_bytecode.push(Instruction::JumpIfNotZero {
+                low_level_bytecode.push(Instruction::Jump {
                     condition: try_as_mem_or_constant(&condition).unwrap(),
                     dest: try_as_mem_or_constant(&dest).unwrap(),
                     updated_fp,
                 });
             }
             IntermediateInstruction::Jump { dest, updated_fp } => {
-                low_level_bytecode.push(Instruction::JumpIfNotZero {
+                low_level_bytecode.push(Instruction::Jump {
                     condition: MemOrConstant::one(),
                     dest: try_as_mem_or_constant(&dest).unwrap(),
                     updated_fp: updated_fp

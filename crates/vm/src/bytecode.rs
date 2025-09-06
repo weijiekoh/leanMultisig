@@ -38,7 +38,7 @@ pub enum Operation {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Instruction {
-    // 3 basic instructions
+    // 4 basic instructions: ADD, MUL, DEREF, JUMP
     Computation {
         operation: Operation,
         arg_a: MemOrConstant,
@@ -50,7 +50,7 @@ pub enum Instruction {
         shift_1: usize,
         res: MemOrFpOrConstant,
     }, // res = m[m[fp + shift_0] + shift_1]
-    JumpIfNotZero {
+    Jump {
         condition: MemOrConstant,
         dest: MemOrConstant,
         updated_fp: MemOrFp,
@@ -243,7 +243,7 @@ impl ToString for Instruction {
                     n_vars
                 )
             }
-            Self::JumpIfNotZero {
+            Self::Jump {
                 condition,
                 dest,
                 updated_fp,

@@ -306,7 +306,7 @@ fn sample_stir_indexes_and_fold(fs_state, num_queries, is_first_round, folding_f
             poseidon16(left, right, state_j_plus_1);
             states[j + 1] = state_j_plus_1;
         }
-        assert_eq_extension(states[folded_domain_size], prev_root);
+        assert_eq_vec(states[folded_domain_size], prev_root);
     }
 
     fs_state_11 = fs_states_c[num_queries];
@@ -337,6 +337,7 @@ fn sample_stir_indexes_and_fold(fs_state, num_queries, is_first_round, folding_f
 
 fn whir_round(fs_state, prev_root, folding_factor, two_pow_folding_factor, is_first_round, num_queries, domain_size, claimed_sum, grinding_bits) -> 7 {
     fs_state_7, folding_randomness, new_claimed_sum_a = sumcheck(fs_state, folding_factor, claimed_sum);
+
     fs_state_8, root, ood_point, ood_eval = parse_commitment(fs_state_7);
 
     fs_state_11, circle_values, folds = 
@@ -832,10 +833,24 @@ fn assert_eq_extension(a, b) inline {
     return;
 }
 
+// TODO improve
+fn assert_eq_vec(a, b) inline {
+    a_ptr = a * 8;
+    b_ptr = b * 8;
+    dot_product(a_ptr, pointer_to_one_vector * 8, b_ptr, 1);
+    dot_product(a_ptr + (8 - DIM), pointer_to_one_vector * 8, b_ptr + (8 - DIM), 1);
+    return;
+}
+
 fn set_to_one(a) {
     a_ptr = 8 * a;
     a_ptr[0] = 1;
     for i in 1..8 unroll { a_ptr[i] = 0; }
+    return;
+}
+
+fn print_vec(a) {
+    print_many_vec(a, 1);
     return;
 }
 

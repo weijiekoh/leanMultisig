@@ -18,7 +18,7 @@ use p3_field::Field;
 use p3_symmetric::Permutation;
 
 const MAX_MEMORY_SIZE: usize = 1 << 24;
-const STACK_TRACE_INSTRUCTIONS: usize = 500;
+const STACK_TRACE_INSTRUCTIONS: usize = 5000;
 const STACK_TRACE_MAX_LINES_PER_FUNCTION: usize = 5;
 
 #[derive(Debug, Clone)]
@@ -698,7 +698,7 @@ fn execute_bytecode_helper(
                 deref_counts += 1;
                 pc += 1;
             }
-            Instruction::JumpIfNotZero {
+            Instruction::Jump {
                 condition,
                 dest,
                 updated_fp,
