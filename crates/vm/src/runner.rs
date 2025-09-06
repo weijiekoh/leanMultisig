@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
 
+use colored::Colorize;
 use p3_field::BasedVectorSpace;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::dot_product;
@@ -324,8 +325,8 @@ fn pretty_stack_trace(
 
                 if idx == latest_instructions.len() - 1 {
                     result.push_str(&format!(
-                        "{}├─ line {} : {} ⚠️\n",
-                        indent, line_num, code_line
+                        "{}├─ {} {}\n",
+                        indent, format!("line {}:", line_num).red(), code_line
                     ));
                 } else {
                     result.push_str(&format!("{}├─ line {}: {}\n", indent, line_num, code_line));
@@ -607,7 +608,9 @@ fn execute_bytecode_helper(
                     // does not increase PC
                 }
                 Hint::LocationReport { location } => {
-                    latest_instructions.push_back(*location);
+                    if latest_instructions.back() != Some(location) {
+                        latest_instructions.push_back(*location);
+                    }
                     if latest_instructions.len() > STACK_TRACE_INSTRUCTIONS {
                         latest_instructions.pop_front();
                     }
