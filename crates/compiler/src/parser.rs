@@ -395,6 +395,7 @@ fn parse_expression(
         Rule::add_expr => parse_binary_expr(pair, constants, HighLevelOperation::Add),
         Rule::sub_expr => parse_binary_expr(pair, constants, HighLevelOperation::Sub),
         Rule::mul_expr => parse_binary_expr(pair, constants, HighLevelOperation::Mul),
+        Rule::mod_expr => parse_binary_expr(pair, constants, HighLevelOperation::Mod),
         Rule::div_expr => parse_binary_expr(pair, constants, HighLevelOperation::Div),
         Rule::exp_expr => parse_binary_expr(pair, constants, HighLevelOperation::Exp),
         Rule::primary => parse_primary(pair, constants),

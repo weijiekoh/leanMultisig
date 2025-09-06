@@ -6,6 +6,7 @@ use compiler::compile_program;
 use p3_field::BasedVectorSpace;
 use p3_field::PrimeCharacteristicRing;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use utils::padd_with_zero_to_next_multiple_of;
 use utils::padd_with_zero_to_next_power_of_two;
 use utils::{
     MyMerkleCompress, MyMerkleHash, build_merkle_compress, build_merkle_hash, build_prover_state,
@@ -132,11 +133,13 @@ pub fn test_whir_recursion() {
     let mut public_input = prover_state.proof_data().to_vec();
     let commitment_size = public_input.len();
     assert_eq!(commitment_size, 16);
-    public_input.extend(point.iter().flat_map(|x| {
-        padd_with_zero_to_next_power_of_two(
-            <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(x),
-        )
-    }));
+    public_input.extend(padd_with_zero_to_next_multiple_of(
+        &point
+            .iter()
+            .flat_map(|x| <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(x).to_vec())
+            .collect::<Vec<F>>(),
+        VECTOR_LEN,
+    ));
     public_input.extend(padd_with_zero_to_next_power_of_two(
         <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(&eval),
     ));

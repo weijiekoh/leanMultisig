@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use p3_field::PrimeCharacteristicRing;
 use p3_field::PrimeField64;
+use utils::ToUsize;
 
 use crate::{F, lang::ConstExpression};
 use vm::*;
@@ -61,6 +62,7 @@ pub enum HighLevelOperation {
     Sub,
     Div, // in the end everything compiles to either Add or Mul
     Exp, // Exponentiation, only for const expressions
+    Mod, // Modulo, only for const expressions
 }
 
 impl HighLevelOperation {
@@ -71,6 +73,7 @@ impl HighLevelOperation {
             HighLevelOperation::Sub => a - b,
             HighLevelOperation::Div => a / b,
             HighLevelOperation::Exp => a.exp_u64(b.as_canonical_u64()),
+            HighLevelOperation::Mod => F::from_usize(a.to_usize() % b.to_usize()),
         }
     }
 }
@@ -180,7 +183,7 @@ impl IntermediateInstruction {
                 arg_c,
                 res: arg_a,
             },
-            HighLevelOperation::Exp => unreachable!(),
+            HighLevelOperation::Exp | HighLevelOperation::Mod => unreachable!(),
         }
     }
 
@@ -363,6 +366,7 @@ impl ToString for HighLevelOperation {
             HighLevelOperation::Sub => "-".to_string(),
             HighLevelOperation::Div => "/".to_string(),
             HighLevelOperation::Exp => "**".to_string(),
+            HighLevelOperation::Mod => "%".to_string(),
         }
     }
 }

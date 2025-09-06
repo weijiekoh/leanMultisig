@@ -193,3 +193,10 @@ pub fn padd_with_zero_to_next_power_of_two<F: Field>(pol: &[F]) -> Vec<F> {
     padded.resize(next_power_of_two, F::ZERO);
     padded
 }
+
+pub fn padd_with_zero_to_next_multiple_of<F: Field>(pol: &[F], multiple: usize) -> Vec<F> {
+    let next_multiple = pol.len().next_multiple_of(multiple);
+    let mut padded = pol.to_vec();
+    padded.resize(next_multiple, F::ZERO);
+    padded
+}
