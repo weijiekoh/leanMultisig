@@ -230,7 +230,7 @@ fn pretty_stack_trace(source_code: &str, stack_trace: &VecDeque<LocationInSource
     let lines: Vec<&str> = source_code.lines().collect();
     let mut result = String::new();
     for &location in stack_trace.iter() {
-        result.push_str(&format!("{}: \"{}\"\n", location + 1, lines[location]));
+        result.push_str(&format!("{}: {}\n", location + 1, lines[location]));
     }
     result
 }
