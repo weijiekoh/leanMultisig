@@ -159,7 +159,7 @@ pub fn test_whir_recursion() {
     let first_folding_factor = recursion_config_builder.folding_factor.at_round(0);
 
     // to align the first merkle leaves (in base field) (required to appropriately call the precompile multilinear_eval)
-    let proof_data_padding = (1 << first_folding_factor)
+    let mut proof_data_padding = (1 << first_folding_factor)
         - ((PUBLIC_INPUT_START
             + public_input.len()
             + {
@@ -180,6 +180,7 @@ pub fn test_whir_recursion() {
             })
             % (1 << first_folding_factor));
     assert_eq!(proof_data_padding % 8, 0);
+    proof_data_padding /= 8;
     program_str = program_str
         .replace(
             "PADDING_FOR_INITIAL_MERKLE_LEAVES_PLACEHOLDER",
@@ -191,7 +192,7 @@ pub fn test_whir_recursion() {
             &recursion_config_builder.starting_log_inv_rate.to_string(),
         );
 
-    public_input.extend(F::zero_vec(proof_data_padding));
+    public_input.extend(F::zero_vec(proof_data_padding * 8));
 
     public_input.extend(prover_state.proof_data()[commitment_size..].to_vec());
 
@@ -206,6 +207,9 @@ pub fn test_whir_recursion() {
     Verifier(&recursion_config)
         .verify(&mut verifier_state, &parsed_commitment, &statement)
         .unwrap();
+
+    #[rustfmt::skip] // debug
+    std::fs::write("public_input.txt", build_public_memory(&public_input).chunks_exact(8).enumerate().map(|(i, chunk)| { format!("{} - {}: {}\n", i, i * 8, chunk.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")) }).collect::<String>(),).unwrap();
 
     // utils::init_tracing();
     let (bytecode, function_locations) = compile_program(&program_str);

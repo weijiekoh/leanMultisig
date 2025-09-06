@@ -229,12 +229,9 @@ fn sumcheck(fs_state, n_steps, claimed_sum) -> 3 {
     folding_randomness = malloc(n_steps * DIM); // in reverse order.
 
     for sc_round in 0..n_steps {
-
-        fs_state_5, poly = fs_receive_ef(fs_states_a[sc_round], 1);
-
+        fs_state_5, poly = fs_receive_ef(fs_states_a[sc_round], 3);
         sum_over_boolean_hypercube = degree_two_polynomial_sum_at_0_and_1(poly);
         assert_eq_extension(sum_over_boolean_hypercube, claimed_sums[sc_round]);
-        
         fs_state_6, rand = fs_sample_ef(fs_state_5);
         fs_states_a[sc_round + 1] = fs_state_6;
         new_claimed_sum = degree_two_polynomial_eval(poly, rand);
@@ -588,11 +585,12 @@ fn degree_two_polynomial_sum_at_0_and_1(coeffs) -> 1 {
 }
 
 fn degree_two_polynomial_eval(coeffs, point) -> 1 {
-    // coefs: vectorized
-    // res: normal pointer to 8 field elements
+    // coefs: normal pointer to 3 consecutive EF element
+    // point: normal pointer to 1 EF element
+    // return a normal pointer to 1 EF element
     point_squared = mul_extension_ret(point, point);
-    a_xx = mul_extension_ret(coeffs + 2, point_squared);
-    b_x = mul_extension_ret(coeffs + 1, point);
+    a_xx = mul_extension_ret(coeffs + DIM * 2, point_squared);
+    b_x = mul_extension_ret(coeffs + DIM, point);
     c = coeffs;
     res_0 = add_extension_ret(a_xx, b_x);
     res_1 = add_extension_ret(res_0, c);
@@ -732,7 +730,6 @@ fn fs_hint(fs_state, n) -> 2 {
 
 fn fs_receive_ef(fs_state, n) -> 2 {
     // return the updated fs_state, and a (normal) pointer to n consecutive EF elements
-
     final_fs_state = fs_observe(fs_state, n);
     res = malloc(n * DIM);
     // TODO optimize with dot_product
@@ -831,7 +828,7 @@ fn sub_extension(a, b, c) {
 }
 
 fn assert_eq_extension(a, b) inline {
-    dot_product(a, pointer_to_one_vector, a, 1);
+    dot_product(a, pointer_to_one_vector * 8, b, 1);
     return;
 }
 
