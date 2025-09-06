@@ -37,3 +37,27 @@
 - WIR recursion: batch the multilinear_eval calls on initial merkle leaves
 - KoalaBear extension of degree 5: only AVX2 has been tested and benchmarked. TODO: AVX512 / Neon
 - KoalaBear extension of degree 6: in order to use the (proven) Johnson bound in WHIR
+
+## Known leanISA compiler bugs:
+
+### Non exhaustive conditions in inlined functions
+
+Currently, to inline functions we simply replace the "return" keyword by some variable assignment, i.e.
+we do not properly handle conditions, we would need to add some JUMPs ...
+
+```
+fn works(x) inline -> 1 {
+    if x == 0 {
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+fn doesnt_work(x) inline -> 1 {
+    if x == 0 {
+        return 0; // will be compiled to `res = 0`;
+    } // the bug: we do not JUMP here, when inlined
+    return 1; // will be compiled to `res = 1`; -> invalid (res = 0 and = 1 at the same time)
+}
+```

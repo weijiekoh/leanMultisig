@@ -397,3 +397,21 @@ fn test_match() {
    "#;
     compile_and_run(program, &[], &[]);
 }
+
+// #[test]
+// fn inline_bug_mre() {
+//     let program = r#"
+//     fn main() {
+//         boolean(0);
+//         return;
+//     }
+
+//     fn boolean(a) inline -> 1 {
+//         if a == 0 {
+//             return 0;
+//         }
+//         return 1;
+//     }
+//    "#;
+//     compile_and_run(program, &[], &[]);
+// }

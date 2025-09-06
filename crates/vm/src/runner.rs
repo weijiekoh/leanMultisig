@@ -17,7 +17,7 @@ use p3_field::Field;
 use p3_symmetric::Permutation;
 
 const MAX_MEMORY_SIZE: usize = 1 << 24;
-const STACK_TRACE_LEN: usize = 15;
+const STACK_TRACE_LEN: usize = 20;
 
 #[derive(Debug, Clone)]
 pub enum RunnerError {

@@ -687,8 +687,9 @@ pub fn test_whir_recursion() {
     fn less_than_8(a) inline -> 1 {
         if a * (a - 1) * (a - 2) * (a - 3) * (a - 4) * (a - 5) * (a - 6) * (a - 7) == 0 {
             return 1; // a < 8
+        } else {
+            return 0; // a >= 8
         }
-        return 0; // a >= 8
     }
 
     fn fs_sample_ef(fs_state) -> 2 {
