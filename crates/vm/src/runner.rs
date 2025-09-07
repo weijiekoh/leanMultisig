@@ -220,7 +220,7 @@ fn pretty_stack_trace(
     let source_lines: Vec<&str> = source_code.lines().collect();
     let mut result = String::new();
     let mut call_stack: Vec<(usize, String)> = Vec::new(); // (line_number, function_name)
-    let mut prev_function: Option<String> = None;
+    let mut prev_function_line = usize::MAX;
     let mut skipped_lines: usize = 0; // Track skipped lines for current function
 
     result.push_str("╔══════════════════════════════════════════════════════════════╗\n");
@@ -228,115 +228,83 @@ fn pretty_stack_trace(
     result.push_str("╚══════════════════════════════════════════════════════════════╝\n\n");
 
     for (idx, &line_num) in latest_instructions.iter().enumerate() {
-        // Find which function this line belongs to
-        let current_function = find_function_for_line(line_num, function_locations);
+        let (current_function_line, current_function_name) =
+            find_function_for_line(line_num, function_locations);
 
-        // Detect function changes
-        match (&prev_function, &current_function) {
-            (None, Some(func)) => {
-                // Initial function entry
-                call_stack.push((line_num, func.clone()));
-                result.push_str(&format!("┌─ {} (line {})\n", func, line_num));
+        if prev_function_line != current_function_line {
+            assert_eq!(skipped_lines, 0);
+
+            // Check if we're returning to a previous function or calling a new one
+            if let Some(pos) = call_stack
+                .iter()
+                .position(|(_, f)| f == &current_function_name)
+            {
+                // Returning to a previous function - pop the stack
+                while call_stack.len() > pos + 1 {
+                    call_stack.pop();
+                    let indent = "│ ".repeat(call_stack.len());
+                    result.push_str(&format!("{}└─ [return]\n", indent));
+                }
+                skipped_lines = 0;
+            } else {
+                // Add the new function to the stack
+                call_stack.push((line_num, current_function_name.clone()));
+                let indent = "│ ".repeat(call_stack.len() - 1);
+                result.push_str(&format!(
+                    "{}├─ {} (line {})\n",
+                    indent,
+                    current_function_name.blue(),
+                    current_function_line
+                ));
                 skipped_lines = 0;
             }
-            (Some(prev), Some(curr)) if prev != curr => {
-                // Show skipped lines message if any were skipped
-                if skipped_lines > 0 {
-                    let indent = "│ ".repeat(call_stack.len());
-                    result.push_str(&format!(
-                        "{}├─ ... ({} lines skipped) ...\n",
-                        indent, skipped_lines
-                    ));
-                }
-
-                // Check if we're returning to a previous function or calling a new one
-                if let Some(pos) = call_stack.iter().position(|(_, f)| f == curr) {
-                    // Returning to a previous function - pop the stack
-                    while call_stack.len() > pos + 1 {
-                        call_stack.pop();
-                        let indent = "│ ".repeat(call_stack.len());
-                        result.push_str(&format!("{}└─ [return]\n", indent));
-                    }
-                    skipped_lines = 0;
-                } else {
-                    // Calling a new function
-                    let indent = "│ ".repeat(call_stack.len());
-
-                    // Show the calling instruction
-                    if idx > 0 {
-                        let caller_line = latest_instructions[idx - 1];
-                        let code_line = source_lines
-                            .get(caller_line.saturating_sub(1))
-                            .unwrap_or(&"<line not found>")
-                            .trim();
-                        result.push_str(&format!(
-                            "{}├─ line {}: {}\n",
-                            indent, caller_line, code_line
-                        ));
-                    }
-
-                    // Add the new function to the stack
-                    call_stack.push((line_num, curr.clone()));
-                    let indent = "│ ".repeat(call_stack.len() - 1);
-                    result.push_str(&format!("{}├─ {} (line {})\n", indent, curr, line_num));
-                    skipped_lines = 0;
-                }
-            }
-            _ => {
-                // Same function, continue
-            }
         }
 
-        // Display the current instruction
-        if current_function.is_some() {
-            // Determine if we should show this line
-            let should_show = if idx == latest_instructions.len() - 1 {
-                // Always show the last line (error location)
-                true
-            } else {
-                // Count remaining lines in this function
-                let remaining_in_function = count_remaining_lines_in_function(
-                    idx,
-                    latest_instructions,
-                    function_locations,
-                    &current_function,
-                );
+        // Determine if we should show this line
+        let should_show = if idx == latest_instructions.len() - 1 {
+            // Always show the last line (error location)
+            true
+        } else {
+            // Count remaining lines in this function
+            let remaining_in_function = count_remaining_lines_in_function(
+                idx,
+                latest_instructions,
+                function_locations,
+                current_function_line,
+            );
 
-                // Show if within the last MAX_LINES_PER_FUNCTION lines of this function
-                remaining_in_function < STACK_TRACE_MAX_LINES_PER_FUNCTION
-            };
+            remaining_in_function < STACK_TRACE_MAX_LINES_PER_FUNCTION
+        };
 
-            if should_show {
-                // Show skipped lines message if transitioning from skipping to showing
-                if skipped_lines > 0 {
-                    let indent = "│ ".repeat(call_stack.len());
-                    result.push_str(&format!(
-                        "{}├─ ... ({} lines skipped) ...\n",
-                        indent, skipped_lines
-                    ));
-                    skipped_lines = 0;
-                }
-
+        if should_show {
+            // Show skipped lines message if transitioning from skipping to showing
+            if skipped_lines > 0 {
                 let indent = "│ ".repeat(call_stack.len());
-                let code_line = source_lines
-                    .get(line_num.saturating_sub(1))
-                    .unwrap_or(&"<line not found>")
-                    .trim();
-
-                if idx == latest_instructions.len() - 1 {
-                    result.push_str(&format!(
-                        "{}├─ {} {}\n",
-                        indent, format!("line {}:", line_num).red(), code_line
-                    ));
-                } else {
-                    result.push_str(&format!("{}├─ line {}: {}\n", indent, line_num, code_line));
-                }
-            } else {
-                skipped_lines += 1;
+                result.push_str(&format!(
+                    "{}├─ ... ({} lines skipped) ...\n",
+                    indent, skipped_lines
+                ));
+                skipped_lines = 0;
             }
+
+            let indent = "│ ".repeat(call_stack.len());
+            let code_line = source_lines.get(line_num.saturating_sub(1)).unwrap().trim();
+
+            if idx == latest_instructions.len() - 1 {
+                result.push_str(&format!(
+                    "{}├─ {} {}\n",
+                    indent,
+                    format!("line {}:", line_num).red(),
+                    code_line
+                ));
+            } else {
+                result.push_str(&format!("{}├─ line {}: {}\n", indent, line_num, code_line));
+            }
+        } else {
+            skipped_lines += 1;
         }
 
-        prev_function = current_function;
+        prev_function_line = current_function_line;
     }
 
     // Add summary
@@ -356,26 +324,27 @@ fn pretty_stack_trace(
 fn find_function_for_line(
     line_num: usize,
     function_locations: &BTreeMap<usize, String>,
-) -> Option<String> {
+) -> (usize, String) {
     function_locations
         .range(..=line_num)
         .next_back()
-        .map(|(_, func_name)| func_name.clone())
+        .map(|(line, func_name)| (*line, func_name.clone()))
+        .unwrap()
 }
 
 fn count_remaining_lines_in_function(
     current_idx: usize,
     latest_instructions: &VecDeque<LocationInSourceCode>,
     function_locations: &BTreeMap<usize, String>,
-    current_function: &Option<String>,
+    current_function_line: usize,
 ) -> usize {
     let mut count = 0;
 
     for i in (current_idx + 1)..latest_instructions.len() {
         let line_num = latest_instructions[i];
-        let func = find_function_for_line(line_num, function_locations);
+        let func_line = find_function_for_line(line_num, function_locations).0;
 
-        if &func != current_function {
+        if func_line != current_function_line {
             break;
         }
         count += 1;
