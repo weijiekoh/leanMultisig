@@ -12,7 +12,6 @@ use zk_vm::{
 };
 
 #[test]
-#[ignore]
 fn test_xmss_aggregate() {
     // Public input:  message_hash | all_public_keys | bitield
     // Private input: signatures = (randomness | chain_tips | merkle_path)
@@ -204,7 +203,10 @@ fn test_xmss_aggregate() {
     const LOG_LIFETIME: usize = 32;
     const INV_BITFIELD_DENSITY: usize = 1; // (1 / INV_BITFIELD_DENSITY) of the bits are 1 in the bitfield
 
-    let n_public_keys: usize = env::var("NUM_XMSS_AGGREGATED").unwrap().parse().unwrap();
+    let n_public_keys: usize = env::var("NUM_XMSS_AGGREGATED")
+        .unwrap_or("100".to_string())
+        .parse()
+        .unwrap();
 
     let xmss_signature_size_padded = (V + 1 + LOG_LIFETIME) + LOG_LIFETIME.div_ceil(8);
     program_str = program_str
@@ -286,6 +288,7 @@ fn test_xmss_aggregate() {
             &public_input,
             &private_input,
             &batch_pcs,
+            false
         );
         let proving_time = time.elapsed();
         verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
@@ -296,6 +299,6 @@ fn test_xmss_aggregate() {
         );
         println!("Proving time: {:?}", proving_time);
     } else {
-        compile_and_run(&program_str, &public_input, &private_input);
+        compile_and_run(&program_str, &public_input, &private_input, false);
     }
 }

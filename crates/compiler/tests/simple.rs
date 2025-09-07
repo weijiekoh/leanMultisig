@@ -21,7 +21,7 @@ fn test_fibonacci_program() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_edge_case_0() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn test_edge_case_1() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn test_edge_case_2() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn test_decompose_bits() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_unroll() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn test_rev_unroll() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn test_mini_program_0() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn test_mini_program_1() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn test_mini_program_2() {
         return sum, product;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -236,7 +236,7 @@ fn test_mini_program_3() {
         .collect::<Vec<F>>()
         .try_into()
         .unwrap();
-    compile_and_run(program, &public_input, &[]);
+    compile_and_run(program, &public_input, &[], false);
 
     get_poseidon16().permute_mut(&mut public_input);
     let _ = dbg!(public_input);
@@ -263,7 +263,7 @@ fn test_mini_program_4() {
         .collect::<Vec<F>>()
         .try_into()
         .unwrap();
-    compile_and_run(program, &public_input, &[]);
+    compile_and_run(program, &public_input, &[], false);
 
     get_poseidon24().permute_mut(&mut public_input);
     dbg!(&public_input[16..]);
@@ -343,7 +343,7 @@ fn test_inlined() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 #[test]
@@ -395,7 +395,7 @@ fn test_match() {
         return x * x * x * x * x * x;
     }
    "#;
-    compile_and_run(program, &[], &[]);
+    compile_and_run(program, &[], &[], false);
 }
 
 // #[test]

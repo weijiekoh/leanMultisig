@@ -40,7 +40,7 @@ The full recursion program is not finished yet. Instead, we prove validity of a 
 
 ### XMSS aggregation
 
-`RUSTFLAGS='-C target-cpu=native' NUM_XMSS_AGGREGATED='500' cargo test --release --package rec_aggregation --lib -- xmss_aggregate::test_xmss_aggregate --nocapture --ignored`
+`RUSTFLAGS='-C target-cpu=native' NUM_XMSS_AGGREGATED='500' cargo test --release --package rec_aggregation --lib -- xmss_aggregate::test_xmss_aggregate --nocapture`
 
 500 XMSS aggregated. "Trivial encoding" (for now).
 

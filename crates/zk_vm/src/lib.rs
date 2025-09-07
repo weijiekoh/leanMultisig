@@ -8,7 +8,6 @@ use utils::*;
 use vm::{EF, F};
 use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfigBuilder};
 
-use compiler::compile_program;
 use vm::execute_bytecode;
 use zk_vm_trace::*;
 
@@ -34,11 +33,6 @@ fn exec_column_groups() -> Vec<Range<usize>> {
         ],
     ]
     .concat()
-}
-
-pub fn compile_and_run(program: &str, public_input: &[vm::F], private_input: &[vm::F]) {
-    let (bytecode, function_locations) = compile_program(program);
-    execute_bytecode(&bytecode, &public_input, private_input, program, &function_locations);
 }
 
 pub fn build_batch_pcs() -> WhirBatchPcs<F, EF, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>

@@ -75,7 +75,7 @@ pub enum Instruction {
     MultilinearEval {
         coeffs: MemOrConstant, // vectorized pointer, chunk size = 2^n_vars
         point: MemOrConstant, // normal pointer, pointing to `n_vars` continuous extension field elements
-        res: MemOrFp, // normal pointer, pointing to 1 extension field element
+        res: MemOrFp,         // normal pointer, pointing to 1 extension field element
         n_vars: usize,
     },
 }

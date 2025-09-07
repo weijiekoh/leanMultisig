@@ -28,9 +28,16 @@ pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
     (compiled, function_locations)
 }
 
-pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F]) {
+pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F], profiler: bool) {
     let (bytecode, function_locations) = compile_program(program);
-    execute_bytecode(&bytecode, &public_input, private_input, program, &function_locations);
+    execute_bytecode(
+        &bytecode,
+        &public_input,
+        private_input,
+        program,
+        &function_locations,
+        profiler,
+    );
 }
 
 #[derive(Debug, Clone, Default)]

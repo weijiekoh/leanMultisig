@@ -1,11 +1,8 @@
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-
-use colored::Colorize;
 use p3_field::BasedVectorSpace;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::dot_product;
 use rayon::prelude::*;
+use std::collections::BTreeMap;
 use utils::ToUsize;
 use utils::get_poseidon16;
 use utils::get_poseidon24;
@@ -14,13 +11,14 @@ use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::multilinear::MultilinearPoint;
 
 use crate::bytecode::*;
+use crate::profiler::profiling_report;
+use crate::stack_trace::pretty_stack_trace;
 use crate::*;
 use p3_field::Field;
 use p3_symmetric::Permutation;
 
 const MAX_MEMORY_SIZE: usize = 1 << 24;
 const STACK_TRACE_INSTRUCTIONS: usize = 5000;
-const STACK_TRACE_MAX_LINES_PER_FUNCTION: usize = 5;
 
 #[derive(Debug, Clone)]
 pub enum RunnerError {
@@ -212,145 +210,10 @@ impl Memory {
     }
 }
 
-fn pretty_stack_trace(
-    source_code: &str,
-    latest_instructions: &VecDeque<LocationInSourceCode>,
-    function_locations: &BTreeMap<usize, String>,
-) -> String {
-    let source_lines: Vec<&str> = source_code.lines().collect();
-    let mut result = String::new();
-    let mut call_stack: Vec<(usize, String)> = Vec::new(); // (line_number, function_name)
-    let mut prev_function_line = usize::MAX;
-    let mut skipped_lines: usize = 0; // Track skipped lines for current function
-
-    result.push_str("╔══════════════════════════════════════════════════════════════╗\n");
-    result.push_str("║                       STACK TRACE                            ║\n");
-    result.push_str("╚══════════════════════════════════════════════════════════════╝\n\n");
-
-    for (idx, &line_num) in latest_instructions.iter().enumerate() {
-        let (current_function_line, current_function_name) =
-            find_function_for_line(line_num, function_locations);
-
-        if prev_function_line != current_function_line {
-            assert_eq!(skipped_lines, 0);
-
-            // Check if we're returning to a previous function or calling a new one
-            if let Some(pos) = call_stack
-                .iter()
-                .position(|(_, f)| f == &current_function_name)
-            {
-                // Returning to a previous function - pop the stack
-                while call_stack.len() > pos + 1 {
-                    call_stack.pop();
-                    let indent = "│ ".repeat(call_stack.len());
-                    result.push_str(&format!("{}└─ [return]\n", indent));
-                }
-                skipped_lines = 0;
-            } else {
-                // Add the new function to the stack
-                call_stack.push((line_num, current_function_name.clone()));
-                let indent = "│ ".repeat(call_stack.len() - 1);
-                result.push_str(&format!(
-                    "{}├─ {} (line {})\n",
-                    indent,
-                    current_function_name.blue(),
-                    current_function_line
-                ));
-                skipped_lines = 0;
-            }
-        }
-
-        // Determine if we should show this line
-        let should_show = if idx == latest_instructions.len() - 1 {
-            // Always show the last line (error location)
-            true
-        } else {
-            // Count remaining lines in this function
-            let remaining_in_function = count_remaining_lines_in_function(
-                idx,
-                latest_instructions,
-                function_locations,
-                current_function_line,
-            );
-
-            remaining_in_function < STACK_TRACE_MAX_LINES_PER_FUNCTION
-        };
-
-        if should_show {
-            // Show skipped lines message if transitioning from skipping to showing
-            if skipped_lines > 0 {
-                let indent = "│ ".repeat(call_stack.len());
-                result.push_str(&format!(
-                    "{}├─ ... ({} lines skipped) ...\n",
-                    indent, skipped_lines
-                ));
-                skipped_lines = 0;
-            }
-
-            let indent = "│ ".repeat(call_stack.len());
-            let code_line = source_lines.get(line_num.saturating_sub(1)).unwrap().trim();
-
-            if idx == latest_instructions.len() - 1 {
-                result.push_str(&format!(
-                    "{}├─ {} {}\n",
-                    indent,
-                    format!("line {}:", line_num).red(),
-                    code_line
-                ));
-            } else {
-                result.push_str(&format!("{}├─ line {}: {}\n", indent, line_num, code_line));
-            }
-        } else {
-            skipped_lines += 1;
-        }
-
-        prev_function_line = current_function_line;
-    }
-
-    // Add summary
-    result.push_str("\n");
-    result.push_str("═══════════════════════════════════════════════════════════════\n");
-
-    if !call_stack.is_empty() {
-        result.push_str("\nCall stack:\n");
-        for (i, (line, func)) in call_stack.iter().enumerate() {
-            result.push_str(&format!("  {}. {} (line {})\n", i + 1, func, line));
-        }
-    }
-
-    result
-}
-
-fn find_function_for_line(
-    line_num: usize,
-    function_locations: &BTreeMap<usize, String>,
-) -> (usize, String) {
-    function_locations
-        .range(..=line_num)
-        .next_back()
-        .map(|(line, func_name)| (*line, func_name.clone()))
-        .unwrap()
-}
-
-fn count_remaining_lines_in_function(
-    current_idx: usize,
-    latest_instructions: &VecDeque<LocationInSourceCode>,
-    function_locations: &BTreeMap<usize, String>,
-    current_function_line: usize,
-) -> usize {
-    let mut count = 0;
-
-    for i in (current_idx + 1)..latest_instructions.len() {
-        let line_num = latest_instructions[i];
-        let func_line = find_function_for_line(line_num, function_locations).0;
-
-        if func_line != current_function_line {
-            break;
-        }
-        count += 1;
-    }
-
-    count
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ExecutionHistory {
+    pub(crate) lines: Vec<LocationInSourceCode>,
+    pub(crate) cycles: Vec<usize>, // for each line, how many cycles it took
 }
 
 pub fn execute_bytecode(
@@ -359,9 +222,10 @@ pub fn execute_bytecode(
     private_input: &[F],
     source_code: &str,                            // debug purpose
     function_locations: &BTreeMap<usize, String>, // debug purpose
+    profiler: bool,
 ) -> ExecutionResult {
     let mut std_out = String::new();
-    let mut latest_instructions = VecDeque::new();
+    let mut instruction_history = ExecutionHistory::default();
     let first_exec = match execute_bytecode_helper(
         bytecode,
         public_input,
@@ -369,10 +233,15 @@ pub fn execute_bytecode(
         MAX_MEMORY_SIZE / 2,
         false,
         &mut std_out,
-        &mut latest_instructions,
+        &mut instruction_history,
+        false,
+        function_locations,
     ) {
         Ok(first_exec) => first_exec,
         Err(err) => {
+            let lines_history = &instruction_history.lines;
+            let latest_instructions =
+                &lines_history[lines_history.len().saturating_sub(STACK_TRACE_INSTRUCTIONS)..];
             println!(
                 "\n{}",
                 pretty_stack_trace(source_code, &latest_instructions, function_locations)
@@ -386,6 +255,7 @@ pub fn execute_bytecode(
             panic!("Error during bytecode execution: {}", err.to_string());
         }
     };
+    instruction_history = ExecutionHistory::default();
     execute_bytecode_helper(
         bytecode,
         public_input,
@@ -393,7 +263,9 @@ pub fn execute_bytecode(
         first_exec.no_vec_runtime_memory,
         true,
         &mut String::new(),
-        &mut latest_instructions,
+        &mut instruction_history,
+        profiler,
+        function_locations,
     )
     .unwrap()
 }
@@ -439,7 +311,9 @@ fn execute_bytecode_helper(
     no_vec_runtime_memory: usize,
     final_execution: bool,
     std_out: &mut String,
-    latest_instructions: &mut VecDeque<LocationInSourceCode>,
+    instruction_history: &mut ExecutionHistory,
+    profiler: bool,
+    function_locations: &BTreeMap<usize, String>,
 ) -> Result<ExecutionResult, RunnerError> {
     let poseidon_16 = get_poseidon16(); // TODO avoid rebuilding each time
     let poseidon_24 = get_poseidon24();
@@ -483,6 +357,7 @@ fn execute_bytecode_helper(
     let mut jump_counts = 0;
 
     let mut counter_hint = 0;
+    let mut cpu_cycles_before_new_line = 0;
 
     while pc != bytecode.ending_pc {
         if pc >= bytecode.instructions.len() {
@@ -493,6 +368,7 @@ fn execute_bytecode_helper(
         fps.push(fp);
 
         cpu_cycles += 1;
+        cpu_cycles_before_new_line += 1;
 
         for hint in bytecode.hints.get(&pc).unwrap_or(&vec![]) {
             match hint {
@@ -577,12 +453,9 @@ fn execute_bytecode_helper(
                     // does not increase PC
                 }
                 Hint::LocationReport { location } => {
-                    if latest_instructions.back() != Some(location) {
-                        latest_instructions.push_back(*location);
-                    }
-                    if latest_instructions.len() > STACK_TRACE_INSTRUCTIONS {
-                        latest_instructions.pop_front();
-                    }
+                    instruction_history.lines.push(*location);
+                    instruction_history.cycles.push(cpu_cycles_before_new_line);
+                    cpu_cycles_before_new_line = 0;
                 }
             }
         }
@@ -768,15 +641,31 @@ fn execute_bytecode_helper(
     fps.push(fp);
 
     if final_execution {
-        if !std_out.is_empty() {
-            println!("╔══════════════════════════════════════════════════════════════╗");
-            println!("║                         STD-OUT                              ║");
-            println!("╚══════════════════════════════════════════════════════════════╝\n");
-            print!("{}", std_out);
+        if profiler {
+            let report = profiling_report(&instruction_history, function_locations);
+            println!("\n{}", report);
         }
+        if !std_out.is_empty() {
+            println!("╔═════════════════════════════════════════════════════════════════════════╗");
+            println!("║                                STD-OUT                                  ║");
+            println!("╚═════════════════════════════════════════════════════════════════════════╝");
+            print!("\n{}", std_out);
+            println!(
+                "──────────────────────────────────────────────────────────────────────────\n"
+            );
+        }
+
+        println!("╔═════════════════════════════════════════════════════════════════════════╗");
+        println!("║                                 STATS                                   ║");
+        println!("╚═════════════════════════════════════════════════════════════════════════╝\n");
+
+        println!("CYCLES: {}", pretty_integer(cpu_cycles));
+        println!("MEMORY: {}", pretty_integer(memory.0.len()));
+        println!();
+
         let runtime_memory_size = memory.0.len() - (PUBLIC_INPUT_START + public_input.len());
         println!(
-            "\nBytecode size: {}",
+            "Bytecode size: {}",
             pretty_integer(bytecode.instructions.len())
         );
         println!("Public input size: {}", pretty_integer(public_input.len()));
@@ -784,12 +673,24 @@ fn execute_bytecode_helper(
             "Private input size: {}",
             pretty_integer(private_input.len())
         );
-        println!("Executed {} instructions", pretty_integer(cpu_cycles));
         println!(
             "Runtime memory: {} ({:.2}% vec)",
             pretty_integer(runtime_memory_size),
             (DIMENSION * (ap_vec - initial_ap_vec)) as f64 / runtime_memory_size as f64 * 100.0
         );
+        let used_memory_cells = memory
+            .0
+            .iter()
+            .skip(PUBLIC_INPUT_START + public_input.len())
+            .filter(|&&x| x.is_some())
+            .count();
+        println!(
+            "Memory usage: {:.1}%",
+            used_memory_cells as f64 / runtime_memory_size as f64 * 100.0
+        );
+
+        println!();
+
         if poseidon16_calls + poseidon24_calls > 0 {
             println!(
                 "Poseidon2_16 calls: {}, Poseidon2_24 calls: {} (1 poseidon per {} instructions)",
@@ -810,16 +711,6 @@ fn execute_bytecode_helper(
                 pretty_integer(multilinear_eval_calls)
             );
         }
-        let used_memory_cells = memory
-            .0
-            .iter()
-            .skip(PUBLIC_INPUT_START + public_input.len())
-            .filter(|&&x| x.is_some())
-            .count();
-        println!(
-            "Memory usage: {:.1}%",
-            used_memory_cells as f64 / runtime_memory_size as f64 * 100.0
-        );
 
         if false {
             println!("Low level instruction counts:");
@@ -832,6 +723,8 @@ fn execute_bytecode_helper(
             println!("DEREF: {}", deref_counts);
             println!("JUMP: {}", jump_counts);
         }
+
+        println!("──────────────────────────────────────────────────────────────────────────\n");
     }
 
     let no_vec_runtime_memory = ap - initial_ap;

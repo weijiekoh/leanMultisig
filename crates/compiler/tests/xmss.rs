@@ -104,7 +104,7 @@ fn test_verify_merkle_path() {
     );
     public_input.splice(1..1, F::zero_vec(7));
 
-    compile_and_run(program, &public_input, &private_input);
+    compile_and_run(program, &public_input, &private_input, false);
 
     dbg!(&merkle_root);
 }
@@ -187,7 +187,7 @@ fn test_wots_encode() {
     public_input.extend(randomness.to_vec());
     public_input.extend(encoding.iter().map(|&x| F::from_u8(x)));
 
-    compile_and_run(program, &public_input, &[]);
+    compile_and_run(program, &public_input, &[], false);
 }
 
 #[test]
@@ -371,7 +371,7 @@ fn test_verify_wots_signature() {
     );
     public_input.splice(1..1, F::zero_vec(7));
 
-    compile_and_run(program, &public_input, &private_input);
+    compile_and_run(program, &public_input, &private_input, false);
 }
 
 #[test]
@@ -592,5 +592,5 @@ fn test_verify_xmss_signature() {
     );
     public_input.splice(1..1, F::zero_vec(7));
 
-    compile_and_run(&program, &public_input, &private_input);
+    compile_and_run(&program, &public_input, &private_input, false);
 }

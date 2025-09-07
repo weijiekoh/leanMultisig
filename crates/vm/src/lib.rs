@@ -2,7 +2,9 @@ use p3_field::extension::QuinticExtensionField;
 use p3_koala_bear::KoalaBear;
 
 mod bytecode;
+mod profiler;
 mod runner;
+mod stack_trace;
 pub use bytecode::*;
 pub use runner::*;
 

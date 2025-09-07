@@ -80,7 +80,7 @@ fn main() {
 
     
     for i in 0..NUM_QUERIES_3 {
-        powers_of_2_rev = powers_of_two_rev_base(final_circle_values[i], FINAL_VARS);
+        powers_of_2_rev = powers_of_two_rev_base_const(final_circle_values[i], FINAL_VARS);
         poly_eq = poly_eq_base(powers_of_2_rev, FINAL_VARS, 2**FINAL_VARS);
         final_pol_evaluated_on_circle = malloc(DIM);
         dot_product_base_extension(poly_eq, final_coeffcients, final_pol_evaluated_on_circle, 2**FINAL_VARS); // TODO use multilinear eval instead
@@ -89,7 +89,7 @@ fn main() {
 
     fs_state_11, folding_randomness_5, end_sum = sumcheck(fs_state_10, FINAL_VARS, final_claimed_sum);
 
-    folding_randomness_global = malloc_vec(N_VARS);
+    folding_randomness_global = malloc(N_VARS * DIM);
 
     ffs = malloc(N_ROUNDS + 2);
     ffs[0] = FOLDING_FACTOR_0; ffs[1] = FOLDING_FACTOR_1; ffs[2] = FOLDING_FACTOR_2; ffs[3] = FOLDING_FACTOR_3; ffs[4] = FINAL_VARS;
@@ -101,9 +101,9 @@ fn main() {
         ffs_sums[i + 1] = ffs_sums[i] + ffs[i + 1];
     }
     for i in 0..N_ROUNDS + 2 {
-        start = folding_randomness_global + N_VARS - ffs_sums[N_ROUNDS + 1 - i];
+        start = folding_randomness_global + (N_VARS - ffs_sums[N_ROUNDS + 1 - i]) * DIM;
         for j in 0..ffs[N_ROUNDS + 1 - i] {
-            copy_chunk_vec(frs[i] + j, start + j);
+            assert_eq_extension(frs[i] + j*DIM, start + j*DIM);
         }
     }
 
@@ -122,25 +122,25 @@ fn main() {
     combination_randomness_powers = malloc(N_ROUNDS); combination_randomness_powers[0] = combination_randomness_powers_1; combination_randomness_powers[1] = combination_randomness_powers_2; combination_randomness_powers[2] = combination_randomness_powers_3;
 
     for i in 0..N_ROUNDS {
-        ood_expanded_from_univariate = powers_of_two_rev_extension(ood_points[i + 1], N_VARS - ffs_sums[i]); // 456 cycles
-        s5 = eq_mle_extension(ood_expanded_from_univariate, folding_randomness_global, N_VARS - ffs_sums[i]); // 2248 cycles
-        s6s = malloc_vec(num_queries[i] + 1);
-        copy_chunk_vec(s5, s6s);
+        ood_expanded_from_univariate = powers_of_two_rev_extension(ood_points[i + 1], N_VARS - ffs_sums[i]);
+        s5 = eq_mle_extension(ood_expanded_from_univariate, folding_randomness_global, N_VARS - ffs_sums[i]);
+        s6s = malloc((num_queries[i] + 1) * DIM);
+        assert_eq_extension(s5, s6s);
         circle_value_i = circle_values[i];
         for j in 0..num_queries[i] {
-            expanded_from_univariate = powers_of_two_rev_base(circle_value_i[j], N_VARS - ffs_sums[i]); // 302 cycles
-            temp = eq_mle_extension_base(expanded_from_univariate, folding_randomness_global, N_VARS - ffs_sums[i]); // 1415 cycles
-            copy_chunk_vec(temp, s6s + j + 1);
+            expanded_from_univariate = powers_of_two_rev_base_dynamic(circle_value_i[j], N_VARS - ffs_sums[i]);
+            temp = eq_mle_extension_base_dynamic(expanded_from_univariate, folding_randomness_global, N_VARS - ffs_sums[i]);
+            assert_eq_extension(temp, s6s + (j + 1) * DIM);
         }
-        s7 = malloc_vec(1);
-        dot_product_dynamic(s6s, combination_randomness_powers[i], s7, num_queries[i] + 1);  // 10720 cycles
+        s7 = malloc(DIM);
+        dot_product_dynamic(s6s, combination_randomness_powers[i], s7, num_queries[i] + 1);
         wsum = add_extension_ret(weight_sums[i], s7);
         weight_sums[i+1] = wsum;
     }
 
     evaluation_of_weights = weight_sums[N_ROUNDS];
     poly_eq_final = poly_eq_extension(folding_randomness_5, FINAL_VARS, 2**FINAL_VARS);
-    final_value = malloc_vec(1);
+    final_value = malloc(DIM);
     dot_product(poly_eq_final, final_coeffcients, final_value, 2**FINAL_VARS);
     evaluation_of_weights_times_final_value = mul_extension_ret(evaluation_of_weights, final_value);
     assert_eq_extension(evaluation_of_weights_times_final_value, end_sum);
@@ -149,65 +149,97 @@ fn main() {
 
 fn eq_mle_extension(a, b, n) -> 1 {
 
-    buff = malloc_vec(n);
+    buff = malloc(n*DIM);
 
     for i in 0..n {
-        ai = a + i;
-        bi = b + i;
-        buffi = buff + i;
+        shift = i * DIM;
+        ai = a + shift;
+        bi = b + shift;
+        buffi = buff + shift;
         ab = mul_extension_ret(ai, bi);
-        a_ptr = ai * 8;
-        b_ptr = bi * 8;
-        ab_ptr = ab * 8;
-        buff_ptr = buffi * 8;
-        buff_ptr[0] = 1 + 2 * ab_ptr[0] - a_ptr[0] - b_ptr[0];
-        for j in 1..8 unroll {
-            buff_ptr[j] = 2 * ab_ptr[j] - a_ptr[j] - b_ptr[j];
+        buffi[0] = 1 + 2 * ab[0] - ai[0] - bi[0];
+        for j in 1..DIM unroll {
+            buffi[j] = 2 * ab[j] - ai[j] - bi[j];
         }
     }
 
-    prods = malloc_vec(n);
-    copy_chunk_vec(buff, prods);
+    prods = malloc(n*DIM);
+    assert_eq_extension(buff, prods);
     for i in 0..n - 1 {
-        mul_extension(prods + i, buff + i + 1, prods + i + 1);
+        mul_extension(prods + i*DIM, buff + (i + 1)*DIM, prods + (i + 1)*DIM);
     }
 
-    return prods + n - 1;
+    return prods + (n - 1) * DIM;
 }
 
-fn eq_mle_extension_base(a, b, n) -> 1 {
+fn eq_mle_extension_base_dynamic(a, b, n) -> 1 {
+    if n == N_VARS - FOLDING_FACTOR_0 {
+        res = eq_mle_extension_base_const(a, b, N_VARS - FOLDING_FACTOR_0);
+        return res;
+    }
+    if n == N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1 {
+        res = eq_mle_extension_base_const(a, b, N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1);
+        return res;
+    }
+    if n == N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1 - FOLDING_FACTOR_2 {
+        res = eq_mle_extension_base_const(a, b, N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1 - FOLDING_FACTOR_2);
+        return res;
+    }
+    TODO_eq_mle_extension_base_dynamicc = n;
+    print(TODO_eq_mle_extension_base_dynamicc);
+    panic();
+}
+
+fn eq_mle_extension_base_const(a, b, const n) -> 1 {
     // a: base
     // b: extension
 
-    buff = malloc_vec(n);
+    buff = malloc(n*DIM);
 
-    for i in 0..n {
+    for i in 0..n unroll {
         ai = a[i];
-        bi = (b + i) * 8;
-        buffi = (buff + i) * 8;
+        bi = b + i*DIM;
+        buffi = buff + i*DIM;
         ai_double = ai * 2;
         buffi[0] = 1 + ai_double * bi[0] - ai - bi[0];
-        for j in 1..8 unroll {
+        for j in 1..DIM unroll {
             buffi[j] = ai_double * bi[j] - bi[j];
         }
     }
 
-
-    prods = malloc_vec(n);
-    copy_chunk_vec(buff, prods);
-    for i in 0..n - 1 {
-        mul_extension(prods + i, buff + i + 1, prods + i + 1);
+    prods = malloc(n*DIM);
+    assert_eq_extension(buff, prods);
+    for i in 0..n - 1 unroll {
+        mul_extension(prods + i*DIM, buff + (i + 1)*DIM, prods + (i + 1)*DIM);
     }
-    return prods + n - 1;
+    return prods + (n - 1) * DIM;
 }
 
-fn powers_of_two_rev_base(alpha, n) -> 1 {
+fn powers_of_two_rev_base_dynamic(alpha, n) -> 1 {
+    if n == N_VARS - FOLDING_FACTOR_0 {
+        res = powers_of_two_rev_base_const(alpha, N_VARS - FOLDING_FACTOR_0);
+        return res;
+    }
+    if n == N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1 {
+        res = powers_of_two_rev_base_const(alpha, N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1);
+        return res;
+    }
+    if n == N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1 - FOLDING_FACTOR_2 {
+        res = powers_of_two_rev_base_const(alpha, N_VARS - FOLDING_FACTOR_0 - FOLDING_FACTOR_1 - FOLDING_FACTOR_2);
+        return res;
+    }
+    TODO_powers_of_two_rev_base_dynamic = n;
+    print(TODO_powers_of_two_rev_base_dynamic);
+    panic();
+}
+
+fn powers_of_two_rev_base_const(alpha, const n) -> 1 {
     // "expand_from_univariate"
     // alpha: F
 
     res = malloc(n);
     res[n - 1] = alpha;
-    for i in 1..n {
+    for i in 1..n unroll {
         res[n - 1 - i] = res[n - i] * res[n - i];
     }
     return res;
@@ -216,10 +248,10 @@ fn powers_of_two_rev_base(alpha, n) -> 1 {
 fn powers_of_two_rev_extension(alpha, n) -> 1 {
     // "expand_from_univariate"
 
-    res = malloc_vec(n);
-    copy_chunk_vec(alpha, res + n - 1);
+    res = malloc(n*DIM);
+    assert_eq_extension(alpha, res + (n - 1)*DIM);
     for i in 1..n {
-        mul_extension(res + (n - i), res + (n - i), res + (n - 1 - i));
+        mul_extension(res + (n - i)*DIM, res + (n - i)*DIM, res + (n - 1 - i)*DIM);
     }
     return res;
 }

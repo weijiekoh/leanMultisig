@@ -40,6 +40,7 @@ pub fn prove_execution(
     public_input: &[F],
     private_input: &[F],
     pcs: &impl BatchPCS<PF<EF>, EF, EF>,
+    vm_profiler: bool,
 ) -> Vec<PF<EF>> {
     let ExecutionTrace {
         full_trace,
@@ -58,6 +59,7 @@ pub fn prove_execution(
             private_input,
             source_code,
             function_locations,
+            vm_profiler
         );
         get_execution_trace(&bytecode, &execution_result)
     });

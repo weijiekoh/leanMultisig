@@ -33,12 +33,12 @@ pub fn test_whir_recursion() {
     let src_file = Path::new(env!("CARGO_MANIFEST_DIR")).join("recursion_program.lean_lang");
     let mut program_str = std::fs::read_to_string(src_file).unwrap();
 
-    let num_variables = 22;
+    let num_variables = 25;
     let recursion_config_builder = WhirConfigBuilder {
         max_num_variables_to_send_coeffs: 6,
         security_level: 128,
         pow_bits: 17,
-        folding_factor: FoldingFactor::ConstantFromSecondRound(5, 4),
+        folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
         merkle_hash: build_merkle_hash(),
         merkle_compress: build_merkle_compress(),
         soundness_type: SecurityAssumption::CapacityBound,
@@ -222,6 +222,7 @@ pub fn test_whir_recursion() {
         &public_input,
         &[],
         &batch_pcs,
+        true
     );
     println!("WHIR recursion, proving time: {:?}", time.elapsed());
     verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();

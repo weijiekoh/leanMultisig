@@ -200,7 +200,8 @@ pub fn get_execution_trace(
                 let addr_res = res.read_value(&memory, fp).unwrap().to_usize();
                 let point = (0..*n_vars)
                     .map(|i| memory.get_ef_element(addr_point + i * DIMENSION))
-                    .collect::<Result<Vec<EF>, _>>().unwrap();
+                    .collect::<Result<Vec<EF>, _>>()
+                    .unwrap();
                 let res = memory.get_ef_element(addr_res).unwrap();
                 vm_multilinear_evals.push(WitnessMultilinearEval {
                     cycle,
