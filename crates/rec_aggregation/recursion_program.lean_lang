@@ -68,7 +68,13 @@ fn main() {
 
     domain_size_3 = domain_size_2 - RS_REDUCTION_FACTOR_2;
     fs_state_8, folding_randomness_4, final_claimed_sum = sumcheck(fs_state_7, FOLDING_FACTOR_3, claimed_sum_3);
-    fs_state_9, final_coeffcients = fs_receive(fs_state_8, 2**FINAL_VARS);
+    
+    fs_state_9, final_coeffcients_unpacked = fs_receive(fs_state_8, 2**FINAL_VARS);
+    final_coeffcients = malloc(2**FINAL_VARS * DIM);
+    for i in 0..2**FINAL_VARS {
+        assert_eq_extension((final_coeffcients_unpacked + i) * 8, final_coeffcients + i*DIM);
+    }
+
     fs_state_10, final_circle_values, final_folds =
         sample_stir_indexes_and_fold(fs_state_9, NUM_QUERIES_3, 0, FOLDING_FACTOR_3, 2**FOLDING_FACTOR_3, domain_size_3, root_3, folding_randomness_4, GRINDING_BITS_3);
 
@@ -76,9 +82,9 @@ fn main() {
     for i in 0..NUM_QUERIES_3 {
         powers_of_2_rev = powers_of_two_rev_base(final_circle_values[i], FINAL_VARS);
         poly_eq = poly_eq_base(powers_of_2_rev, FINAL_VARS, 2**FINAL_VARS);
-        final_pol_evaluated_on_circle = malloc_vec(1);
+        final_pol_evaluated_on_circle = malloc(DIM);
         dot_product_base_extension(poly_eq, final_coeffcients, final_pol_evaluated_on_circle, 2**FINAL_VARS); // TODO use multilinear eval instead
-        assert_eq_extension(final_pol_evaluated_on_circle, final_folds + i);
+        assert_eq_extension(final_pol_evaluated_on_circle, final_folds + i*DIM);
     }
 
     fs_state_11, folding_randomness_5, end_sum = sumcheck(fs_state_10, FINAL_VARS, final_claimed_sum);
@@ -319,7 +325,7 @@ fn sample_stir_indexes_and_fold(fs_state, num_queries, merkle_leaves_in_basefiel
     } else {
         poly_eq = poly_eq_extension(folding_randomness, folding_factor, two_pow_folding_factor);
         for i in 0..num_queries {
-            dot_product_dynamic(answers[i] * 8, poly_eq, (folds + i) * 8, two_pow_folding_factor);
+            dot_product_dynamic(answers[i] * 8, poly_eq, folds + i*DIM, two_pow_folding_factor);
         }
     }
 
@@ -464,25 +470,23 @@ fn dot_product_dynamic(a, b, res, n) {
 }
 
 fn dot_product_base_extension(a, b, res, const n) {
-    // a is a pointer to n base field elements
-    // b is a pointer to n extension field elements
+    // a is a normal pointer to n F elements
+    // b is a normal pointer to n continous EF elements
+    // res is a normal pointer to 1 EF element
 
-    b_ptr = b * 8;
-    res_ptr = res * 8;
-        
-    prods = malloc(n * 8);
+    prods = malloc(n * DIM);
     for i in 0..n unroll {
-        for j in 0..8 unroll {
-            prods[i * 8 + j] = a[i] * b_ptr[i * 8 + j];
+        for j in 0..DIM unroll {
+            prods[i * DIM + j] = a[i] * b[i * DIM + j];
         }
     }
-    my_buff = malloc(n * 8);
-    for i in 0..8 unroll {
+    my_buff = malloc(n * DIM);
+    for i in 0..DIM unroll {
         my_buff[n * i] = prods[i];
         for j in 0..n - 1 unroll {
-            my_buff[(n * i) + j + 1] = my_buff[(n * i) + j] + prods[i + ((j + 1) * 8)];
+            my_buff[(n * i) + j + 1] = my_buff[(n * i) + j] + prods[i + ((j + 1) * DIM)];
         }
-        res_ptr[i] = my_buff[(n * i) + n - 1];
+        res[i] = my_buff[(n * i) + n - 1];
     }
 
     return;
