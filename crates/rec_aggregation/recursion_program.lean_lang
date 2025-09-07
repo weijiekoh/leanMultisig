@@ -346,8 +346,8 @@ fn whir_round(fs_state, prev_root, folding_factor, two_pow_folding_factor, is_fi
 
     combination_randomness_powers = powers(combination_randomness_gen, num_queries + 1); // "+ 1" because of one OOD sample
 
-    claimed_sum_supplement_side = malloc_vec(1);
-    dot_product_dynamic(folds, combination_randomness_powers + 1, claimed_sum_supplement_side, num_queries);
+    claimed_sum_supplement_side = malloc(5);
+    dot_product_dynamic(folds, combination_randomness_powers + DIM, claimed_sum_supplement_side, num_queries);
 
     claimed_sum_supplement = add_extension_ret(claimed_sum_supplement_side, ood_eval);
     new_claimed_sum_b = add_extension_ret(claimed_sum_supplement, new_claimed_sum_a);
@@ -372,10 +372,10 @@ fn powers(alpha, n) -> 1 {
     // alpha: EF
     // n: F
 
-    res = malloc_vec(n);
+    res = malloc(n * DIM);
     set_to_one(res);
     for i in 0..n - 1 {
-        mul_extension(res + i, alpha, res + i + 1);
+        mul_extension(res + i*DIM, alpha, res + (i + 1)*DIM);
     }
     return res;
 }
@@ -841,10 +841,9 @@ fn assert_eq_vec(a, b) inline {
     return;
 }
 
-fn set_to_one(a) {
-    a_ptr = 8 * a;
-    a_ptr[0] = 1;
-    for i in 1..8 unroll { a_ptr[i] = 0; }
+fn set_to_one(a) inline {
+    a[0] = 1;
+    for i in 1..DIM unroll { a[i] = 0; }
     return;
 }
 
