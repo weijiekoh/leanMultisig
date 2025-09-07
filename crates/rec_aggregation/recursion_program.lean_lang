@@ -245,7 +245,7 @@ fn sumcheck(fs_state, n_steps, claimed_sum) -> 3 {
     return new_state, folding_randomness, new_claimed_sum;
 }
 
-fn sample_stir_indexes_and_fold(fs_state, num_queries, is_first_round, folding_factor, two_pow_folding_factor, domain_size, prev_root, folding_randomness, grinding_bits) -> 3 {
+fn sample_stir_indexes_and_fold(fs_state, num_queries, merkle_leaves_in_basefield, folding_factor, two_pow_folding_factor, domain_size, prev_root, folding_randomness, grinding_bits) -> 3 {
 
     fs_state_8 = fs_grinding(fs_state, grinding_bits);
     fs_state_9, stir_challenges_indexes = sample_bits(fs_state_8, num_queries);
@@ -255,10 +255,10 @@ fn sample_stir_indexes_and_fold(fs_state, num_queries, is_first_round, folding_f
     fs_states_b[0] = fs_state_9;
     
     // the number of chunk of 8 field elements per merkle leaf opened
-    if is_first_round == 1 {
+    if merkle_leaves_in_basefield == 1 {
         n_chuncks_per_answer = two_pow_folding_factor / 8; // "/ 8" because initial merkle leaves are in the basefield
     } else {
-        n_chuncks_per_answer = two_pow_folding_factor;
+        n_chuncks_per_answer = two_pow_folding_factor * DIM / 8;
     }
 
     for i in 0..num_queries {
@@ -312,14 +312,14 @@ fn sample_stir_indexes_and_fold(fs_state, num_queries, is_first_round, folding_f
     fs_state_11 = fs_states_c[num_queries];
 
     folds = malloc(num_queries * DIM);
-    if is_first_round == 1 {
+    if merkle_leaves_in_basefield == 1 {
         for i in 0..num_queries {
             multilinear_eval((answers[i] * 8) / 2**FOLDING_FACTOR_0, folding_randomness, folds + i*DIM, FOLDING_FACTOR_0); // TODO batching: use a single call to multilinear eval
         }
     } else {
         poly_eq = poly_eq_extension(folding_randomness, folding_factor, two_pow_folding_factor);
         for i in 0..num_queries {
-            dot_product_dynamic(answers[i], poly_eq, folds + i, two_pow_folding_factor);
+            dot_product_dynamic(answers[i] * 8, poly_eq, (folds + i) * 8, two_pow_folding_factor);
         }
     }
 
@@ -334,13 +334,13 @@ fn sample_stir_indexes_and_fold(fs_state, num_queries, is_first_round, folding_f
 }
 
 
-fn whir_round(fs_state, prev_root, folding_factor, two_pow_folding_factor, is_first_round, num_queries, domain_size, claimed_sum, grinding_bits) -> 7 {
+fn whir_round(fs_state, prev_root, folding_factor, two_pow_folding_factor, merkle_leaves_in_basefield, num_queries, domain_size, claimed_sum, grinding_bits) -> 7 {
     fs_state_7, folding_randomness, new_claimed_sum_a = sumcheck(fs_state, folding_factor, claimed_sum);
 
     fs_state_8, root, ood_point, ood_eval = parse_commitment(fs_state_7);
 
     fs_state_11, circle_values, folds = 
-        sample_stir_indexes_and_fold(fs_state_8, num_queries, is_first_round, folding_factor, two_pow_folding_factor, domain_size, prev_root, folding_randomness, grinding_bits);
+        sample_stir_indexes_and_fold(fs_state_8, num_queries, merkle_leaves_in_basefield, folding_factor, two_pow_folding_factor, domain_size, prev_root, folding_randomness, grinding_bits);
 
     fs_state_12, combination_randomness_gen = fs_sample_ef(fs_state_11);
 
@@ -492,20 +492,20 @@ fn poly_eq_extension(point, n, two_pow_n) -> 1 {
     // Example: for n = 2: eq(x, y) = [(1 - x)(1 - y), (1 - x)y, x(1 - y), xy]
 
     if n == 0 {
-        res = malloc_vec(1);
+        res = malloc(DIM);
         set_to_one(res);
         return res;
     }
 
-    res = malloc_vec(two_pow_n);
+    res = malloc(two_pow_n * DIM);
 
-    inner_res = poly_eq_extension(point + 1, n - 1, two_pow_n / 2);
+    inner_res = poly_eq_extension(point + DIM, n - 1, two_pow_n / 2);
 
     two_pow_n_minus_1 = two_pow_n / 2;
 
     for i in 0..two_pow_n_minus_1 {
-        mul_extension(point, inner_res + i, res + two_pow_n_minus_1 + i);
-        sub_extension(inner_res + i, res + two_pow_n_minus_1 + i, res + i);
+        mul_extension(point, inner_res + i*DIM, res + (two_pow_n_minus_1 + i) * DIM);
+        sub_extension(inner_res + i*DIM, res + (two_pow_n_minus_1 + i) * DIM, res + i*DIM);
     }
     
     return res;
@@ -814,15 +814,10 @@ fn add_extension(a, b, c) inline {
     return;
 }
 
-fn sub_extension(a, b, c) {
-    // c = a - b
-
-    ap = a * 8;
-    bp = b * 8;
-    cp = c * 8;
-
-    for i in 0..8 unroll {
-        cp[i] = ap[i] - bp[i];
+fn sub_extension(a, b, c) inline {
+    // TODO if a and b are adjacent we can do it in one cycle using the dot_product precompile
+    for i in 0..DIM unroll {
+        c[i] = a[i] - b[i];
     }
     return;
 }
