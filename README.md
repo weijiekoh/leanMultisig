@@ -1,26 +1,29 @@
 <h1 align="center">♦ leanMultisig ♦</h1>
 
-XMSS + Simple [zkVM](minimal_zkVM.pdf) = PQ signatures, with unbounded aggregation
+XMSS + minimal [zkVM](minimal_zkVM.pdf) = lightweight PQ signatures, with unbounded aggregation
 
-## AIR Proving System
 
-The protocol is detailed in [Whirlaway.pdf](Whirlaway.pdf)
+## Proving System
 
-The core argument builds upon [SuperSpartan](https://eprint.iacr.org/2023/552.pdf) (Srinath Setty, Justin Thaler, Riad Wahby), with AIR-specific optimizations developed by William Borgeaud in [A simple multivariate AIR argument inspired by SuperSpartan](https://solvable.group/posts/super-air/#fnref:1).
 
-Key techniques:
+- AIR tables committed via multilinear polynomial, using [WHIR](https://eprint.iacr.org/2024/1586.pdf)
+- [SuperSpartan](https://eprint.iacr.org/2023/552.pdf), with AIR-specific optimizations developed by W. Borgeaud in [A simple multivariate AIR argument inspired by SuperSpartan](https://solvable.group/posts/super-air/#fnref:1)
+- [Univariate Skip](https://eprint.iacr.org/2024/108.pdf)
+- [Logup*](https://eprint.iacr.org/2025/946.pdf)
+- ...
 
-- AIR table committed as a single multilinear polynomial, using the [WHIR](https://eprint.iacr.org/2024/1586.pdf) PCS
-- Sumcheck + "Univariate Skip" from [Some Improvements for the PIOP for ZeroCheck](https://eprint.iacr.org/2024/108.pdf) (Angus Gruen)
+The VM design is inspired by the famous [Cairo paper](https://eprint.iacr.org/2021/1063.pdf).
+
+Details on how to prove AIR constraints in the multilinear settings are described in [Whirlaway.pdf](Whirlaway.pdf).
+
 
 ## Benchmarks
 
-commit: 8948b85
 cpu: cpu: i9-12900H, ram: 32 gb
 
-> TLDR: Very slow, **but there is hope** (cf [TODO](TODO.md))
+> TLDR: Slow, **but there is hope** (cf [TODO](TODO.md))
 
-Conjecture: 4.12 of [WHIR](https://eprint.iacr.org/2024/1586.pdf), "up to capacity" (TODO: a version without any conjecture, requires degree 6 extension of KoalaBear)
+target ≈ 128 bits of security, currently using conjecture: 4.12 of [WHIR](https://eprint.iacr.org/2024/1586.pdf), "up to capacity" (TODO: a version without any conjecture, requires an extension of koala-bear of degree > 5)
 
 ### Poseidon2
 

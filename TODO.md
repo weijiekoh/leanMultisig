@@ -6,26 +6,23 @@
 - Opti recursion bytecode
 - inverse folding ordering in WHIR to enable Packing during sumcheck (more generally, TODO packing everywhere)
 - one can "move out" the variable of the eq(.) polynomials out of the sumcheck computation in WHIR (as done in the PIOP)
-- Extension field: dim 5/6
 - Structured AIR: often no all the columns use both up/down -> only handle the used ones to speed up the PIOP zerocheck
 - use RowMAjorMatrix instead of Vec<Vec> for witness
 - Fill Precompile tables during bytecode execution
 - Use Univariate Skip to commit to tables with k.2^n rows (k small)
-- increase density of multi commitments -> we can almost reduce by 2x commitment costs
+- increase density of multi commitments -> we can almost reduce by 2x commitment costs (question: will perf be good enough in order to avoid using the "jagged pcs" (cf sp1 hypercube)?)
 - avoid field embedding in the initial sumcheck of logup*, when table / values are in base field
 - opti logup* GKR when the indexes are not a power of 2 (which is the case in the execution table)
 - incremental merkle paths in whir-p3
 - Experiment to increase degree, and reduce commitments, in Poseidon arithmetization
 - Avoid embedding overhead on the flag, len, and index columns in the AIR table for dot products
-- reduce to only 2 logup*, one vectorized, one not
 - Batched logup*: when computing the eq() factor we can opti if the points contain boolean factor
 - Lev's trick to skip some low-level modular reduction
-- Sumcheckcheck, case z = 0, no need to fold, only keep first half of the values (done in PR 33 by Lambda) (and also in WHIR?)
+- Sumcheck, case z = 0, no need to fold, only keep first half of the values (done in PR 33 by Lambda) (and also in WHIR?)
 - Custom AVX2 / AVX512 / Neon implem in Plonky3 for all of the finite field operations (done for degree 4 extension, but not degree 5)
-- leanISA compiler: inlined function
-- batch the logup* in basefield. We should have only 2 logup* in memory (not 3)
+- batch the logup* in basefield for memory. We should have only 2 logup* in memory (not 3): one normal and one vectorized (chunks of 8)
 - the 2 executions of the program, before generating the validity proof, can be merged, using some kind of placeholders
-- XMSS aggregation program has 40% of unused memory!! -> TODO improve the compiler to reduce memory fragmentation
+- both WHIR verif + XMSS aggregation programs have 40% of unused memory!! -> TODO improve the compiler to reduce memory fragmentation
 
 ## Not Perf
 
