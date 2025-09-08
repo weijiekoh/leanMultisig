@@ -22,6 +22,10 @@ pub fn shift_range(range: Range<usize>, shift: usize) -> Range<usize> {
     }
 }
 
+pub const fn singleton_range(i: usize) -> Range<usize> {
+    i..i + 1
+}
+
 pub fn diff_to_next_power_of_two(n: usize) -> usize {
     n.next_power_of_two() - n
 }

@@ -4,6 +4,7 @@ use p3_field::{ExtensionField, Field};
 
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_uni_stark::get_symbolic_constraints;
+use tracing::instrument;
 use utils::{ConstraintChecker, PF};
 
 use crate::{MyAir, witness::AirWitness};
@@ -33,6 +34,7 @@ impl<EF: ExtensionField<PF<EF>>, A: MyAir<EF>> AirTable<EF, A> {
         self.air.width()
     }
 
+    #[instrument(name = "Check trace validity", skip_all)]
     pub fn check_trace_validity<IF: ExtensionField<PF<EF>>>(
         &self,
         witness: &AirWitness<IF>,

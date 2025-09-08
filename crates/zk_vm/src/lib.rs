@@ -34,6 +34,13 @@ fn exec_column_groups() -> Vec<Range<usize>> {
     ]
     .concat()
 }
+// fn exec_column_groups() -> Vec<Range<usize>> {
+//     [(0..N_EXEC_AIR_COLUMNS)
+//         .map(|i| i..i + 1)
+//         .collect::<Vec<_>>()]
+//     .concat()
+// }
+
 
 pub fn build_batch_pcs() -> WhirBatchPcs<F, EF, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>
 {

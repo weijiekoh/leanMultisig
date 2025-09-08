@@ -457,14 +457,18 @@ pub fn verify_execution(
         .evaluate(&grand_product_mem_values_mixing_challenges),
     };
 
-    let exec_evals_to_verify = exec_table.verify(
+    let [exec_evals_to_verify, dot_product_evals_to_verify] = verify_many_air_2(
         &mut verifier_state,
+        &[&exec_table],
+        &[&dot_product_table],
         UNIVARIATE_SKIPS,
-        log_n_cycles,
-        &exec_column_groups(),
-    )?;
+        &[log_n_cycles, table_dot_products_log_n_rows],
+        &[exec_column_groups(), DOT_PRODUCT_AIR_COLUMN_GROUPS.to_vec()],
+    )?
+    .try_into()
+    .unwrap();
 
-    let poseidon_evals_to_verify = verify_many_air_2(
+    let [p16_evals_to_verify, p24_evals_to_verify] = verify_many_air_2(
         &mut verifier_state,
         &[&p16_table],
         &[&p24_table],
@@ -474,17 +478,10 @@ pub fn verify_execution(
             poseidon_16_column_groups(&p16_air),
             poseidon_24_column_groups(&p24_air),
         ],
-    )?;
-    let p16_evals_to_verify = &poseidon_evals_to_verify[0];
-    let p24_evals_to_verify = &poseidon_evals_to_verify[1];
+    )?
+    .try_into()
+    .unwrap();
     let memory_folding_challenges = MultilinearPoint(p16_evals_to_verify[0].point[..3].to_vec());
-
-    let dot_product_evals_to_verify = dot_product_table.verify(
-        &mut verifier_state,
-        1,
-        table_dot_products_log_n_rows,
-        &DOT_PRODUCT_AIR_COLUMN_GROUPS,
-    )?;
 
     let memory_poly_eq_point_alpha = verifier_state.sample();
 

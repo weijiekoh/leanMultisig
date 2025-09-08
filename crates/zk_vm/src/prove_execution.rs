@@ -2,6 +2,7 @@ use crate::common::*;
 use crate::*;
 use ::air::prove_many_air_2;
 use ::air::{table::AirTable, witness::AirWitness};
+use air::prove_many_air_2_f_and_ef;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
 use p3_air::BaseAir;
@@ -59,7 +60,7 @@ pub fn prove_execution(
             private_input,
             source_code,
             function_locations,
-            vm_profiler
+            vm_profiler,
         );
         get_execution_trace(&bytecode, &execution_result)
     });
@@ -617,24 +618,34 @@ pub fn prove_execution(
         .evaluate(&grand_product_mem_values_mixing_challenges),
     };
 
-    let exec_evals_to_prove = info_span!("Execution AIR proof")
-        .in_scope(|| exec_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, exec_witness));
+    let [exec_evals_to_prove, dot_product_evals_to_prove] =
+        info_span!("Execution + DotProduct AIR proof")
+            .in_scope(|| {
+                prove_many_air_2_f_and_ef(
+                    &mut prover_state,
+                    UNIVARIATE_SKIPS,
+                    &[&exec_table],
+                    &[&dot_product_table],
+                    &[exec_witness],
+                    &[dot_product_witness],
+                )
+            })
+            .try_into()
+            .unwrap();
 
-    let poseidon_evals_to_prove = info_span!("Poseidons AIR proof").in_scope(|| {
-        prove_many_air_2(
-            &mut prover_state,
-            UNIVARIATE_SKIPS,
-            &[&p16_table],
-            &[&p24_table],
-            &[p16_witness],
-            &[p24_witness],
-        )
-    });
-    let p16_evals_to_prove = &poseidon_evals_to_prove[0];
-    let p24_evals_to_prove = &poseidon_evals_to_prove[1];
-
-    let dot_product_evals_to_prove = info_span!("Dot Product AIR proof")
-        .in_scope(|| dot_product_table.prove_extension(&mut prover_state, 1, dot_product_witness));
+    let [p16_evals_to_prove, p24_evals_to_prove] = info_span!("Poseidons AIR proof")
+        .in_scope(|| {
+            prove_many_air_2(
+                &mut prover_state,
+                UNIVARIATE_SKIPS,
+                &[&p16_table],
+                &[&p24_table],
+                &[p16_witness],
+                &[p24_witness],
+            )
+        })
+        .try_into()
+        .unwrap();
 
     // Main memory lookup
     let exec_memory_indexes = padd_with_zero_to_next_power_of_two(
@@ -696,8 +707,8 @@ pub fn prove_execution(
         let poseidon_lookup_value = poseidon_lookup_value(
             n_poseidons_16,
             n_poseidons_24,
-            p16_evals_to_prove,
-            p24_evals_to_prove,
+            &p16_evals_to_prove,
+            &p24_evals_to_prove,
             &poseidon_lookup_batching_chalenges,
         );
         let poseidon_lookup_challenge = Evaluation {
