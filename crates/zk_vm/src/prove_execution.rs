@@ -2,7 +2,6 @@ use crate::common::*;
 use crate::*;
 use ::air::prove_many_air_2;
 use ::air::{table::AirTable, witness::AirWitness};
-use air::prove_many_air_2_f_and_ef;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
 use p3_air::BaseAir;
@@ -598,20 +597,11 @@ pub fn prove_execution(
         value: grand_product_exec_sumcheck_inner_evals[COL_INDEX_FP],
     };
 
-    let [exec_evals_to_prove, dot_product_evals_to_prove] =
-        info_span!("Execution + DotProduct AIR proof")
-            .in_scope(|| {
-                prove_many_air_2_f_and_ef(
-                    &mut prover_state,
-                    UNIVARIATE_SKIPS,
-                    &[&exec_table],
-                    &[&dot_product_table],
-                    &[exec_witness],
-                    &[dot_product_witness],
-                )
-            })
-            .try_into()
-            .unwrap();
+    let exec_evals_to_prove = info_span!("Execution AIR proof")
+        .in_scope(|| exec_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, exec_witness));
+
+    let dot_product_evals_to_prove = info_span!("DotProduct AIR proof")
+        .in_scope(|| dot_product_table.prove_extension(&mut prover_state, 1, dot_product_witness));
 
     let [p16_evals_to_prove, p24_evals_to_prove] = info_span!("Poseidons AIR proof")
         .in_scope(|| {

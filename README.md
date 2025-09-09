@@ -27,7 +27,9 @@ target ≈ 128 bits of security, currently using conjecture: 4.12 of [WHIR](http
 
 ### Poseidon2
 
-`RUSTFLAGS='-C target-cpu=native' cargo run --release`
+```console
+RUSTFLAGS='-C target-cpu=native' cargo run --release
+```
 
 50 % over 16 field elements, 50 % over 24 field elements. rate = 1/2
 
@@ -35,7 +37,9 @@ target ≈ 128 bits of security, currently using conjecture: 4.12 of [WHIR](http
 
 ### Recursion
 
-`RUSTFLAGS='-C target-cpu=native' cargo test --release --package rec_aggregation --lib -- recursion::test_whir_recursion --nocapture`
+```console
+RUSTFLAGS='-C target-cpu=native' cargo test --release --package rec_aggregation --lib -- recursion::test_whir_recursion --nocapture
+```
 
 The full recursion program is not finished yet. Instead, we prove validity of a WHIR opening, with 25 variables, and rate = 1/4.
 
@@ -43,7 +47,9 @@ The full recursion program is not finished yet. Instead, we prove validity of a 
 
 ### XMSS aggregation
 
-`RUSTFLAGS='-C target-cpu=native' NUM_XMSS_AGGREGATED='500' cargo test --release --package rec_aggregation --lib -- xmss_aggregate::test_xmss_aggregate --nocapture`
+```console
+RUSTFLAGS='-C target-cpu=native' NUM_XMSS_AGGREGATED='500' cargo test --release --package rec_aggregation --lib -- xmss_aggregate::test_xmss_aggregate --nocapture
+```
 
 500 XMSS aggregated. "Trivial encoding" (for now).
 

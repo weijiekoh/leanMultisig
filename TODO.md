@@ -20,7 +20,6 @@
 - Lev's trick to skip some low-level modular reduction
 - Sumcheck, case z = 0, no need to fold, only keep first half of the values (done in PR 33 by Lambda) (and also in WHIR?)
 - Custom AVX2 / AVX512 / Neon implem in Plonky3 for all of the finite field operations (done for degree 4 extension, but not degree 5)
-- batch the logup* in basefield for memory. We should have only 2 logup* in memory (not 3): one normal and one vectorized (chunks of 8)
 - the 2 executions of the program, before generating the validity proof, can be merged, using some kind of placeholders
 - both WHIR verif + XMSS aggregation programs have 40% of unused memory!! -> TODO improve the compiler to reduce memory fragmentation
 

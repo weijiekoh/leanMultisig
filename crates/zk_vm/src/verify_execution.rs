@@ -440,16 +440,19 @@ pub fn verify_execution(
         value: grand_product_exec_sumcheck_inner_evals[COL_INDEX_FP],
     };
 
-    let [exec_evals_to_verify, dot_product_evals_to_verify] = verify_many_air_2(
+    let exec_evals_to_verify = exec_table.verify(
         &mut verifier_state,
-        &[&exec_table],
-        &[&dot_product_table],
         UNIVARIATE_SKIPS,
-        &[log_n_cycles, table_dot_products_log_n_rows],
-        &[exec_column_groups(), DOT_PRODUCT_AIR_COLUMN_GROUPS.to_vec()],
-    )?
-    .try_into()
-    .unwrap();
+        log_n_cycles,
+        &exec_column_groups(),
+    )?;
+
+    let dot_product_evals_to_verify = dot_product_table.verify(
+        &mut verifier_state,
+        1,
+        table_dot_products_log_n_rows,
+        &DOT_PRODUCT_AIR_COLUMN_GROUPS,
+    )?;
 
     let [p16_evals_to_verify, p24_evals_to_verify] = verify_many_air_2(
         &mut verifier_state,
