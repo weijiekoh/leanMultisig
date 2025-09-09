@@ -1,4 +1,7 @@
-use std::ops::Range;
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    ops::Range,
+};
 
 use p3_field::{BasedVectorSpace, ExtensionField, Field};
 use rayon::prelude::*;
@@ -101,4 +104,10 @@ macro_rules! assert_eq_many {
             )+
         }
     };
+}
+
+pub fn debug_hash<A: Hash>(a: &A) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    a.hash(&mut hasher);
+    hasher.finish()
 }

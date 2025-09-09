@@ -12,7 +12,7 @@ fn test_zk_vm() {
     fn main() {
         for i in 0..1000 unroll {  if 1 == 0 {  return; } } // increase bytecode size artificially
 
-        for i in 0..1000 {
+        for i in 0..500 {
             x = malloc_vec(6);
             poseidon16(i + 3, i, x);
             poseidon24(i + 3, i, x + 2);
@@ -44,6 +44,10 @@ fn test_zk_vm() {
 
         assert res3[0] == res2[0] + 2**7;
 
+        for i in 0..1000 {
+            assert i != 1000;
+        }
+
         return;
     }
    "#
@@ -67,7 +71,7 @@ fn test_zk_vm() {
         &public_input,
         &private_input,
         &batch_pcs,
-        false
+        false,
     );
     verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
 }

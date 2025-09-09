@@ -701,7 +701,7 @@ fn execute_bytecode_helper(
         }
         if dot_product_ext_ext_calls > 0 {
             println!(
-                "DotProductExtExt calls: {}",
+                "DotProduct calls: {}",
                 pretty_integer(dot_product_ext_ext_calls)
             );
         }

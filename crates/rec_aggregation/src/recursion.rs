@@ -222,7 +222,7 @@ pub fn test_whir_recursion() {
         &public_input,
         &[],
         &batch_pcs,
-        false
+        false,
     );
     println!("WHIR recursion, proving time: {:?}", time.elapsed());
     verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();

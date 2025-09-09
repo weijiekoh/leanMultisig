@@ -288,7 +288,7 @@ fn test_xmss_aggregate() {
             &public_input,
             &private_input,
             &batch_pcs,
-            false
+            false,
         );
         let proving_time = time.elapsed();
         verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();

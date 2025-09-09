@@ -141,10 +141,6 @@ pub fn prove_execution(
         }
     }
 
-    let exec_memory_addresses = padd_with_zero_to_next_power_of_two(
-        &full_trace[COL_INDEX_MEM_ADDRESS_A..=COL_INDEX_MEM_ADDRESS_C].concat(),
-    );
-
     assert!(private_memory.len() % public_memory.len() == 0);
     let n_private_memory_chunks = private_memory.len() / public_memory.len();
     let private_memory_commited_chunks = (0..n_private_memory_chunks)
@@ -261,7 +257,9 @@ pub fn prove_execution(
             vec![
                 full_trace[COL_INDEX_PC].as_slice(),
                 full_trace[COL_INDEX_FP].as_slice(),
-                exec_memory_addresses.as_slice(),
+                full_trace[COL_INDEX_MEM_ADDRESS_A].as_slice(),
+                full_trace[COL_INDEX_MEM_ADDRESS_B].as_slice(),
+                full_trace[COL_INDEX_MEM_ADDRESS_C].as_slice(),
                 p16_indexes.as_slice(),
                 p24_indexes.as_slice(),
                 p16_commited.as_slice(),
@@ -600,24 +598,6 @@ pub fn prove_execution(
         value: grand_product_exec_sumcheck_inner_evals[COL_INDEX_FP],
     };
 
-    let grand_product_mem_values_mixing_challenges = MultilinearPoint(prover_state.sample_vec(2));
-    let grand_product_mem_values_statement = Evaluation {
-        point: MultilinearPoint(
-            [
-                grand_product_mem_values_mixing_challenges.0.clone(),
-                grand_product_exec_sumcheck_point.0.clone(),
-            ]
-            .concat(),
-        ),
-        value: [
-            grand_product_exec_sumcheck_inner_evals[COL_INDEX_MEM_VALUE_A],
-            grand_product_exec_sumcheck_inner_evals[COL_INDEX_MEM_VALUE_B],
-            grand_product_exec_sumcheck_inner_evals[COL_INDEX_MEM_VALUE_C],
-            EF::ZERO,
-        ]
-        .evaluate(&grand_product_mem_values_mixing_challenges),
-    };
-
     let [exec_evals_to_prove, dot_product_evals_to_prove] =
         info_span!("Execution + DotProduct AIR proof")
             .in_scope(|| {
@@ -647,23 +627,7 @@ pub fn prove_execution(
         .try_into()
         .unwrap();
 
-    // Main memory lookup
-    let exec_memory_indexes = padd_with_zero_to_next_power_of_two(
-        &full_trace[COL_INDEX_MEM_ADDRESS_A..=COL_INDEX_MEM_ADDRESS_C].concat(),
-    );
-    let mut memory_poly_eq_point = eval_eq(&exec_evals_to_prove[11].point);
-    let memory_poly_eq_point_alpha = prover_state.sample();
-    compute_eval_eq::<PF<EF>, EF, true>(
-        &grand_product_mem_values_statement.point,
-        &mut memory_poly_eq_point,
-        memory_poly_eq_point_alpha,
-    );
     let padded_memory = padd_with_zero_to_next_power_of_two(&memory); // TODO avoid this padding
-    let exec_pushforward = compute_pushforward(
-        &exec_memory_indexes,
-        padded_memory.len(),
-        &memory_poly_eq_point,
-    );
 
     let max_n_poseidons = poseidons_16.len().max(poseidons_24.len());
     let min_n_poseidons = poseidons_16.len().min(poseidons_24.len());
@@ -810,7 +774,6 @@ pub fn prove_execution(
         .map(|col| col.evaluate(&bytecode_lookup_point_1))
         .collect::<Vec<_>>();
     prover_state.add_extension_scalars(&non_used_precompiles_evals);
-
     let bytecode_compression_challenges =
         MultilinearPoint(prover_state.sample_vec(log2_ceil_usize(N_INSTRUCTION_COLUMNS)));
 
@@ -894,32 +857,148 @@ pub fn prove_execution(
     let dot_product_values_batched_eval =
         padd_with_zero_to_next_power_of_two(&dot_product_evals_spread)
             .evaluate(&dot_product_values_batching_scalars);
-    // TODO remove
-    {
-        let concatenated_dot_product_values_spread =
-            padd_with_zero_to_next_power_of_two(&dot_product_values_spread.concat());
 
-        assert_eq!(
-            concatenated_dot_product_values_spread.evaluate(&dot_product_values_batched_point),
-            dot_product_values_batched_eval
-        );
-    }
+    let concatenated_dot_product_values_spread =
+        padd_with_zero_to_next_power_of_two(&dot_product_values_spread.concat());
+
+    // TODO remove
+    assert_eq!(
+        concatenated_dot_product_values_spread.evaluate(&dot_product_values_batched_point),
+        dot_product_values_batched_eval
+    );
 
     let padded_dot_product_indexes_spread =
         padd_with_zero_to_next_power_of_two(&dot_product_indexes_spread.concat());
-    let dot_product_poly_eq_point = eval_eq(&dot_product_values_batched_point);
-    let dot_product_pushforward = compute_pushforward(
-        &padded_dot_product_indexes_spread,
+
+    assert!(
+        padded_dot_product_indexes_spread.len() <= 1 << log_n_cycles,
+        "TODO a more general commitment structure"
+    );
+
+    let unused_1 = evaluate_as_larger_multilinear_pol(
+        &concatenated_dot_product_values_spread,
+        &grand_product_exec_sumcheck_point,
+    );
+    prover_state.add_extension_scalar(unused_1);
+
+    let grand_product_mem_values_mixing_challenges = MultilinearPoint(prover_state.sample_vec(2));
+    let base_memory_lookup_statement_1 = Evaluation {
+        point: MultilinearPoint(
+            [
+                grand_product_mem_values_mixing_challenges.0.clone(),
+                grand_product_exec_sumcheck_point.0.clone(),
+            ]
+            .concat(),
+        ),
+        value: [
+            grand_product_exec_sumcheck_inner_evals[COL_INDEX_MEM_VALUE_A],
+            grand_product_exec_sumcheck_inner_evals[COL_INDEX_MEM_VALUE_B],
+            grand_product_exec_sumcheck_inner_evals[COL_INDEX_MEM_VALUE_C],
+            unused_1,
+        ]
+        .evaluate(&grand_product_mem_values_mixing_challenges),
+    };
+
+    assert_eq_many!(
+        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()].point,
+        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_B.index_in_air()].point,
+        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_C.index_in_air()].point
+    );
+    let unused_2 = evaluate_as_larger_multilinear_pol(
+        &concatenated_dot_product_values_spread,
+        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()].point,
+    );
+    prover_state.add_extension_scalar(unused_2);
+    let exec_air_mem_values_mixing_challenges = MultilinearPoint(prover_state.sample_vec(2));
+    let base_memory_lookup_statement_2 = Evaluation {
+        point: MultilinearPoint(
+            [
+                exec_air_mem_values_mixing_challenges.0.clone(),
+                exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()]
+                    .point
+                    .0
+                    .clone(),
+            ]
+            .concat(),
+        ),
+        value: [
+            exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()].value,
+            exec_evals_to_prove[COL_INDEX_MEM_VALUE_B.index_in_air()].value,
+            exec_evals_to_prove[COL_INDEX_MEM_VALUE_C.index_in_air()].value,
+            unused_2,
+        ]
+        .evaluate(&exec_air_mem_values_mixing_challenges),
+    };
+
+    let unused_3a = evaluate_as_smaller_multilinear_pol(
+        &full_trace[COL_INDEX_MEM_VALUE_A],
+        &dot_product_values_batched_point,
+    );
+    let unused_3b = evaluate_as_smaller_multilinear_pol(
+        &full_trace[COL_INDEX_MEM_VALUE_B],
+        &dot_product_values_batched_point,
+    );
+    let unused_3c = evaluate_as_smaller_multilinear_pol(
+        &full_trace[COL_INDEX_MEM_VALUE_C],
+        &dot_product_values_batched_point,
+    );
+    prover_state.add_extension_scalars(&[unused_3a, unused_3b, unused_3c]);
+    let dot_product_air_mem_values_mixing_challenges = MultilinearPoint(prover_state.sample_vec(2));
+    let base_memory_lookup_statement_3 = Evaluation {
+        point: MultilinearPoint(
+            [
+                dot_product_air_mem_values_mixing_challenges.0.clone(),
+                EF::zero_vec(log_n_cycles - dot_product_values_batched_point.len()),
+                dot_product_values_batched_point.0.clone(),
+            ]
+            .concat(),
+        ),
+        value: [
+            unused_3a,
+            unused_3b,
+            unused_3c,
+            dot_product_values_batched_eval,
+        ]
+        .evaluate(&dot_product_air_mem_values_mixing_challenges),
+    };
+
+    // Main memory lookup
+    let base_memory_indexes = [
+        full_trace[COL_INDEX_MEM_ADDRESS_A].clone(),
+        full_trace[COL_INDEX_MEM_ADDRESS_B].clone(),
+        full_trace[COL_INDEX_MEM_ADDRESS_C].clone(),
+        [
+            padded_dot_product_indexes_spread.clone(),
+            F::zero_vec((1 << log_n_cycles) - padded_dot_product_indexes_spread.len()),
+        ]
+        .concat(),
+    ]
+    .concat();
+
+    let memory_poly_eq_point_alpha = prover_state.sample();
+
+    let mut base_memory_poly_eq_point = eval_eq(&base_memory_lookup_statement_1.point);
+    compute_eval_eq::<PF<EF>, EF, true>(
+        &base_memory_lookup_statement_2.point,
+        &mut base_memory_poly_eq_point,
+        memory_poly_eq_point_alpha,
+    );
+    compute_eval_eq::<PF<EF>, EF, true>(
+        &base_memory_lookup_statement_3.point,
+        &mut base_memory_poly_eq_point,
+        memory_poly_eq_point_alpha.square(),
+    );
+    let base_memory_pushforward = compute_pushforward(
+        &base_memory_indexes,
         padded_memory.len(),
-        &dot_product_poly_eq_point,
+        &base_memory_poly_eq_point,
     );
 
     // 2nd Commitment
     let commited_extension = [
-        exec_pushforward.as_slice(),
+        base_memory_pushforward.as_slice(),
         poseidon_pushforward.as_slice(),
         bytecode_pushforward.as_slice(),
-        dot_product_pushforward.as_slice(),
     ];
     let packed_pcs_witness_extension = packed_pcs_commit(
         &pcs.pcs_b(
@@ -931,14 +1010,15 @@ pub fn prove_execution(
         &mut prover_state,
     );
 
-    let exec_logup_star_statements = prove_logup_star(
+    let base_memory_logup_star_statements = prove_logup_star(
         &mut prover_state,
         &padded_memory,
-        &exec_memory_indexes,
-        exec_evals_to_prove[11].value
-            + memory_poly_eq_point_alpha * grand_product_mem_values_statement.value,
-        &memory_poly_eq_point,
-        &exec_pushforward,
+        &base_memory_indexes,
+        base_memory_lookup_statement_1.value
+            + memory_poly_eq_point_alpha * base_memory_lookup_statement_2.value
+            + memory_poly_eq_point_alpha.square() * base_memory_lookup_statement_3.value,
+        &base_memory_poly_eq_point,
+        &base_memory_pushforward,
     );
 
     let poseidon_logup_star_statements = prove_logup_star(
@@ -959,15 +1039,6 @@ pub fn prove_execution(
         &bytecode_pushforward,
     );
 
-    let dot_product_logup_star_statements = prove_logup_star(
-        &mut prover_state,
-        &padded_memory,
-        &padded_dot_product_indexes_spread,
-        dot_product_values_batched_eval,
-        &dot_product_poly_eq_point,
-        &dot_product_pushforward,
-    );
-
     let poseidon_lookup_memory_point = MultilinearPoint(
         [
             poseidon_logup_star_statements.on_table.point.0.clone(),
@@ -978,22 +1049,17 @@ pub fn prove_execution(
 
     // open memory
     let exec_lookup_chunk_point = MultilinearPoint(
-        exec_logup_star_statements.on_table.point[log_memory - log_public_memory..].to_vec(),
+        base_memory_logup_star_statements.on_table.point[log_memory - log_public_memory..].to_vec(),
     );
     let poseidon_lookup_chunk_point =
         MultilinearPoint(poseidon_lookup_memory_point[log_memory - log_public_memory..].to_vec());
-    let dot_product_lookup_chunk_point = MultilinearPoint(
-        dot_product_logup_star_statements.on_table.point[log_memory - log_public_memory..].to_vec(),
-    );
+
     for (i, private_memory_chunk) in private_memory_commited_chunks.iter().enumerate() {
         let chunk_eval_exec_lookup = private_memory_chunk.evaluate(&exec_lookup_chunk_point);
         let chunk_eval_poseidon_lookup =
             private_memory_chunk.evaluate(&poseidon_lookup_chunk_point);
-        let chunk_eval_dot_product_lookup =
-            private_memory_chunk.evaluate(&dot_product_lookup_chunk_point);
         prover_state.add_extension_scalar(chunk_eval_exec_lookup);
         prover_state.add_extension_scalar(chunk_eval_poseidon_lookup);
-        prover_state.add_extension_scalar(chunk_eval_dot_product_lookup);
         private_memory_statements[i].extend(vec![
             Evaluation {
                 point: exec_lookup_chunk_point.clone(),
@@ -1002,10 +1068,6 @@ pub fn prove_execution(
             Evaluation {
                 point: poseidon_lookup_chunk_point.clone(),
                 value: chunk_eval_poseidon_lookup,
-            },
-            Evaluation {
-                point: dot_product_lookup_chunk_point.clone(),
-                value: chunk_eval_dot_product_lookup,
             },
         ]);
     }
@@ -1049,38 +1111,87 @@ pub fn prove_execution(
         })
         .collect::<Vec<_>>();
 
-    let dot_product_logup_star_indexes_inner_point =
-        MultilinearPoint(dot_product_logup_star_statements.on_indexes.point[3..].to_vec());
-    let dot_product_logup_star_indexes_inner_value =
-        dot_product_indexes.evaluate(&dot_product_logup_star_indexes_inner_point);
-    prover_state.add_extension_scalar(dot_product_logup_star_indexes_inner_value);
-    let dot_product_logup_star_indexes_inner_eval = Evaluation {
-        point: dot_product_logup_star_indexes_inner_point,
-        value: dot_product_logup_star_indexes_inner_value,
-    };
-    // TODO remove
-    {
-        assert_eq!(
-            padded_dot_product_indexes_spread
-                .evaluate(&dot_product_logup_star_statements.on_indexes.point),
-            dot_product_logup_star_statements.on_indexes.value
-        );
+    let mem_lookup_eval_indexes_partial_point =
+        MultilinearPoint(base_memory_logup_star_statements.on_indexes.point[2..].to_vec());
+    let mem_lookup_eval_indexes_a =
+        full_trace[COL_INDEX_MEM_ADDRESS_A].evaluate(&mem_lookup_eval_indexes_partial_point); // validity is proven via PCS
+    let mem_lookup_eval_indexes_b =
+        full_trace[COL_INDEX_MEM_ADDRESS_B].evaluate(&mem_lookup_eval_indexes_partial_point); // validity is proven via PCS
+    let mem_lookup_eval_indexes_c =
+        full_trace[COL_INDEX_MEM_ADDRESS_C].evaluate(&mem_lookup_eval_indexes_partial_point); // validity is proven via PCS
+    assert_eq!(mem_lookup_eval_indexes_partial_point.len(), log_n_cycles);
+    assert_eq!(
+        log2_strict_usize(padded_dot_product_indexes_spread.len()),
+        log_n_rows_dot_product_table + 5
+    );
+    let index_diff = log_n_cycles - log2_strict_usize(padded_dot_product_indexes_spread.len());
+    let mem_lookup_eval_spread_indexes_dot_product = padded_dot_product_indexes_spread.evaluate(
+        &MultilinearPoint(mem_lookup_eval_indexes_partial_point[index_diff..].to_vec()),
+    );
 
-        let mut dot_product_indexes_inner_evals_incr = vec![EF::ZERO; 8];
-        for i in 0..DIMENSION {
-            dot_product_indexes_inner_evals_incr[i] = dot_product_logup_star_indexes_inner_value
-                + EF::from_usize(i)
-                    * [F::ONE, F::ONE, F::ONE, F::ZERO].evaluate(&MultilinearPoint(
-                        dot_product_logup_star_statements.on_indexes.point[3..5].to_vec(),
-                    ));
+    prover_state.add_extension_scalars(&[
+        mem_lookup_eval_indexes_a,
+        mem_lookup_eval_indexes_b,
+        mem_lookup_eval_indexes_c,
+        mem_lookup_eval_spread_indexes_dot_product,
+    ]);
+
+    assert_eq!(
+        [
+            mem_lookup_eval_indexes_a,
+            mem_lookup_eval_indexes_b,
+            mem_lookup_eval_indexes_c,
+            mem_lookup_eval_spread_indexes_dot_product
+                * mem_lookup_eval_indexes_partial_point[..index_diff]
+                    .iter()
+                    .map(|x| EF::ONE - *x)
+                    .product::<EF>(),
+        ]
+        .evaluate(&MultilinearPoint(
+            base_memory_logup_star_statements.on_indexes.point[..2].to_vec(),
+        )),
+        base_memory_logup_star_statements.on_indexes.value
+    );
+
+    // proving validity of mem_lookup_eval_spread_indexes_dot_product
+    let dot_product_logup_star_indexes_inner_eval = {
+        let dot_product_logup_star_indexes_inner_point =
+            MultilinearPoint(mem_lookup_eval_indexes_partial_point.0[3 + index_diff..].to_vec());
+        let dot_product_logup_star_indexes_inner_value =
+            dot_product_indexes.evaluate(&dot_product_logup_star_indexes_inner_point);
+        prover_state.add_extension_scalar(dot_product_logup_star_indexes_inner_value);
+        let dot_product_logup_star_indexes_inner_eval = Evaluation {
+            point: dot_product_logup_star_indexes_inner_point,
+            value: dot_product_logup_star_indexes_inner_value,
+        };
+
+        // TODO remove
+        {
+            assert_eq!(
+                padded_dot_product_indexes_spread.evaluate(&MultilinearPoint(
+                    mem_lookup_eval_indexes_partial_point.0[index_diff..].to_vec()
+                )),
+                mem_lookup_eval_spread_indexes_dot_product
+            );
+
+            let mut dot_product_indexes_inner_evals_incr = vec![EF::ZERO; 8];
+            for i in 0..DIMENSION {
+                dot_product_indexes_inner_evals_incr[i] = dot_product_logup_star_indexes_inner_value
+                    + EF::from_usize(i)
+                        * [F::ONE, F::ONE, F::ONE, F::ZERO].evaluate(&MultilinearPoint(
+                            mem_lookup_eval_indexes_partial_point.0[3 + index_diff..5 + index_diff]
+                                .to_vec(),
+                        ));
+            }
+            assert_eq!(
+                dot_product_indexes_inner_evals_incr.evaluate(&MultilinearPoint(
+                    mem_lookup_eval_indexes_partial_point.0[index_diff..3 + index_diff].to_vec(),
+                )),
+                mem_lookup_eval_spread_indexes_dot_product
+            );
         }
-        assert_eq!(
-            dot_product_indexes_inner_evals_incr.evaluate(&MultilinearPoint(
-                dot_product_logup_star_statements.on_indexes.point[..3].to_vec(),
-            )),
-            dot_product_logup_star_statements.on_indexes.value
-        );
-    }
+        dot_product_logup_star_indexes_inner_eval
+    };
 
     // First Opening
     let global_statements_base = packed_pcs_global_statements(
@@ -1088,16 +1199,36 @@ pub fn prove_execution(
         &[
             vec![
                 vec![
-                    exec_evals_to_prove[12].clone(),
+                    exec_evals_to_prove[COL_INDEX_PC.index_in_air()].clone(),
                     bytecode_logup_star_statements.on_indexes.clone(),
                     initial_pc_statement,
                     final_pc_statement,
                 ], // pc
-                vec![exec_evals_to_prove[13].clone(), grand_product_fp_statement], // fp
                 vec![
-                    exec_evals_to_prove[14].clone(),
-                    exec_logup_star_statements.on_indexes,
-                ], // memory addresses
+                    exec_evals_to_prove[COL_INDEX_FP.index_in_air()].clone(),
+                    grand_product_fp_statement,
+                ], // fp
+                vec![
+                    exec_evals_to_prove[COL_INDEX_MEM_ADDRESS_A.index_in_air()].clone(),
+                    Evaluation {
+                        point: mem_lookup_eval_indexes_partial_point.clone(),
+                        value: mem_lookup_eval_indexes_a,
+                    },
+                ], // exec memory address A
+                vec![
+                    exec_evals_to_prove[COL_INDEX_MEM_ADDRESS_B.index_in_air()].clone(),
+                    Evaluation {
+                        point: mem_lookup_eval_indexes_partial_point.clone(),
+                        value: mem_lookup_eval_indexes_b,
+                    },
+                ], // exec memory address B
+                vec![
+                    exec_evals_to_prove[COL_INDEX_MEM_ADDRESS_C.index_in_air()].clone(),
+                    Evaluation {
+                        point: mem_lookup_eval_indexes_partial_point.clone(),
+                        value: mem_lookup_eval_indexes_c,
+                    },
+                ], // exec memory address C
                 p16_indexes_statements,
                 p24_indexes_statements,
                 vec![p16_evals_to_prove[2].clone()],
@@ -1126,10 +1257,9 @@ pub fn prove_execution(
     let global_statements_extension = packed_pcs_global_statements(
         &packed_pcs_witness_extension.tree,
         &vec![
-            exec_logup_star_statements.on_pushforward,
+            base_memory_logup_star_statements.on_pushforward,
             poseidon_logup_star_statements.on_pushforward,
             bytecode_logup_star_statements.on_pushforward,
-            dot_product_logup_star_statements.on_pushforward,
         ],
     );
 

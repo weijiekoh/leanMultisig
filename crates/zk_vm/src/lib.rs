@@ -18,29 +18,11 @@ pub mod verify_execution;
 const UNIVARIATE_SKIPS: usize = 3;
 
 fn exec_column_groups() -> Vec<Range<usize>> {
-    [
-        (0..N_INSTRUCTION_COLUMNS_IN_AIR)
-            .map(|i| i..i + 1)
-            .collect::<Vec<_>>(),
-        vec![
-            N_INSTRUCTION_COLUMNS_IN_AIR..N_INSTRUCTION_COLUMNS_IN_AIR + N_MEMORY_VALUE_COLUMNS,
-            N_INSTRUCTION_COLUMNS_IN_AIR + N_MEMORY_VALUE_COLUMNS
-                ..N_INSTRUCTION_COLUMNS_IN_AIR + N_MEMORY_VALUE_COLUMNS + 1, // pc
-            N_INSTRUCTION_COLUMNS_IN_AIR + N_MEMORY_VALUE_COLUMNS + 1
-                ..N_INSTRUCTION_COLUMNS_IN_AIR + N_MEMORY_VALUE_COLUMNS + 2, // fp
-            N_INSTRUCTION_COLUMNS_IN_AIR + N_MEMORY_VALUE_COLUMNS + 2
-                ..N_INSTRUCTION_COLUMNS_IN_AIR + N_MEMORY_VALUE_COLUMNS + N_COMMITTED_EXEC_COLUMNS,
-        ],
-    ]
+    [(0..N_EXEC_AIR_COLUMNS)
+        .map(|i| i..i + 1)
+        .collect::<Vec<_>>()]
     .concat()
 }
-// fn exec_column_groups() -> Vec<Range<usize>> {
-//     [(0..N_EXEC_AIR_COLUMNS)
-//         .map(|i| i..i + 1)
-//         .collect::<Vec<_>>()]
-//     .concat()
-// }
-
 
 pub fn build_batch_pcs() -> WhirBatchPcs<F, EF, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>
 {

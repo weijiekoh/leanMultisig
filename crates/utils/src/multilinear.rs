@@ -1,9 +1,12 @@
 use std::borrow::Borrow;
 
+use crate::from_end;
 use p3_field::{BasedVectorSpace, PackedValue};
 use p3_field::{ExtensionField, Field, dot_product};
+use p3_util::log2_strict_usize;
 use rayon::prelude::*;
 use whir_p3::poly::evals::EvaluationsList;
+use whir_p3::poly::multilinear::MultilinearPoint;
 
 use crate::{EFPacking, PF};
 
@@ -199,4 +202,58 @@ pub fn padd_with_zero_to_next_multiple_of<F: Field>(pol: &[F], multiple: usize) 
     let mut padded = pol.to_vec();
     padded.resize(next_multiple, F::ZERO);
     padded
+}
+
+pub fn evaluate_as_larger_multilinear_pol<F: Field, EF: ExtensionField<F>>(
+    pol: &[F],
+    point: &[EF],
+) -> EF {
+    // [[-pol-] 0 0 0 0 ... 0 0 0 0 0] evaluated at point
+    let pol_n_vars = log2_strict_usize(pol.len());
+    assert!(point.len() >= pol_n_vars);
+    point
+        .iter()
+        .take(point.len() - pol_n_vars)
+        .map(|x| EF::ONE - *x)
+        .product::<EF>()
+        * pol.evaluate(&MultilinearPoint(from_end(&point, pol_n_vars).to_vec()))
+}
+
+pub fn evaluate_as_smaller_multilinear_pol<F: Field, EF: ExtensionField<F>>(
+    pol: &[F],
+    point: &[EF],
+) -> EF {
+    let pol_n_vars = log2_strict_usize(pol.len());
+    assert!(point.len() <= pol_n_vars);
+    (&pol[..1 << point.len()]).evaluate(&MultilinearPoint(point.to_vec()))
+}
+
+#[cfg(test)]
+mod tests {
+    use p3_field::PrimeCharacteristicRing;
+    use p3_field::extension::QuinticExtensionField;
+    use p3_koala_bear::KoalaBear;
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
+
+    use super::*;
+
+    type F = KoalaBear;
+    type EF = QuinticExtensionField<F>;
+
+    #[test]
+    fn test_evaluate_as_larger_multilinear_pol() {
+        let n_vars = 5;
+        let n_point_vars = 7;
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut pol = F::zero_vec(1 << n_point_vars);
+        for i in 0..(1 << n_vars) {
+            pol[i] = rng.random();
+        }
+        let point = (0..n_point_vars).map(|_| rng.random()).collect::<Vec<EF>>();
+        assert_eq!(
+            evaluate_as_larger_multilinear_pol(&pol[..1 << n_vars], &point),
+            pol.evaluate(&MultilinearPoint(point))
+        );
+    }
 }

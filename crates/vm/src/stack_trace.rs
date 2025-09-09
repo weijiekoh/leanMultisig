@@ -17,9 +17,13 @@ pub(crate) fn pretty_stack_trace(
     let mut prev_function_line = usize::MAX;
     let mut skipped_lines: usize = 0; // Track skipped lines for current function
 
-    result.push_str("╔═════════════════════════════════════════════════════════════════════════╗\n");
-    result.push_str("║                               STACK TRACE                               ║\n");
-    result.push_str("╚═════════════════════════════════════════════════════════════════════════╝\n\n");
+    result
+        .push_str("╔═════════════════════════════════════════════════════════════════════════╗\n");
+    result
+        .push_str("║                               STACK TRACE                               ║\n");
+    result.push_str(
+        "╚═════════════════════════════════════════════════════════════════════════╝\n\n",
+    );
 
     for (idx, &line_num) in instructions.iter().enumerate() {
         let (current_function_line, current_function_name) =
