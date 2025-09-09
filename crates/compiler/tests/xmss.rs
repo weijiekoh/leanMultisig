@@ -274,9 +274,6 @@ fn test_verify_wots_signature() {
             assert powers_scaled_sum_w[10] + powers_scaled_sum_2[5] == compressed_ptr[i];
         }
 
-        // FANCY OPTIMIZATION IDEA:
-        // We know for sure that each number n of the encoding is < W. We can use a JUMP to a + n * b (a, b two constants).
-
         public_key = malloc_vec(V * 2);
         for i in 0..V / 2 unroll {
             if encoding[2 * i] == 2 {
@@ -460,9 +457,6 @@ fn test_verify_xmss_signature() {
 
             assert powers_scaled_sum_w[10] + powers_scaled_sum_2[5] == compressed_ptr[i];
         }
-
-        // FANCY OPTIMIZATION IDEA:
-        // We know for sure that each number n of the encoding is < W. We can use a JUMP to a + n * b (a, b two constants).
 
         public_key = malloc_vec(V * 2);
         for i in 0..V / 2 unroll {

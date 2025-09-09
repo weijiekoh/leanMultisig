@@ -47,7 +47,7 @@ fn test_xmss_aggregate() {
     fn xmss_recover_pub_key(message_hash, signature) -> 1 {
         // message_hash: vectorized pointers (of length 1)
         // signature: vectorized pointer = randomness | chain_tips | merkle_neighbours | merkle_are_left
-        // return a vectorized pointer (of length 1), the hashed public key
+        // return a vectorized pointer (of length 1), the hashed xmss public key
         randomness = signature; // vectorized
         chain_tips = signature + 1; // vectorized
         merkle_neighbours = chain_tips + V; // vectorized
@@ -99,9 +99,6 @@ fn test_xmss_aggregate() {
 
             assert powers_scaled_sum_w[10] + powers_scaled_sum_2[5] == compressed_ptr[i];
         }
-
-        // FANCY OPTIMIZATION IDEA:
-        // We know for sure that each number n of the encoding is < W. We can use a JUMP to a + n * b (a, b two constants).
 
         public_key = malloc_vec(V * 2);
 
