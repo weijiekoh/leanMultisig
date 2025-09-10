@@ -1,3 +1,4 @@
+use p3_air::BaseAir;
 use p3_field::{ExtensionField, Field, cyclic_subgroup_known_order, dot_product};
 use p3_util::log2_ceil_usize;
 use sumcheck::{MleGroup, MleGroupOwned, MleGroupRef, ProductComputation};
@@ -8,8 +9,8 @@ use whir_p3::fiat_shamir::FSChallenger;
 use whir_p3::poly::evals::{eval_eq, fold_multilinear, scale_poly};
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 
-use crate::MyAir;
 use crate::witness::AirWitness;
+use crate::{NormalAir, PackedAir};
 use crate::{
     uni_skip_utils::{matrix_down_folded, matrix_up_folded},
     utils::{column_down, column_up, columns_up_and_down},
@@ -24,15 +25,22 @@ cf https://eprint.iacr.org/2023/552.pdf and https://solvable.group/posts/super-a
 */
 
 #[instrument(name = "air: prove many", skip_all)]
-pub fn prove_many_air_2<'a, EF: ExtensionField<PF<EF>>, A1: MyAir<EF>, A2: MyAir<EF>>(
+pub fn prove_many_air_2<
+    'a,
+    EF: ExtensionField<PF<EF>>,
+    A1: NormalAir<EF>,
+    AP1: PackedAir<EF>,
+    A2: NormalAir<EF>,
+    AP2: PackedAir<EF>,
+>(
     prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
     univariate_skips: usize,
-    tables_1: &[&AirTable<EF, A1>],
-    tables_2: &[&AirTable<EF, A2>],
+    tables_1: &[&AirTable<EF, A1, AP1>],
+    tables_2: &[&AirTable<EF, A2, AP2>],
     witnesses_1: &[AirWitness<'a, PF<EF>>],
     witnesses_2: &[AirWitness<'a, PF<EF>>],
 ) -> Vec<Vec<Evaluation<EF>>> {
-    prove_many_air_3::<_, _, _, A2>(
+    prove_many_air_3::<_, _, _, _, _, A2, AP2>(
         prover_state,
         univariate_skips,
         tables_1,
@@ -48,15 +56,18 @@ pub fn prove_many_air_2<'a, EF: ExtensionField<PF<EF>>, A1: MyAir<EF>, A2: MyAir
 pub fn prove_many_air_3<
     'a,
     EF: ExtensionField<PF<EF>>,
-    A1: MyAir<EF>,
-    A2: MyAir<EF>,
-    A3: MyAir<EF>,
+    A1: NormalAir<EF>,
+    AP1: PackedAir<EF>,
+    A2: NormalAir<EF>,
+    AP2: PackedAir<EF>,
+    A3: NormalAir<EF>,
+    AP3: PackedAir<EF>,
 >(
     prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
     univariate_skips: usize,
-    tables_1: &[&AirTable<EF, A1>],
-    tables_2: &[&AirTable<EF, A2>],
-    tables_3: &[&AirTable<EF, A3>],
+    tables_1: &[&AirTable<EF, A1, AP1>],
+    tables_2: &[&AirTable<EF, A2, AP2>],
+    tables_3: &[&AirTable<EF, A3, AP3>],
     witnesses_1: &[AirWitness<'a, PF<EF>>],
     witnesses_2: &[AirWitness<'a, PF<EF>>],
     witnesses_3: &[AirWitness<'a, EF>],
@@ -85,26 +96,26 @@ pub fn prove_many_air_3<
         );
     }
     let structured_air = if tables_1.len() > 0 {
-        tables_1[0].air.structured()
+        <A1 as BaseAir<PF<EF>>>::structured(&tables_1[0].air)
     } else if tables_2.len() > 0 {
-        tables_2[0].air.structured()
+        <A2 as BaseAir<PF<EF>>>::structured(&tables_2[0].air)
     } else {
-        tables_3[0].air.structured()
+        <A3 as BaseAir<PF<EF>>>::structured(&tables_3[0].air)
     };
     assert!(
         tables_1
             .iter()
-            .all(|t| t.air.structured() == structured_air)
+            .all(|t| <A1 as BaseAir<PF<EF>>>::structured(&t.air) == structured_air)
     );
     assert!(
         tables_2
             .iter()
-            .all(|t| t.air.structured() == structured_air)
+            .all(|t| <A2 as BaseAir<PF<EF>>>::structured(&t.air) == structured_air)
     );
     assert!(
         tables_3
             .iter()
-            .all(|t| t.air.structured() == structured_air)
+            .all(|t| <A3 as BaseAir<PF<EF>>>::structured(&t.air) == structured_air)
     );
 
     let log_lengths_1 = witnesses_1
@@ -179,12 +190,15 @@ pub fn prove_many_air_3<
         })
         .collect::<Vec<_>>();
     let (outer_sumcheck_challenge, all_inner_sums, _) = info_span!("zerocheck").in_scope(|| {
-        sumcheck::prove_in_parallel_3::<EF, _, _, _, _>(
+        sumcheck::prove_in_parallel_3::<EF, _, _, _, _, _, _, _>(
             vec![univariate_skips; n_tables],
             columns_for_zero_check_packed,
             tables_1.iter().map(|t| &t.air).collect::<Vec<_>>(),
             tables_2.iter().map(|t| &t.air).collect::<Vec<_>>(),
             tables_3.iter().map(|t| &t.air).collect::<Vec<_>>(),
+            tables_1.iter().map(|t| &t.air_packed).collect::<Vec<_>>(),
+            tables_2.iter().map(|t| &t.air_packed).collect::<Vec<_>>(),
+            tables_3.iter().map(|t| &t.air_packed).collect::<Vec<_>>(),
             vec![&constraints_batching_scalars; n_tables],
             all_zerocheck_challenges,
             vec![true; n_tables],
@@ -230,7 +244,7 @@ pub fn prove_many_air_3<
     }
 }
 
-impl<EF: ExtensionField<PF<EF>>, A: MyAir<EF>> AirTable<EF, A> {
+impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<EF, A, AP> {
     #[instrument(name = "air: prove in base", skip_all)]
     pub fn prove_base<'a>(
         &self,
@@ -238,7 +252,7 @@ impl<EF: ExtensionField<PF<EF>>, A: MyAir<EF>> AirTable<EF, A> {
         univariate_skips: usize,
         witness: AirWitness<'a, PF<EF>>,
     ) -> Vec<Evaluation<EF>> {
-        let mut res = prove_many_air_3::<EF, A, A, A>(
+        let mut res = prove_many_air_3::<EF, A, AP, A, AP, A, AP>(
             prover_state,
             univariate_skips,
             &[self],
@@ -259,7 +273,7 @@ impl<EF: ExtensionField<PF<EF>>, A: MyAir<EF>> AirTable<EF, A> {
         univariate_skips: usize,
         witness: AirWitness<'a, EF>,
     ) -> Vec<Evaluation<EF>> {
-        let mut res = prove_many_air_3::<EF, A, A, A>(
+        let mut res = prove_many_air_3::<EF, A, AP, A, AP, A, AP>(
             prover_state,
             univariate_skips,
             &[],
@@ -437,9 +451,10 @@ fn open_structured_columns<'a, EF: ExtensionField<PF<EF>> + ExtensionField<IF>, 
     ]);
 
     let n_groups = witness.column_groups.len();
-    let (inner_challenges, inner_evals, _) = sumcheck::prove::<EF, _>(
+    let (inner_challenges, inner_evals, _) = sumcheck::prove::<EF, _, _>(
         1,
         inner_mle,
+        &ProductComputation,
         &ProductComputation,
         &[],
         None,

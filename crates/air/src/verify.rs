@@ -1,3 +1,4 @@
+use p3_air::BaseAir;
 use p3_field::{ExtensionField, cyclic_subgroup_known_order, dot_product};
 use p3_util::log2_ceil_usize;
 use std::ops::Range;
@@ -12,20 +13,27 @@ use whir_p3::{
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
 };
 
-use crate::MyAir;
 use crate::utils::{matrix_down_lde, matrix_up_lde};
+use crate::{NormalAir, PackedAir};
 
 use super::table::AirTable;
 
-pub fn verify_many_air_2<'a, EF: ExtensionField<PF<EF>>, A1: MyAir<EF>, A2: MyAir<EF>>(
+pub fn verify_many_air_2<
+    'a,
+    EF: ExtensionField<PF<EF>>,
+    A1: NormalAir<EF>,
+    AP1: PackedAir<EF>,
+    A2: NormalAir<EF>,
+    AP2: PackedAir<EF>,
+>(
     verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
-    tables_1: &[&AirTable<EF, A1>],
-    tables_2: &[&AirTable<EF, A2>],
+    tables_1: &[&AirTable<EF, A1, AP1>],
+    tables_2: &[&AirTable<EF, A2, AP2>],
     univariate_skips: usize,
     log_lengths: &[usize],
     column_groups: &[Vec<Range<usize>>],
 ) -> Result<Vec<Vec<Evaluation<EF>>>, ProofError> {
-    verify_many_air_3::<EF, A1, A2, A2>(
+    verify_many_air_3::<EF, A1, AP1, A2, AP2, A2, AP2>(
         verifier_state,
         tables_1,
         tables_2,
@@ -39,14 +47,17 @@ pub fn verify_many_air_2<'a, EF: ExtensionField<PF<EF>>, A1: MyAir<EF>, A2: MyAi
 pub fn verify_many_air_3<
     'a,
     EF: ExtensionField<PF<EF>>,
-    A1: MyAir<EF>,
-    A2: MyAir<EF>,
-    A3: MyAir<EF>,
+    A1: NormalAir<EF>,
+    AP1: PackedAir<EF>,
+    A2: NormalAir<EF>,
+    AP2: PackedAir<EF>,
+    A3: NormalAir<EF>,
+    AP3: PackedAir<EF>,
 >(
     verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
-    tables_1: &[&AirTable<EF, A1>],
-    tables_2: &[&AirTable<EF, A2>],
-    tables_3: &[&AirTable<EF, A3>],
+    tables_1: &[&AirTable<EF, A1, AP1>],
+    tables_2: &[&AirTable<EF, A2, AP2>],
+    tables_3: &[&AirTable<EF, A3, AP3>],
     univariate_skips: usize,
     log_lengths: &[usize],
     column_groups: &[Vec<Range<usize>>],
@@ -66,9 +77,17 @@ pub fn verify_many_air_3<
             &log_lengths,
             &tables_1
                 .iter()
-                .map(|t| t.air.degree() + 1)
-                .chain(tables_2.iter().map(|t| t.air.degree() + 1))
-                .chain(tables_3.iter().map(|t| t.air.degree() + 1))
+                .map(|t| <A1 as BaseAir<PF<EF>>>::degree(&t.air) + 1)
+                .chain(
+                    tables_2
+                        .iter()
+                        .map(|t| <A2 as BaseAir<PF<EF>>>::degree(&t.air) + 1),
+                )
+                .chain(
+                    tables_3
+                        .iter()
+                        .map(|t| <A3 as BaseAir<PF<EF>>>::degree(&t.air) + 1),
+                )
                 .collect::<Vec<_>>(),
             true,
         )?;
@@ -83,27 +102,33 @@ pub fn verify_many_air_3<
 
     let mut all_inner_sums = vec![];
     for table in tables_1 {
-        let inner_sums = verifier_state.next_extension_scalars_vec(if table.air.structured() {
-            2 * table.n_columns()
-        } else {
-            table.n_columns()
-        })?;
+        let inner_sums = verifier_state.next_extension_scalars_vec(
+            if <A1 as BaseAir<PF<EF>>>::structured(&table.air) {
+                2 * table.n_columns()
+            } else {
+                table.n_columns()
+            },
+        )?;
         all_inner_sums.push(inner_sums);
     }
     for table in tables_2 {
-        let inner_sums = verifier_state.next_extension_scalars_vec(if table.air.structured() {
-            2 * table.n_columns()
-        } else {
-            table.n_columns()
-        })?;
+        let inner_sums = verifier_state.next_extension_scalars_vec(
+            if <A2 as BaseAir<PF<EF>>>::structured(&table.air) {
+                2 * table.n_columns()
+            } else {
+                table.n_columns()
+            },
+        )?;
         all_inner_sums.push(inner_sums);
     }
     for table in tables_3 {
-        let inner_sums = verifier_state.next_extension_scalars_vec(if table.air.structured() {
-            2 * table.n_columns()
-        } else {
-            table.n_columns()
-        })?;
+        let inner_sums = verifier_state.next_extension_scalars_vec(
+            if <A3 as BaseAir<PF<EF>>>::structured(&table.air) {
+                2 * table.n_columns()
+            } else {
+                table.n_columns()
+            },
+        )?;
         all_inner_sums.push(inner_sums);
     }
 
@@ -160,21 +185,21 @@ pub fn verify_many_air_3<
         }
     }
 
-    let structured_air = tables_1[0].air.structured();
+    let structured_air = <A1 as BaseAir<PF<EF>>>::structured(&tables_1[0].air);
     assert!(
         tables_1
             .iter()
-            .all(|t| t.air.structured() == structured_air)
+            .all(|t| <A1 as BaseAir<PF<EF>>>::structured(&t.air) == structured_air)
     );
     assert!(
         tables_2
             .iter()
-            .all(|t| t.air.structured() == structured_air)
+            .all(|t| <A2 as BaseAir<PF<EF>>>::structured(&t.air) == structured_air)
     );
     assert!(
         tables_3
             .iter()
-            .all(|t| t.air.structured() == structured_air)
+            .all(|t| <A3 as BaseAir<PF<EF>>>::structured(&t.air) == structured_air)
     );
 
     if structured_air {
@@ -217,7 +242,7 @@ pub fn verify_many_air_3<
     }
 }
 
-impl<EF: ExtensionField<PF<EF>>, A: MyAir<EF>> AirTable<EF, A> {
+impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<EF, A, AP> {
     pub fn verify(
         &self,
         verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
@@ -225,7 +250,7 @@ impl<EF: ExtensionField<PF<EF>>, A: MyAir<EF>> AirTable<EF, A> {
         log_n_rows: usize,
         column_groups: &[Range<usize>],
     ) -> Result<Vec<Evaluation<EF>>, ProofError> {
-        Ok(verify_many_air_3::<EF, A, A, A>(
+        Ok(verify_many_air_3::<EF, A, AP, A, AP, A, AP>(
             verifier_state,
             &[self],
             &[],
@@ -320,7 +345,7 @@ fn verify_structured_columns<EF: ExtensionField<PF<EF>>>(
     log_n_rows: usize,
 ) -> Result<Vec<Evaluation<EF>>, ProofError> {
     let log_n_groups = log2_ceil_usize(column_groups.len());
-    let max_columns_per_group = column_groups.iter().map(|g| g.len()).max().unwrap();
+    let max_columns_per_group = Iterator::max(column_groups.iter().map(|g| g.len())).unwrap();
     let log_max_columns_per_group = log2_ceil_usize(max_columns_per_group);
     let batching_scalars = verifier_state.sample_vec(log_n_groups + log_max_columns_per_group);
     let alpha = verifier_state.sample();

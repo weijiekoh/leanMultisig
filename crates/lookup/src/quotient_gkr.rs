@@ -173,9 +173,10 @@ where
             vec![u0_folded[0], u1_folded[0], u2_folded[0], u3_folded[0]],
         )
     } else {
-        let (mut sc_point, inner_evals, _) = sumcheck::prove::<EF, _>(
+        let (mut sc_point, inner_evals, _) = sumcheck::prove::<EF, _, _>(
             1,
             MleGroupRef::Extension(vec![u0_folded, u1_folded, u2_folded, u3_folded]),
+            &GKRQuotientComputation { u4_const, u5_const },
             &GKRQuotientComputation { u4_const, u5_const },
             &[EF::ONE],
             Some((claim.point.0[1..].to_vec(), None)),
@@ -296,7 +297,7 @@ where
 
     eq_poly_packed.resize(eq_poly_packed.len() / 2, Default::default());
 
-    let (mut sc_point, quarter_evals, _) = sumcheck::prove::<EF, _>(
+    let (mut sc_point, quarter_evals, _) = sumcheck::prove::<EF, _, _>(
         1,
         MleGroupRef::ExtensionPacked(vec![
             u0_folded_packed,
@@ -304,6 +305,7 @@ where
             u2_folded_packed,
             u3_folded_packed,
         ]),
+        &GKRQuotientComputation { u4_const, u5_const },
         &GKRQuotientComputation { u4_const, u5_const },
         &[],
         Some((
@@ -461,15 +463,13 @@ fn sum_quotients_2_by_2<EF: PrimeCharacteristicRing + Sync + Send + Copy>(layer:
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-
     use super::*;
-    use p3_field::extension::QuinticExtensionField;
-    use p3_koala_bear::KoalaBear;
+    use p3_koala_bear::QuinticExtensionFieldKB;
     use rand::{Rng, SeedableRng, rngs::StdRng};
+    use std::time::Instant;
     use utils::{build_prover_state, build_verifier_state};
 
-    type EF = QuinticExtensionField<KoalaBear>;
+    type EF = QuinticExtensionFieldKB;
 
     fn sum_all_quotients(layer: &[EF]) -> EF {
         (0..layer.num_evals() / 2)

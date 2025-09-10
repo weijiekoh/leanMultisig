@@ -11,6 +11,8 @@ use p3_poseidon2_air::generate_trace_rows;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
+use crate::PFPacking;
+
 pub type Poseidon16 = Poseidon2KoalaBear<16>;
 pub type Poseidon24 = Poseidon2KoalaBear<24>;
 
@@ -25,8 +27,8 @@ pub const SBOX_REGISTERS: usize = 0;
 
 pub type MyLinearLayers = GenericPoseidon2LinearLayersKoalaBear;
 
-pub type Poseidon16Air = Poseidon2Air<
-    KoalaBear,
+pub type Poseidon16Air<F> = Poseidon2Air<
+    F,
     MyLinearLayers,
     16,
     SBOX_DEGREE,
@@ -35,8 +37,8 @@ pub type Poseidon16Air = Poseidon2Air<
     PARTIAL_ROUNDS_16,
 >;
 
-pub type Poseidon24Air = Poseidon2Air<
-    KoalaBear,
+pub type Poseidon24Air<F> = Poseidon2Air<
+    F,
     MyLinearLayers,
     24,
     SBOX_DEGREE,
@@ -77,26 +79,58 @@ pub fn get_poseidon24() -> &'static Poseidon24 {
     })
 }
 
-pub fn build_poseidon_16_air() -> Poseidon16Air {
+pub fn build_poseidon_16_air() -> Poseidon16Air<KoalaBear> {
     Poseidon16Air::new(build_poseidon16_constants())
 }
 
-pub fn build_poseidon_24_air() -> Poseidon24Air {
+pub fn build_poseidon_24_air() -> Poseidon24Air<KoalaBear> {
     Poseidon24Air::new(build_poseidon24_constants())
+}
+
+pub fn build_poseidon_16_air_packed() -> Poseidon16Air<PFPacking<KoalaBear>> {
+    Poseidon16Air::new(build_poseidon16_constants_packed())
+}
+
+pub fn build_poseidon_24_air_packed() -> Poseidon24Air<PFPacking<KoalaBear>> {
+    Poseidon24Air::new(build_poseidon24_constants_packed())
 }
 
 fn build_poseidon16_constants()
 -> RoundConstants<KoalaBear, 16, HALF_FULL_ROUNDS_16, PARTIAL_ROUNDS_16> {
-    RoundConstants::<KoalaBear, 16, HALF_FULL_ROUNDS_16, PARTIAL_ROUNDS_16>::from_rng(
-        &mut StdRng::seed_from_u64(0),
-    )
+    RoundConstants::from_rng(&mut StdRng::seed_from_u64(0))
 }
 
 fn build_poseidon24_constants()
 -> RoundConstants<KoalaBear, 24, HALF_FULL_ROUNDS_24, PARTIAL_ROUNDS_24> {
-    RoundConstants::<KoalaBear, 24, HALF_FULL_ROUNDS_24, PARTIAL_ROUNDS_24>::from_rng(
-        &mut StdRng::seed_from_u64(0),
-    )
+    RoundConstants::from_rng(&mut StdRng::seed_from_u64(0))
+}
+
+fn build_poseidon16_constants_packed()
+-> RoundConstants<PFPacking<KoalaBear>, 16, HALF_FULL_ROUNDS_16, PARTIAL_ROUNDS_16> {
+    let normal_constants = build_poseidon16_constants();
+    RoundConstants {
+        beginning_full_round_constants: normal_constants
+            .beginning_full_round_constants
+            .map(|arr| arr.map(Into::into)),
+        partial_round_constants: normal_constants.partial_round_constants.map(Into::into),
+        ending_full_round_constants: normal_constants
+            .ending_full_round_constants
+            .map(|arr| arr.map(Into::into)),
+    }
+}
+
+fn build_poseidon24_constants_packed()
+-> RoundConstants<PFPacking<KoalaBear>, 24, HALF_FULL_ROUNDS_24, PARTIAL_ROUNDS_24> {
+    let normal_constants = build_poseidon24_constants();
+    RoundConstants {
+        beginning_full_round_constants: normal_constants
+            .beginning_full_round_constants
+            .map(|arr| arr.map(Into::into)),
+        partial_round_constants: normal_constants.partial_round_constants.map(Into::into),
+        ending_full_round_constants: normal_constants
+            .ending_full_round_constants
+            .map(|arr| arr.map(Into::into)),
+    }
 }
 
 pub fn generate_trace_poseidon_16(inputs: Vec<[KoalaBear; 16]>) -> RowMajorMatrix<KoalaBear> {

@@ -19,7 +19,7 @@ use whir_p3::{
 use crate::*;
 use vm::*;
 
-pub fn poseidon_16_column_groups(poseidon_16_air: &Poseidon16Air) -> Vec<Range<usize>> {
+pub fn poseidon_16_column_groups(poseidon_16_air: &Poseidon16Air<F>) -> Vec<Range<usize>> {
     vec![
         0..8,
         8..16,
@@ -29,7 +29,7 @@ pub fn poseidon_16_column_groups(poseidon_16_air: &Poseidon16Air) -> Vec<Range<u
     ]
 }
 
-pub fn poseidon_24_column_groups(poseidon_24_air: &Poseidon24Air) -> Vec<Range<usize>> {
+pub fn poseidon_24_column_groups(poseidon_24_air: &Poseidon24Air<F>) -> Vec<Range<usize>> {
     vec![
         0..8,
         8..16,

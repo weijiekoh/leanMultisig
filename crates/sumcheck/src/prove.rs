@@ -10,15 +10,17 @@ use whir_p3::poly::dense::WhirDensePolynomial;
 use whir_p3::poly::evals::eval_eq;
 use whir_p3::poly::multilinear::MultilinearPoint;
 
+use crate::Mle;
 use crate::MleGroup;
 use crate::SumcheckComputation;
-use crate::{Mle, MySumcheckComputation};
+use crate::SumcheckComputationPacked;
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove<'a, EF, SC>(
+pub fn prove<'a, EF, SC, SCP>(
     skips: usize, // skips == 1: classic sumcheck. skips >= 2: sumcheck with univariate skips (eprint 2024/108)
     multilinears: impl Into<MleGroup<'a, EF>>,
     computation: &SC,
+    computation_packed: &SCP,
     batching_scalars: &[EF],
     eq_factor: Option<(Vec<EF>, Option<Mle<EF>>)>, // (a, b, c ...), eq_poly(b, c, ...)
     is_zerofier: bool,
@@ -28,12 +30,14 @@ pub fn prove<'a, EF, SC>(
 ) -> (MultilinearPoint<EF>, Vec<EF>, EF)
 where
     EF: ExtensionField<PF<EF>>,
-    SC: MySumcheckComputation<EF>,
+    SC: SumcheckComputation<PF<EF>, EF> + SumcheckComputation<EF, EF>,
+    SCP: SumcheckComputationPacked<EF>,
 {
     let (challenges, mut final_folds, mut sum) = prove_in_parallel_1(
         vec![skips],
         vec![multilinears],
         vec![computation],
+        vec![computation_packed],
         vec![batching_scalars],
         vec![eq_factor],
         vec![is_zerofier],
@@ -47,10 +51,11 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_in_parallel_1<'a, EF, SC, M: Into<MleGroup<'a, EF>>>(
+pub fn prove_in_parallel_1<'a, EF, SC, SCP, M: Into<MleGroup<'a, EF>>>(
     skips: Vec<usize>, // skips == 1: classic sumcheck. skips >= 2: sumcheck with univariate skips (eprint 2024/108)
     multilinears: Vec<M>,
     computations: Vec<&SC>,
+    computations_packed: Vec<&SCP>,
     batching_scalars: Vec<&[EF]>,
     eq_factors: Vec<Option<(Vec<EF>, Option<Mle<EF>>)>>, // (a, b, c ...), eq_poly(b, c, ...)
     is_zerofier: Vec<bool>,
@@ -61,12 +66,16 @@ pub fn prove_in_parallel_1<'a, EF, SC, M: Into<MleGroup<'a, EF>>>(
 ) -> (MultilinearPoint<EF>, Vec<Vec<EF>>, Vec<EF>)
 where
     EF: ExtensionField<PF<EF>>,
-    SC: MySumcheckComputation<EF>,
+    SC: SumcheckComputation<PF<EF>, EF> + SumcheckComputation<EF, EF>,
+    SCP: SumcheckComputationPacked<EF>,
 {
-    prove_in_parallel_3::<EF, SC, SC, SC, M>(
+    prove_in_parallel_3::<EF, SC, SC, SC, SCP, SCP, SCP, M>(
         skips,
         multilinears,
         computations,
+        vec![],
+        vec![],
+        computations_packed,
         vec![],
         vec![],
         batching_scalars,
@@ -80,12 +89,15 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_in_parallel_3<'a, EF, SC1, SC2, SC3, M: Into<MleGroup<'a, EF>>>(
+pub fn prove_in_parallel_3<'a, EF, SC1, SC2, SC3, SCP1, SCP2, SCP3, M: Into<MleGroup<'a, EF>>>(
     mut skips: Vec<usize>, // skips == 1: classic sumcheck. skips >= 2: sumcheck with univariate skips (eprint 2024/108)
     multilinears: Vec<M>,
     computations_1: Vec<&SC1>,
     computations_2: Vec<&SC2>,
     computations_3: Vec<&SC3>,
+    computations_packed_1: Vec<&SCP1>,
+    computations_packed_2: Vec<&SCP2>,
+    computations_packed_3: Vec<&SCP3>,
     batching_scalars: Vec<&[EF]>,
     mut eq_factors: Vec<Option<(Vec<EF>, Option<Mle<EF>>)>>, // (a, b, c ...), eq_poly(b, c, ...)
     mut is_zerofier: Vec<bool>,
@@ -96,9 +108,12 @@ pub fn prove_in_parallel_3<'a, EF, SC1, SC2, SC3, M: Into<MleGroup<'a, EF>>>(
 ) -> (MultilinearPoint<EF>, Vec<Vec<EF>>, Vec<EF>)
 where
     EF: ExtensionField<PF<EF>>,
-    SC1: MySumcheckComputation<EF>,
-    SC2: MySumcheckComputation<EF>,
-    SC3: MySumcheckComputation<EF>,
+    SC1: SumcheckComputation<PF<EF>, EF> + SumcheckComputation<EF, EF>,
+    SC2: SumcheckComputation<PF<EF>, EF> + SumcheckComputation<EF, EF>,
+    SC3: SumcheckComputation<PF<EF>, EF> + SumcheckComputation<EF, EF>,
+    SCP1: SumcheckComputationPacked<EF>,
+    SCP2: SumcheckComputationPacked<EF>,
+    SCP3: SumcheckComputationPacked<EF>,
 {
     let n_sumchecks = multilinears.len();
     assert_eq!(n_sumchecks, skips.len());
@@ -172,6 +187,7 @@ where
                     skips[i],
                     &multilinears[i],
                     computations_1[i],
+                    computations_packed_1[i],
                     &eq_factors[i],
                     batching_scalars[i],
                     is_zerofier[i],
@@ -184,6 +200,7 @@ where
                     skips[i],
                     &multilinears[i],
                     computations_2[i - computations_1.len()],
+                    computations_packed_2[i - computations_1.len()],
                     &eq_factors[i],
                     batching_scalars[i],
                     is_zerofier[i],
@@ -196,6 +213,7 @@ where
                     skips[i],
                     &multilinears[i],
                     computations_3[i - computations_1.len() - computations_2.len()],
+                    computations_packed_3[i - computations_1.len() - computations_2.len()],
                     &eq_factors[i],
                     batching_scalars[i],
                     is_zerofier[i],
@@ -244,10 +262,11 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn compute_and_send_polynomial<'a, EF, SC>(
+fn compute_and_send_polynomial<'a, EF, SC, SCP>(
     skips: usize, // the first round will fold 2^skips (instead of 2 in the basic sumcheck)
     multilinears: &MleGroup<'a, EF>,
     computation: &SC,
+    computations_packed: &SCP,
     eq_factor: &Option<(Vec<EF>, Mle<EF>)>, // (a, b, c ...), eq_poly(b, c, ...)
     batching_scalars: &[EF],
     is_zerofier: bool,
@@ -257,7 +276,8 @@ fn compute_and_send_polynomial<'a, EF, SC>(
 ) -> WhirDensePolynomial<EF>
 where
     EF: ExtensionField<PF<EF>>,
-    SC: MySumcheckComputation<EF>,
+    SC: SumcheckComputation<PF<EF>, EF> + SumcheckComputation<EF, EF>,
+    SCP: SumcheckComputationPacked<EF>,
 {
     let selectors = univariate_selectors::<PF<EF>>(skips);
 
@@ -290,6 +310,7 @@ where
         eq_factor.as_ref().map(|(_, eq_mle)| eq_mle),
         &folding_scalars,
         computation,
+        computations_packed,
         batching_scalars,
         missing_mul_factor,
     ));

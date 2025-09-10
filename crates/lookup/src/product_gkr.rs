@@ -128,9 +128,10 @@ where
     EF: ExtensionField<PF<EF>>,
     PF<EF>: PrimeField64,
 {
-    let (sc_point, inner_evals, _) = sumcheck::prove::<EF, _>(
+    let (sc_point, inner_evals, _) = sumcheck::prove::<EF, _, _>(
         1,
         up_layer,
+        &ProductComputation,
         &ProductComputation,
         &[],
         Some((claim.point.0.clone(), None)),
@@ -223,12 +224,11 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use p3_field::extension::QuinticExtensionField;
-    use p3_koala_bear::KoalaBear;
+    use p3_koala_bear::QuinticExtensionFieldKB;
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use utils::{assert_eq_many, build_prover_state, build_verifier_state, pack_extension};
 
-    type EF = QuinticExtensionField<KoalaBear>;
+    type EF = QuinticExtensionFieldKB;
 
     #[test]
     fn test_gkr_product_step() {

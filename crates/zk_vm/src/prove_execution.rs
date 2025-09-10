@@ -86,7 +86,7 @@ pub fn prove_execution(
             .collect::<Vec<_>>(),
     );
     let exec_witness = AirWitness::<PF<EF>>::new(&exec_columns, &exec_column_groups());
-    let exec_table = AirTable::<EF, _>::new(VMAir);
+    let exec_table = AirTable::<EF, _, _>::new(VMAir, VMAir);
 
     // TODO remove
     exec_table.check_trace_validity(&exec_witness).unwrap();
@@ -95,10 +95,12 @@ pub fn prove_execution(
 
     let p16_air = build_poseidon_16_air();
     let p24_air = build_poseidon_24_air();
-    let p16_table = AirTable::<EF, _>::new(p16_air.clone());
-    let p24_table = AirTable::<EF, _>::new(p24_air.clone());
+    let p16_air_packed = build_poseidon_16_air_packed();
+    let p24_air_packed = build_poseidon_24_air_packed();
+    let p16_table = AirTable::<EF, _, _>::new(p16_air.clone(), p16_air_packed);
+    let p24_table = AirTable::<EF, _, _>::new(p24_air.clone(), p24_air_packed);
 
-    let dot_product_table = AirTable::<EF, _>::new(DotProductAir);
+    let dot_product_table = AirTable::<EF, _, _>::new(DotProductAir, DotProductAir);
 
     let (p16_columns, p24_columns) = build_poseidon_columns(&poseidons_16, &poseidons_24);
     let p16_witness = AirWitness::new(&p16_columns, &poseidon_16_column_groups(&p16_air));
@@ -497,6 +499,14 @@ pub fn prove_execution(
         .evaluate(&p24_mixing_scalars_grand_product),
     };
 
+    let dot_product_footprint_computation = DotProductFootprint {
+        grand_product_challenge_global: grand_product_challenge_global,
+        grand_product_challenge_dot_product: grand_product_challenge_dot_product
+            .clone()
+            .try_into()
+            .unwrap(),
+    };
+
     let (
         grand_product_dot_product_sumcheck_point,
         grand_product_dot_product_sumcheck_inner_evals,
@@ -509,13 +519,8 @@ pub fn prove_execution(
                 .map(|c| c.as_slice())
                 .collect::<Vec<_>>(),
         ), // TODO packing
-        &DotProductFootprint {
-            grand_product_challenge_global: grand_product_challenge_global,
-            grand_product_challenge_dot_product: grand_product_challenge_dot_product
-                .clone()
-                .try_into()
-                .unwrap(),
-        },
+        &dot_product_footprint_computation,
+        &dot_product_footprint_computation,
         &[],
         Some((grand_product_dot_product_statement.point.0.clone(), None)),
         false,
@@ -556,6 +561,18 @@ pub fn prove_execution(
         .evaluate(&grand_product_dot_product_table_indexes_mixing_challenges),
     };
 
+    let precompile_foot_print_computation = PrecompileFootprint {
+        grand_product_challenge_global: grand_product_challenge_global,
+        grand_product_challenge_p16: grand_product_challenge_p16.try_into().unwrap(),
+        grand_product_challenge_p24: grand_product_challenge_p24.try_into().unwrap(),
+        grand_product_challenge_dot_product: grand_product_challenge_dot_product
+            .try_into()
+            .unwrap(),
+        grand_product_challenge_vm_multilinear_eval: grand_product_challenge_vm_multilinear_eval
+            .try_into()
+            .unwrap(),
+    };
+
     let (grand_product_exec_sumcheck_point, grand_product_exec_sumcheck_inner_evals, _) =
         sumcheck::prove(
             1, // TODO univariate skip?
@@ -563,18 +580,8 @@ pub fn prove_execution(
                 // TODO not all columns re required
                 full_trace.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
             ), // TODO packing
-            &PrecompileFootprint {
-                grand_product_challenge_global: grand_product_challenge_global,
-                grand_product_challenge_p16: grand_product_challenge_p16.try_into().unwrap(),
-                grand_product_challenge_p24: grand_product_challenge_p24.try_into().unwrap(),
-                grand_product_challenge_dot_product: grand_product_challenge_dot_product
-                    .try_into()
-                    .unwrap(),
-                grand_product_challenge_vm_multilinear_eval:
-                    grand_product_challenge_vm_multilinear_eval
-                        .try_into()
-                        .unwrap(),
-            },
+            &precompile_foot_print_computation,
+            &precompile_foot_print_computation,
             &[],
             Some((grand_product_exec_statement.point.0.clone(), None)),
             false,

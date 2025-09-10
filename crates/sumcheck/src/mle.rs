@@ -1,5 +1,5 @@
-use crate::MySumcheckComputation;
 use crate::SumcheckComputation;
+use crate::SumcheckComputationPacked;
 use p3_field::ExtensionField;
 use p3_field::PackedFieldExtension;
 use p3_field::PackedValue;
@@ -304,18 +304,20 @@ impl<'a, EF: ExtensionField<PF<EF>>> MleGroupRef<'a, EF> {
         }
     }
 
-    pub fn sumcheck_compute<SC>(
+    pub fn sumcheck_compute<SC, SCP>(
         &self,
         zs: &[usize],
         skips: usize,
         eq_mle: Option<&Mle<EF>>,
         folding_scalars: &[Vec<PF<EF>>],
         computation: &SC,
+        computation_packed: &SCP,
         batching_scalars: &[EF],
         missing_mul_factor: Option<EF>,
     ) -> Vec<(PF<EF>, EF)>
     where
-        SC: MySumcheckComputation<EF>,
+        SC: SumcheckComputation<PF<EF>, EF> + SumcheckComputation<EF, EF>,
+        SCP: SumcheckComputationPacked<EF>,
     {
         let fold_size = 1 << (self.n_vars() - skips);
         let packed_fold_size = if self.is_packed() {
@@ -350,7 +352,8 @@ impl<'a, EF: ExtensionField<PF<EF>>> MleGroupRef<'a, EF> {
                             })
                             .collect::<Vec<_>>();
 
-                        let mut res = computation.eval_packed_extension(&point, batching_scalars);
+                        let mut res =
+                            computation_packed.eval_packed_extension(&point, batching_scalars);
                         if let Some(eq_mle_eval) = eq_mle_eval {
                             res *= eq_mle_eval;
                         }
@@ -405,7 +408,7 @@ impl<'a, EF: ExtensionField<PF<EF>>> MleGroupRef<'a, EF> {
                             })
                             .collect::<Vec<_>>();
 
-                        let mut res = computation.eval_packed_base(&point, batching_scalars);
+                        let mut res = computation_packed.eval_packed_base(&point, batching_scalars);
                         if let Some(eq_mle_eval) = eq_mle_eval {
                             res *= eq_mle_eval;
                         }

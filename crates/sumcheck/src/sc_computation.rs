@@ -8,20 +8,6 @@ use utils::{
     PFPacking,
 };
 
-pub trait MySumcheckComputation<EF: ExtensionField<PF<EF>>>:
-    SumcheckComputationPacked<EF> + SumcheckComputation<EF, EF> + SumcheckComputation<PF<EF>, EF>
-{
-}
-
-impl<EF, SC> MySumcheckComputation<EF> for SC
-where
-    EF: ExtensionField<PF<EF>>,
-    SC: SumcheckComputationPacked<EF>
-        + SumcheckComputation<EF, EF>
-        + SumcheckComputation<PF<EF>, EF>,
-{
-}
-
 pub trait SumcheckComputation<NF, EF>: Sync {
     fn degree(&self) -> usize;
     fn eval(&self, point: &[NF], alpha_powers: &[EF]) -> EF;

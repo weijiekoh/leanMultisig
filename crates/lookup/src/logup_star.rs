@@ -56,9 +56,10 @@ where
 
     let (sc_point, inner_evals, prod) =
         info_span!("logup_star sumcheck", table_length, indexes_length).in_scope(|| {
-            sumcheck::prove::<EF, _>(
+            sumcheck::prove::<EF, _, _>(
                 1,
                 MleGroupRef::ExtensionPacked(vec![&table_embedded_packed, &pushforward_packed]),
+                &ProductComputation,
                 &ProductComputation,
                 &[],
                 None,
@@ -264,14 +265,14 @@ pub fn compute_pushforward<F: PrimeField64, EF: ExtensionField<EF>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use p3_field::{PrimeCharacteristicRing, extension::QuinticExtensionField};
-    use p3_koala_bear::KoalaBear;
+    use p3_field::PrimeCharacteristicRing;
+    use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use utils::{build_challenger, init_tracing};
     use whir_p3::poly::evals::{EvaluationsList, eval_eq};
 
     type F = KoalaBear;
-    type EF = QuinticExtensionField<KoalaBear>;
+    type EF = QuinticExtensionFieldKB;
 
     #[test]
     fn test_logup_star() {

@@ -231,15 +231,14 @@ pub fn evaluate_as_smaller_multilinear_pol<F: Field, EF: ExtensionField<F>>(
 #[cfg(test)]
 mod tests {
     use p3_field::PrimeCharacteristicRing;
-    use p3_field::extension::QuinticExtensionField;
-    use p3_koala_bear::KoalaBear;
+    use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
 
     use super::*;
 
     type F = KoalaBear;
-    type EF = QuinticExtensionField<F>;
+    type EF = QuinticExtensionFieldKB;
 
     #[test]
     fn test_evaluate_as_larger_multilinear_pol() {

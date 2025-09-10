@@ -96,6 +96,7 @@ impl<
                 1,
                 MleGroupRef::ExtensionPacked(vec![&packed_transmuted_pol, &packed_a_pol]),
                 &ProductComputation,
+                &ProductComputation,
                 &[],
                 None,
                 false,

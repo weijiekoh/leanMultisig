@@ -30,12 +30,14 @@ pub fn verify_execution(
 ) -> Result<(), ProofError> {
     let mut verifier_state = VerifierState::new(proof_data, build_challenger());
 
-    let exec_table = AirTable::<EF, _>::new(VMAir);
+    let exec_table = AirTable::<EF, _, _>::new(VMAir, VMAir);
     let p16_air = build_poseidon_16_air();
     let p24_air = build_poseidon_24_air();
-    let p16_table = AirTable::<EF, _>::new(p16_air.clone());
-    let p24_table = AirTable::<EF, _>::new(p24_air.clone());
-    let dot_product_table = AirTable::<EF, _>::new(DotProductAir);
+    let p16_air_packed = build_poseidon_16_air_packed();
+    let p24_air_packed = build_poseidon_24_air_packed();
+    let p16_table = AirTable::<EF, _, _>::new(p16_air.clone(), p16_air_packed);
+    let p24_table = AirTable::<EF, _, _>::new(p24_air.clone(), p24_air_packed);
+    let dot_product_table = AirTable::<EF, _, _>::new(DotProductAir, DotProductAir);
 
     let [
         log_n_cycles,

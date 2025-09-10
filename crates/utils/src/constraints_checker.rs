@@ -22,7 +22,6 @@ impl<'a, EF: ExtensionField<PF<EF>> + ExtensionField<IF>, IF: ExtensionField<PF<
     for ConstraintChecker<'a, IF, EF>
 {
     type F = PF<EF>;
-    type I = PF<EF>;
     type Expr = IF;
     type Var = IF;
     type M = RowMajorMatrixView<'a, IF>;

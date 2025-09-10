@@ -1,8 +1,8 @@
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{PrimeCharacteristicRing, extension::QuinticExtensionField};
-use p3_koala_bear::KoalaBear;
+use p3_field::PrimeCharacteristicRing;
+use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
 use p3_matrix::Matrix;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use utils::{build_prover_state, build_verifier_state, padd_with_zero_to_next_power_of_two};
@@ -13,7 +13,7 @@ use crate::{prove_many_air_2, table::AirTable, verify_many_air_2, witness::AirWi
 const UNIVARIATE_SKIPS: usize = 3;
 
 type F = KoalaBear;
-type EF = QuinticExtensionField<F>;
+type EF = QuinticExtensionFieldKB;
 
 struct ExampleStructuredAir<const N_COLUMNS: usize, const N_PREPROCESSED_COLUMNS: usize>;
 
@@ -48,7 +48,7 @@ impl<AB: AirBuilder, const N_COLUMNS: usize, const N_PREPROCESSED_COLUMNS: usize
             builder.assert_eq(
                 down[j].clone(),
                 up[j].clone()
-                    + AB::I::from_usize(j)
+                    + AB::F::from_usize(j)
                     + (0..N_PREPROCESSED_COLUMNS)
                         .map(|k| AB::Expr::from(down[k].clone()))
                         .product::<AB::Expr>(),
@@ -89,7 +89,7 @@ impl<AB: AirBuilder, const N_COLUMNS: usize, const N_PREPROCESSED_COLUMNS: usize
                 (0..N_PREPROCESSED_COLUMNS)
                     .map(|k| AB::Expr::from(up[k].clone()))
                     .product::<AB::Expr>()
-                    + AB::I::from_usize(j),
+                    + AB::F::from_usize(j),
             );
         }
     }
@@ -156,7 +156,10 @@ fn test_structured_air() {
     let column_groups = vec![0..N_PREPROCESSED_COLUMNS, N_PREPROCESSED_COLUMNS..N_COLUMNS];
     let witness = AirWitness::new(&columns, &column_groups);
 
-    let table = AirTable::<EF, _>::new(ExampleStructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>);
+    let table = AirTable::<EF, _, _>::new(
+        ExampleStructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>,
+        ExampleStructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>,
+    );
     table.check_trace_validity(&witness).unwrap();
     let evaluations_remaining_to_prove =
         table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, witness);
@@ -196,7 +199,10 @@ fn test_unstructured_air() {
     let column_groups = vec![0..N_PREPROCESSED_COLUMNS, N_PREPROCESSED_COLUMNS..N_COLUMNS];
     let witness = AirWitness::new(&columns, &column_groups);
 
-    let table = AirTable::<EF, _>::new(ExampleUnstructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>);
+    let table = AirTable::<EF, _, _>::new(
+        ExampleUnstructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>,
+        ExampleUnstructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>,
+    );
     table.check_trace_validity(&witness).unwrap();
     let evaluations_remaining_to_prove =
         table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, witness);
@@ -238,13 +244,19 @@ fn test_many_unstructured_air() {
     let tables_a = log_n_rows_a
         .iter()
         .map(|_| {
-            AirTable::<EF, _>::new(ExampleUnstructuredAir::<N_COLUMNS_A, N_PREPROCESSED_COLUMNS_A>)
+            AirTable::<EF, _, _>::new(
+                ExampleUnstructuredAir::<N_COLUMNS_A, N_PREPROCESSED_COLUMNS_A>,
+                ExampleUnstructuredAir::<N_COLUMNS_A, N_PREPROCESSED_COLUMNS_A>,
+            )
         })
         .collect::<Vec<_>>();
     let tables_b = log_n_rows_b
         .iter()
         .map(|_| {
-            AirTable::<EF, _>::new(ExampleUnstructuredAir::<N_COLUMNS_B, N_PREPROCESSED_COLUMNS_B>)
+            AirTable::<EF, _, _>::new(
+                ExampleUnstructuredAir::<N_COLUMNS_B, N_PREPROCESSED_COLUMNS_B>,
+                ExampleUnstructuredAir::<N_COLUMNS_B, N_PREPROCESSED_COLUMNS_B>,
+            )
         })
         .collect::<Vec<_>>();
     let tables_a = tables_a.iter().collect::<Vec<_>>();
@@ -358,13 +370,19 @@ fn test_many_structured_air() {
     let tables_a = log_n_rows_a
         .iter()
         .map(|_| {
-            AirTable::<EF, _>::new(ExampleStructuredAir::<N_COLUMNS_A, N_PREPROCESSED_COLUMNS_A>)
+            AirTable::<EF, _, _>::new(
+                ExampleStructuredAir::<N_COLUMNS_A, N_PREPROCESSED_COLUMNS_A>,
+                ExampleStructuredAir::<N_COLUMNS_A, N_PREPROCESSED_COLUMNS_A>,
+            )
         })
         .collect::<Vec<_>>();
     let tables_b = log_n_rows_b
         .iter()
         .map(|_| {
-            AirTable::<EF, _>::new(ExampleStructuredAir::<N_COLUMNS_B, N_PREPROCESSED_COLUMNS_B>)
+            AirTable::<EF, _, _>::new(
+                ExampleStructuredAir::<N_COLUMNS_B, N_PREPROCESSED_COLUMNS_B>,
+                ExampleStructuredAir::<N_COLUMNS_B, N_PREPROCESSED_COLUMNS_B>,
+            )
         })
         .collect::<Vec<_>>();
     let tables_a = tables_a.iter().collect::<Vec<_>>();

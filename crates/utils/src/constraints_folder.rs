@@ -22,7 +22,6 @@ where
     EF: Field + ExtensionField<NF>,
 {
     type F = PF<EF>;
-    type I = Self::F;
     type Expr = NF;
     type Var = NF;
     type M = RowMajorMatrixView<'a, NF>;

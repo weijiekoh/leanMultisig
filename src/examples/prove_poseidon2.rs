@@ -2,8 +2,7 @@ use air::table::AirTable;
 use air::witness::AirWitness;
 use p3_air::BaseAir;
 use p3_field::PrimeField64;
-use p3_field::extension::QuinticExtensionField;
-use p3_koala_bear::KoalaBear;
+use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
 use p3_symmetric::Permutation;
 use p3_util::log2_ceil_usize;
 use pcs::{PCS, packed_pcs_commit, packed_pcs_global_statements, packed_pcs_parse_commitment};
@@ -12,16 +11,16 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 use utils::{
-    build_merkle_compress, build_merkle_hash, build_poseidon_16_air, build_poseidon_24_air,
-    build_prover_state, build_verifier_state, generate_trace_poseidon_16,
-    generate_trace_poseidon_24, get_poseidon16, get_poseidon24, init_tracing,
-    padd_with_zero_to_next_power_of_two,
+    build_merkle_compress, build_merkle_hash, build_poseidon_16_air, build_poseidon_16_air_packed,
+    build_poseidon_24_air, build_poseidon_24_air_packed, build_prover_state, build_verifier_state,
+    generate_trace_poseidon_16, generate_trace_poseidon_24, get_poseidon16, get_poseidon24,
+    init_tracing, padd_with_zero_to_next_power_of_two,
 };
 use whir_p3::dft::EvalsDft;
 use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfigBuilder};
 
 type F = KoalaBear;
-type EF = QuinticExtensionField<F>;
+type EF = QuinticExtensionFieldKB;
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2Benchmark {
@@ -70,7 +69,9 @@ pub fn prove_poseidon2(
     let n_poseidons_24 = 1 << log_n_poseidons_24;
 
     let poseidon_air_16 = build_poseidon_16_air();
+    let poseidon_air_16_packed = build_poseidon_16_air_packed();
     let poseidon_air_24 = build_poseidon_24_air();
+    let poseidon_air_24_packed = build_poseidon_24_air_packed();
 
     let n_columns_16 = poseidon_air_16.width();
     let n_columns_24 = poseidon_air_24.width();
@@ -115,8 +116,8 @@ pub fn prove_poseidon2(
     let witness_16 = AirWitness::new(&witness_columns_16, &column_groups_16);
     let witness_24 = AirWitness::new(&witness_columns_24, &column_groups_24);
 
-    let table_16 = AirTable::<EF, _>::new(poseidon_air_16);
-    let table_24 = AirTable::<EF, _>::new(poseidon_air_24);
+    let table_16 = AirTable::<EF, _, _>::new(poseidon_air_16, poseidon_air_16_packed);
+    let table_24 = AirTable::<EF, _, _>::new(poseidon_air_24, poseidon_air_24_packed);
 
     let t = Instant::now();
 

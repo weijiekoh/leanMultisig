@@ -14,8 +14,7 @@ pub struct ConstraintFolderPackedBase<'a, EF: ExtensionField<PF<EF>>> {
 }
 
 impl<'a, EF: ExtensionField<PF<EF>>> AirBuilder for ConstraintFolderPackedBase<'a, EF> {
-    type F = PF<EF>;
-    type I = PF<EF>;
+    type F = PFPacking<EF>;
     type Expr = PFPacking<EF>;
     type Var = PFPacking<EF>;
     type M = RowMajorMatrixView<'a, PFPacking<EF>>;
@@ -74,8 +73,7 @@ pub struct ConstraintFolderPackedExtension<'a, EF: ExtensionField<PF<EF>>> {
 }
 
 impl<'a, EF: ExtensionField<PF<EF>>> AirBuilder for ConstraintFolderPackedExtension<'a, EF> {
-    type F = PF<EF>;
-    type I = PFPacking<EF>;
+    type F = PFPacking<EF>;
     type Expr = EFPacking<EF>;
     type Var = EFPacking<EF>;
     type M = RowMajorMatrixView<'a, EFPacking<EF>>;
