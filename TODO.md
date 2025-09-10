@@ -33,7 +33,7 @@
 - WIR recursion: batch the multilinear_eval calls on initial merkle leaves
 - multilinear_eval precompile: we can reduce the number of sparse equality constraints required to verify the correctness of point / res into the memory
 
-- KoalaBear extension of degree 5: only AVX2 has been tested and benchmarked. TODO: AVX512 / Neon
+- KoalaBear extension of degree 5: the current implem (in a fork of Plonky3) has not been been optimized
 - KoalaBear extension of degree 6: in order to use the (proven) Johnson bound in WHIR
 
 ## Known leanISA compiler bugs:
