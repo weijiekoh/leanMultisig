@@ -1,4 +1,4 @@
-use p3_field::{ExtensionField, Field, cyclic_subgroup_known_order};
+use p3_field::{ExtensionField, Field, cyclic_subgroup_known_order, dot_product};
 use p3_util::log2_ceil_usize;
 use sumcheck::{MleGroup, MleGroupOwned, MleGroupRef, ProductComputation};
 use tracing::{info_span, instrument};
@@ -200,7 +200,6 @@ pub fn prove_many_air_3<
     }
 
     if structured_air {
-        // TODO inner sumchecks in parallel between tables(not usefull in the current protocol but cleaner, more coherent)
         let mut evaluations_remaining_to_prove = vec![];
         for witness in witnesses_1.iter().chain(witnesses_2) {
             evaluations_remaining_to_prove.push(open_structured_columns(
@@ -389,90 +388,107 @@ fn open_structured_columns<'a, EF: ExtensionField<PF<EF>> + ExtensionField<IF>, 
     witness: &AirWitness<'a, IF>,
     outer_sumcheck_challenge: &[EF],
 ) -> Vec<Evaluation<EF>> {
-    let columns_batching_scalars = prover_state.sample_vec(witness.log_max_columns_per_group());
+    let log_n_groups = log2_ceil_usize(witness.column_groups.len());
+    let batching_scalars =
+        prover_state.sample_vec(log_n_groups + witness.log_max_columns_per_group());
     let alpha = prover_state.sample();
 
-    let mut all_inner_mles = vec![];
-    let mut all_inner_sums = vec![];
-    let mut all_batched_columns = vec![];
-    let mut all_batched_columns_mixed = vec![];
+    let poly_eq_batching_scalars = eval_eq(&batching_scalars);
+    let mut column_scalars = vec![];
+    let mut index = 0;
     for group in &witness.column_groups {
-        let batched_column = multilinears_linear_combination(
-            &witness.cols[group.clone()],
-            &eval_eq(&from_end(
-                &columns_batching_scalars,
-                log2_ceil_usize(group.len()),
-            ))[..group.len()],
-        );
-        all_batched_columns.push(batched_column.clone());
-        let batched_column_mixed = add_multilinears(
-            &column_up(&batched_column),
-            &scale_poly(&column_down(&batched_column), alpha),
-        );
-        all_batched_columns_mixed.push(batched_column_mixed.clone());
-
-        // TODO opti
-        let sub_evals = fold_multilinear(
-            &batched_column_mixed,
-            &MultilinearPoint(
-                outer_sumcheck_challenge[1..witness.log_n_rows() - univariate_skips + 1].to_vec(),
-            ),
-        );
-
-        prover_state.add_extension_scalars(&sub_evals);
+        for i in index..index + group.len() {
+            column_scalars.push(poly_eq_batching_scalars[i]);
+        }
+        index += witness.max_columns_per_group().next_power_of_two();
     }
+
+    let batched_column = multilinears_linear_combination(&witness.cols, &column_scalars);
+    let batched_column_mixed = add_multilinears(
+        &column_up(&batched_column),
+        &scale_poly(&column_down(&batched_column), alpha),
+    );
+    // TODO do not recompute this (we can deduce it from already computed values)
+    let sub_evals = fold_multilinear(
+        &batched_column_mixed,
+        &MultilinearPoint(
+            outer_sumcheck_challenge[1..witness.log_n_rows() - univariate_skips + 1].to_vec(),
+        ),
+    );
+    prover_state.add_extension_scalars(&sub_evals);
 
     let epsilons = prover_state.sample_vec(univariate_skips);
 
-    for (batched_column, batched_column_mixed) in all_batched_columns
-        .into_iter()
-        .zip(all_batched_columns_mixed)
-    {
-        let point = [
-            epsilons.clone(),
-            outer_sumcheck_challenge[1..witness.log_n_rows() - univariate_skips + 1].to_vec(),
-        ]
-        .concat();
-        let mles_for_inner_sumcheck = vec![
-            add_multilinears(
-                &matrix_up_folded(&point),
-                &scale_poly(&matrix_down_folded(&point), alpha),
-            ),
-            batched_column,
-        ];
+    let point = [
+        epsilons.clone(),
+        outer_sumcheck_challenge[1..witness.log_n_rows() - univariate_skips + 1].to_vec(),
+    ]
+    .concat();
 
-        // TODO do not recompute
-        let inner_sum = batched_column_mixed.evaluate(&MultilinearPoint(point.clone()));
+    // TODO do not recompute this (we can deduce it from already computed values)
+    let inner_sum = batched_column_mixed.evaluate(&MultilinearPoint(point.clone()));
 
-        all_inner_mles.push(MleGroupOwned::Extension(mles_for_inner_sumcheck));
-        all_inner_sums.push(inner_sum);
-    }
+    let inner_mle = MleGroupOwned::Extension(vec![
+        add_multilinears(
+            &matrix_up_folded(&point),
+            &scale_poly(&matrix_down_folded(&point), alpha),
+        ),
+        batched_column,
+    ]);
+
     let n_groups = witness.column_groups.len();
-    let (inner_challenges, all_inner_evals, _) = sumcheck::prove_in_parallel_1::<EF, _, _>(
-        vec![1; n_groups],
-        all_inner_mles,
-        vec![&ProductComputation; n_groups],
-        vec![&[]; n_groups],
-        vec![None; n_groups],
-        vec![false; n_groups],
+    let (inner_challenges, inner_evals, _) = sumcheck::prove::<EF, _>(
+        1,
+        inner_mle,
+        &ProductComputation,
+        &[],
+        None,
+        false,
         prover_state,
-        all_inner_sums,
-        vec![None; n_groups],
-        true,
+        inner_sum,
+        None,
     );
+
+    // TODO using inner_evals[1], we can avoid 1 of the evaluations below (the last one)
 
     let mut evaluations_remaining_to_prove = vec![];
     for i in 0..n_groups {
         let group = &witness.column_groups[i];
         let point = MultilinearPoint(
             [
-                from_end(&columns_batching_scalars, log2_ceil_usize(group.len())).to_vec(),
+                from_end(
+                    &batching_scalars[log_n_groups..],
+                    log2_ceil_usize(group.len()),
+                )
+                .to_vec(),
                 inner_challenges.0.clone(),
             ]
             .concat(),
         );
-        let value = all_inner_evals[i][1];
+        let value = {
+            let mut padded_group = IF::zero_vec(group.len().next_power_of_two() * witness.n_rows());
+            for (i, col) in witness.cols[group.clone()].iter().enumerate() {
+                padded_group[i * witness.n_rows()..(i + 1) * witness.n_rows()].copy_from_slice(col);
+            }
+            padded_group.evaluate(&point)
+        };
+        prover_state.add_extension_scalars(&[value]);
         evaluations_remaining_to_prove.push(Evaluation { point, value });
     }
+
+    assert_eq!(
+        inner_evals[1],
+        dot_product(
+            eval_eq(&batching_scalars[..log_n_groups]).into_iter(),
+            (0..n_groups).map(|i| evaluations_remaining_to_prove[i].value
+                * batching_scalars[log_n_groups
+                    ..log_n_groups + witness.log_max_columns_per_group()
+                        - log2_ceil_usize(witness.column_groups[i].len())]
+                    .iter()
+                    .map(|&x| EF::ONE - x)
+                    .product::<EF>())
+        )
+    );
+
     evaluations_remaining_to_prove
 }

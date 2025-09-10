@@ -178,7 +178,6 @@ pub fn verify_many_air_3<
     );
 
     if structured_air {
-        // TODO inner sumchecks in parallel between tables(not usefull in the current protocol but cleaner, more coherent)
         let mut evaluations_remaining_to_verify = vec![];
         for i in 0..n_tables {
             let n_columns = if i < tables_1.len() {
@@ -320,91 +319,91 @@ fn verify_structured_columns<EF: ExtensionField<PF<EF>>>(
     outer_selector_evals: &[EF],
     log_n_rows: usize,
 ) -> Result<Vec<Evaluation<EF>>, ProofError> {
-    let max_columns_per_group = Iterator::max(column_groups.iter().map(|g| g.len())).unwrap();
+    let log_n_groups = log2_ceil_usize(column_groups.len());
+    let max_columns_per_group = column_groups.iter().map(|g| g.len()).max().unwrap();
     let log_max_columns_per_group = log2_ceil_usize(max_columns_per_group);
-    let columns_batching_scalars = verifier_state.sample_vec(log_max_columns_per_group);
-
+    let batching_scalars = verifier_state.sample_vec(log_n_groups + log_max_columns_per_group);
     let alpha = verifier_state.sample();
+
+    let poly_eq_batching_scalars = eval_eq(&batching_scalars);
+    let mut column_scalars = vec![];
+    let mut index = 0;
+    for group in column_groups {
+        for i in index..index + group.len() {
+            column_scalars.push(poly_eq_batching_scalars[i]);
+        }
+        index += max_columns_per_group.next_power_of_two();
+    }
 
     let all_witness_up = &all_inner_sums[..n_columns];
     let all_witness_down = &all_inner_sums[n_columns..];
-    assert_eq!(all_witness_up.len(), all_witness_down.len());
 
-    let mut all_sub_evals = vec![];
-    for group in column_groups {
-        let sub_evals = verifier_state.next_extension_scalars_vec(1 << univariate_skips)?;
+    let sub_evals = verifier_state.next_extension_scalars_vec(1 << univariate_skips)?;
 
-        let witness_up = &all_witness_up[group.clone()];
-        let witness_down = &all_witness_down[group.clone()];
-
-        if dot_product::<EF, _, _>(
-            sub_evals.iter().copied(),
-            outer_selector_evals.iter().copied(),
-        ) != dot_product::<EF, _, _>(
-            witness_up.iter().copied(),
-            eval_eq(&from_end(
-                &columns_batching_scalars,
-                log2_ceil_usize(group.len()),
-            ))[..group.len()]
-                .iter()
-                .copied(),
-        ) + dot_product::<EF, _, _>(
-            witness_down.iter().copied(),
-            eval_eq(&from_end(
-                &columns_batching_scalars,
-                log2_ceil_usize(group.len()),
-            ))[..group.len()]
-                .iter()
-                .copied(),
-        ) * alpha
-        {
-            return Err(ProofError::InvalidProof);
-        }
-
-        all_sub_evals.push(sub_evals);
+    if dot_product::<EF, _, _>(
+        sub_evals.iter().copied(),
+        outer_selector_evals.iter().copied(),
+    ) != dot_product::<EF, _, _>(
+        all_witness_up.iter().copied(),
+        column_scalars.iter().copied(),
+    ) + dot_product::<EF, _, _>(
+        all_witness_down.iter().copied(),
+        column_scalars.iter().copied(),
+    ) * alpha
+    {
+        return Err(ProofError::InvalidProof);
     }
 
     let epsilons = MultilinearPoint(verifier_state.sample_vec(univariate_skips));
 
-    let (all_batched_inner_sums, inner_sumcheck_challenge_point, inner_sumcheck_challenge_values) =
-        sumcheck::verify_in_parallel(
-            verifier_state,
-            &vec![log_n_rows; column_groups.len()],
-            &vec![2; column_groups.len()],
-            true,
-        )?;
+    let (inner_sum, inner_sumcheck_stement) = sumcheck::verify(verifier_state, log_n_rows, 2)?;
 
-    for (batched_inner_sum, sub_evals) in all_batched_inner_sums.into_iter().zip(all_sub_evals) {
-        if batched_inner_sum != sub_evals.evaluate(&epsilons) {
-            return Err(ProofError::InvalidProof);
-        }
+    if inner_sum != sub_evals.evaluate(&epsilons) {
+        return Err(ProofError::InvalidProof);
     }
+
+    let matrix_lde_point = [
+        epsilons.0.clone(),
+        outer_sumcheck_challenge.point.to_vec(),
+        inner_sumcheck_stement.point.0.clone(),
+    ]
+    .concat();
+    let up = matrix_up_lde(&matrix_lde_point);
+    let down = matrix_down_lde(&matrix_lde_point);
+
+    let final_value = inner_sumcheck_stement.value / (up + alpha * down);
 
     let mut evaluations_remaining_to_verify = vec![];
-    for (group, inner_sumcheck_challenge_value) in
-        column_groups.iter().zip(inner_sumcheck_challenge_values)
-    {
-        let matrix_lde_point = [
-            epsilons.0.clone(),
-            outer_sumcheck_challenge.point.to_vec(),
-            inner_sumcheck_challenge_point.0.clone(),
-        ]
-        .concat();
-        let up = matrix_up_lde(&matrix_lde_point);
-        let down = matrix_down_lde(&matrix_lde_point);
-
-        let final_value = inner_sumcheck_challenge_value / (up + alpha * down);
-
-        let final_point = [
-            from_end(&columns_batching_scalars, log2_ceil_usize(group.len())).to_vec(),
-            inner_sumcheck_challenge_point.0.clone(),
-        ]
-        .concat();
-
-        evaluations_remaining_to_verify.push(Evaluation {
-            point: MultilinearPoint(final_point),
-            value: final_value,
-        });
+    for group in column_groups {
+        let point = MultilinearPoint(
+            [
+                from_end(
+                    &batching_scalars[log_n_groups..],
+                    log2_ceil_usize(group.len()),
+                )
+                .to_vec(),
+                inner_sumcheck_stement.point.0.clone(),
+            ]
+            .concat(),
+        );
+        let value = verifier_state.next_extension_scalar()?;
+        evaluations_remaining_to_verify.push(Evaluation { point, value });
     }
+
+    assert_eq!(
+        final_value,
+        dot_product(
+            eval_eq(&batching_scalars[..log_n_groups]).into_iter(),
+            column_groups
+                .iter()
+                .enumerate()
+                .map(|(i, group)| evaluations_remaining_to_verify[i].value
+                    * batching_scalars[log_n_groups
+                        ..log_n_groups + log_max_columns_per_group - log2_ceil_usize(group.len())]
+                        .iter()
+                        .map(|&x| EF::ONE - x)
+                        .product::<EF>())
+        )
+    );
     Ok(evaluations_remaining_to_verify)
 }
