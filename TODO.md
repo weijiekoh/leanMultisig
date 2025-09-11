@@ -12,7 +12,9 @@
 - Use Univariate Skip to commit to tables with k.2^n rows (k small)
 - increase density of multi commitments -> we can almost reduce by 2x commitment costs (question: will perf be good enough in order to avoid using the "jagged pcs" (cf sp1 hypercube)?)
 - avoid field embedding in the initial sumcheck of logup*, when table / values are in base field
-- opti logup* GKR when the indexes are not a power of 2 (which is the case in the execution table)
+- opti logup* GKR: 
+    - when the indexes are not a power of 2 (which is the case in the execution table)
+    - due to padding, the last (potentially up to 50%) part of the pushward is full of 0 -> We can also opti commitment here!
 - incremental merkle paths in whir-p3
 - Experiment to increase degree, and reduce commitments, in Poseidon arithmetization
 - Avoid embedding overhead on the flag, len, and index columns in the AIR table for dot products
