@@ -34,6 +34,7 @@ Execution columns:
 
 */
 
+#[derive(Debug)]
 pub struct VMAir;
 
 impl<F> BaseAir<F> for VMAir {

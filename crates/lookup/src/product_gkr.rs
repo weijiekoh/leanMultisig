@@ -121,7 +121,7 @@ where
 
 fn prove_gkr_product_step_core<EF: Field>(
     prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
-    up_layer: MleGroupRef<EF>,
+    up_layer: MleGroupRef<'_, EF>,
     claim: &Evaluation<EF>,
 ) -> Evaluation<EF>
 where

@@ -11,6 +11,7 @@ use rayon::prelude::*;
 use utils::{ToUsize, get_poseidon16, get_poseidon24};
 use vm::*;
 
+#[derive(Debug)]
 pub struct WitnessDotProduct {
     pub cycle: usize,
     pub addr_0: usize,   // normal pointer
@@ -22,6 +23,7 @@ pub struct WitnessDotProduct {
     pub res: EF,
 }
 
+#[derive(Debug)]
 pub struct WitnessMultilinearEval {
     pub cycle: usize,
     pub addr_coeffs: usize, // vectorized pointer, of size 8.2^size
@@ -32,6 +34,7 @@ pub struct WitnessMultilinearEval {
     pub res: EF,
 }
 
+#[derive(Debug)]
 pub struct WitnessPoseidon16 {
     pub cycle: Option<usize>,
     pub addr_input_a: usize, // vectorized pointer (of size 1)
@@ -41,6 +44,7 @@ pub struct WitnessPoseidon16 {
     pub output: [F; 16],
 }
 
+#[derive(Debug)]
 pub struct WitnessPoseidon24 {
     pub cycle: Option<usize>,
     pub addr_input_a: usize, // vectorized pointer (of size 2)
@@ -50,6 +54,7 @@ pub struct WitnessPoseidon24 {
     pub output: [F; 8], // last 8 elements of the output
 }
 
+#[derive(Debug)]
 pub struct ExecutionTrace {
     pub full_trace: Vec<Vec<F>>,
     pub n_poseidons_16: usize,

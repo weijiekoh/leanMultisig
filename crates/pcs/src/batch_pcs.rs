@@ -45,6 +45,7 @@ pub trait BatchPCS<FA: Field, FB: Field, EF: ExtensionField<FA> + ExtensionField
     ) -> Result<(), ProofError>;
 }
 
+#[derive(Debug)]
 pub struct WhirBatchPcs<FA, FB, EF, H, C, const DIGEST_ELEMS: usize>(
     pub WhirConfigBuilder<FA, EF, H, C, DIGEST_ELEMS>,
     pub WhirConfigBuilder<FB, EF, H, C, DIGEST_ELEMS>,

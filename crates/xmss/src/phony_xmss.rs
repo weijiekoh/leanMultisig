@@ -5,6 +5,7 @@ use crate::*;
 // Only 1 WOTS, everything else in the merkle tree is random
 // Useful for benchmark with a big lifetime, to speed up keys generation
 
+#[derive(Debug)]
 pub struct PhonyXmssSecretKey<const LOG_LIFETIME: usize> {
     pub wots_secret_key: WotsSecretKey,
     pub signature_index: usize,

@@ -4,6 +4,7 @@ use utils::{ToUsize, to_little_endian_bits};
 
 use crate::*;
 
+#[derive(Debug)]
 pub struct WotsSecretKey {
     pub pre_images: [Digest; V],
     public_key: WotsPublicKey,
@@ -11,6 +12,8 @@ pub struct WotsSecretKey {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WotsPublicKey(pub [Digest; V]);
+
+#[derive(Debug)]
 pub struct WotsSignature {
     pub chain_tips: [Digest; V],
     pub randomness: Digest,

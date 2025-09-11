@@ -14,6 +14,7 @@ use whir_p3::{
 
 use crate::pcs::PCS;
 
+#[derive(Debug)]
 pub struct RingSwitching<F, EF, InnerPcs, const EXTENSION_DEGREE: usize> {
     inner_pcs: InnerPcs,
     f: PhantomData<F>,

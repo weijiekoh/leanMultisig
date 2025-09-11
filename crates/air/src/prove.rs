@@ -167,7 +167,7 @@ pub fn prove_many_air_3<
                 MleGroupRef::Base(w.cols.clone()).into()
             }
         })
-        .collect::<Vec<MleGroup<EF>>>();
+        .collect::<Vec<MleGroup<'_, EF>>>();
     columns_for_zero_check.extend(witnesses_3.iter().map(|w| {
         if structured_air {
             MleGroupOwned::Extension(columns_up_and_down(w)).into()

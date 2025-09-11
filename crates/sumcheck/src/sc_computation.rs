@@ -93,6 +93,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct ProductComputation;
 
 impl<IF: ExtensionField<PF<EF>>, EF: ExtensionField<IF>> SumcheckComputation<IF, EF>

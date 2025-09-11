@@ -21,6 +21,7 @@ pub enum Mle<EF: ExtensionField<PF<EF>>> {
     ExtensionPacked(Vec<EFPacking<EF>>),
 }
 
+#[derive(Debug)]
 pub enum MleGroup<'a, EF: ExtensionField<PF<EF>>> {
     Owned(MleGroupOwned<EF>),
     Ref(MleGroupRef<'a, EF>),
@@ -38,6 +39,7 @@ impl<'a, EF: ExtensionField<PF<EF>>> From<MleGroupRef<'a, EF>> for MleGroup<'a, 
     }
 }
 
+#[derive(Debug)]
 pub enum MleGroupOwned<EF: ExtensionField<PF<EF>>> {
     Base(Vec<Vec<PF<EF>>>),
     Extension(Vec<Vec<EF>>),

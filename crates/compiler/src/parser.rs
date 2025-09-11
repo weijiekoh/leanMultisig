@@ -83,7 +83,7 @@ fn remove_comments(input: &str) -> String {
 }
 
 fn parse_constant_declaration(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<(String, usize), ParseError> {
     let mut inner = pair.into_inner();
@@ -104,7 +104,7 @@ fn parse_constant_declaration(
 }
 
 fn parse_function(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
     trash_var_count: &mut usize,
 ) -> Result<Function, ParseError> {
@@ -156,7 +156,7 @@ fn parse_function(
     })
 }
 
-fn parse_parameter(pair: Pair<Rule>) -> Result<(String, bool), ParseError> {
+fn parse_parameter(pair: Pair<'_, Rule>) -> Result<(String, bool), ParseError> {
     let mut inner = pair.into_inner();
     let first = inner.next().unwrap();
 
@@ -178,7 +178,7 @@ fn on_new_located_line(lines: &mut Vec<Line>, line_and_location: (Line, Location
 }
 
 fn parse_statement(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
     trash_var_count: &mut usize,
 ) -> Result<(Line, LocationInSourceCode), ParseError> {
@@ -202,7 +202,7 @@ fn parse_statement(
 }
 
 fn parse_match_statement(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
     trash_var_count: &mut usize,
 ) -> Result<Line, ParseError> {
@@ -234,7 +234,7 @@ fn parse_match_statement(
 }
 
 fn parse_const_expr(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<usize, ParseError> {
     let inner = pair.into_inner().next().unwrap();
@@ -265,7 +265,7 @@ fn parse_const_expr(
 }
 
 fn parse_if_statement(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
     trash_var_count: &mut usize,
 ) -> Result<Line, ParseError> {
@@ -303,7 +303,7 @@ fn parse_if_statement(
 }
 
 fn parse_assignment(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Line, ParseError> {
     let mut inner = pair.into_inner();
@@ -315,7 +315,7 @@ fn parse_assignment(
 }
 
 fn parse_array_assign(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Line, ParseError> {
     let mut inner = pair.into_inner();
@@ -330,7 +330,7 @@ fn parse_array_assign(
 }
 
 fn parse_for_statement(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
     trash_var_count: &mut usize,
 ) -> Result<Line, ParseError> {
@@ -374,7 +374,7 @@ fn parse_for_statement(
 }
 
 fn parse_return_statement(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Line, ParseError> {
     let mut return_data = Vec::new();
@@ -387,7 +387,7 @@ fn parse_return_statement(
 }
 
 fn parse_expression(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Expression, ParseError> {
     match pair.as_rule() {
@@ -404,7 +404,7 @@ fn parse_expression(
 }
 
 fn parse_array_access(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Expression, ParseError> {
     let mut inner = pair.into_inner();
@@ -417,7 +417,7 @@ fn parse_array_access(
 }
 
 fn parse_binary_expr(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
     operation: HighLevelOperation,
 ) -> Result<Expression, ParseError> {
@@ -437,7 +437,7 @@ fn parse_binary_expr(
 }
 
 fn parse_primary(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Expression, ParseError> {
     let inner = pair.into_inner().next().unwrap();
@@ -452,7 +452,7 @@ fn parse_primary(
 }
 
 fn parse_tuple_expression(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Vec<Expression>, ParseError> {
     pair.into_inner()
@@ -461,7 +461,7 @@ fn parse_tuple_expression(
 }
 
 fn parse_function_call(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
     trash_var_count: &mut usize,
 ) -> Result<Line, ParseError> {
@@ -582,7 +582,7 @@ fn parse_function_call(
 }
 
 fn parse_condition(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Boolean, ParseError> {
     let inner = pair.into_inner().next().unwrap();
@@ -598,7 +598,7 @@ fn parse_condition(
 }
 
 fn parse_assert_eq(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Line, ParseError> {
     let mut inner = pair.into_inner();
@@ -608,7 +608,7 @@ fn parse_assert_eq(
 }
 
 fn parse_assert_not_eq(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Line, ParseError> {
     let mut inner = pair.into_inner();
@@ -618,7 +618,7 @@ fn parse_assert_not_eq(
 }
 
 fn parse_var_or_constant(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<SimpleExpr, ParseError> {
     let text = pair.as_str();
@@ -658,7 +658,7 @@ fn parse_var_or_constant(
 }
 
 fn parse_var_list(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     constants: &BTreeMap<String, usize>,
 ) -> Result<Vec<SimpleExpr>, ParseError> {
     pair.into_inner()

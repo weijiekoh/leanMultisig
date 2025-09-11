@@ -13,6 +13,7 @@ use crate::{
     combinatorics::{TreeOfVariables, TreeOfVariablesInner},
 };
 
+#[derive(Debug)]
 pub struct MultiCommitmentWitness<F: Field, EF: ExtensionField<F>, Pcs: PCS<F, EF>> {
     pub tree: TreeOfVariables,
     pub inner_witness: Pcs::Witness,
@@ -68,6 +69,7 @@ pub fn packed_pcs_global_statements<EF: Field>(
         .global_statement(&tree.vars_per_polynomial, statements_per_polynomial, &[])
 }
 
+#[derive(Debug)]
 pub struct ParsedMultiCommitment<F: Field, EF: ExtensionField<F>, Pcs: PCS<F, EF>> {
     pub tree: TreeOfVariables,
     pub inner_parsed_commitment: Pcs::ParsedCommitment,

@@ -20,6 +20,7 @@ use whir_p3::{fiat_shamir::errors::ProofError, utils::uninitialized_vec};
 
 use crate::quotient_gkr::{prove_gkr_quotient, verify_gkr_quotient};
 
+#[derive(Debug)]
 pub struct LogupStarStatements<EF> {
     pub on_indexes: Evaluation<EF>,
     pub on_table: Evaluation<EF>,

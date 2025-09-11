@@ -7,6 +7,7 @@ use std::{
 
 use p3_util::{log2_ceil_usize, log2_strict_usize};
 
+#[derive(Debug)]
 pub struct AirWitness<'a, F> {
     pub cols: Vec<&'a [F]>,
     pub column_groups: Vec<Range<usize>>,

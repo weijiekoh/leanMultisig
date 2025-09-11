@@ -270,6 +270,7 @@ pub fn execute_bytecode(
     .unwrap()
 }
 
+#[derive(Debug)]
 pub struct ExecutionResult {
     pub no_vec_runtime_memory: usize,
     pub public_memory_size: usize,

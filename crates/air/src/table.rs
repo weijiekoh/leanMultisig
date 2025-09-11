@@ -10,6 +10,7 @@ use utils::{ConstraintChecker, PF};
 
 use crate::{NormalAir, PackedAir, witness::AirWitness};
 
+#[derive(Debug)]
 pub struct AirTable<EF: Field, A, AP> {
     pub air: A,
     pub air_packed: AP,
@@ -40,7 +41,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
     #[instrument(name = "Check trace validity", skip_all)]
     pub fn check_trace_validity<IF: ExtensionField<PF<EF>>>(
         &self,
-        witness: &AirWitness<IF>,
+        witness: &AirWitness<'_, IF>,
     ) -> Result<(), String>
     where
         EF: ExtensionField<IF>,
@@ -48,7 +49,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
         if witness.n_columns() != self.n_columns() {
             return Err(format!("Invalid number of columns",));
         }
-        let handle_errors = |row: usize, constraint_checker: &mut ConstraintChecker<IF, EF>| {
+        let handle_errors = |row: usize, constraint_checker: &mut ConstraintChecker<'_, IF, EF>| {
             if constraint_checker.errors.len() > 0 {
                 return Err(format!(
                     "Trace is not valid at row {}: contraints not respected: {}",
@@ -81,7 +82,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
                 if TypeId::of::<IF>() == TypeId::of::<EF>() {
                     unsafe {
                         self.air
-                            .eval(transmute::<_, &mut ConstraintChecker<EF, EF>>(
+                            .eval(transmute::<_, &mut ConstraintChecker<'_, EF, EF>>(
                                 &mut constraints_checker,
                             ));
                     }
@@ -89,7 +90,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
                     assert_eq!(TypeId::of::<IF>(), TypeId::of::<PF<EF>>());
                     unsafe {
                         self.air
-                            .eval(transmute::<_, &mut ConstraintChecker<PF<EF>, EF>>(
+                            .eval(transmute::<_, &mut ConstraintChecker<'_, PF<EF>, EF>>(
                                 &mut constraints_checker,
                             ));
                     }
@@ -110,7 +111,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
                 if TypeId::of::<IF>() == TypeId::of::<EF>() {
                     unsafe {
                         self.air
-                            .eval(transmute::<_, &mut ConstraintChecker<EF, EF>>(
+                            .eval(transmute::<_, &mut ConstraintChecker<'_, EF, EF>>(
                                 &mut constraints_checker,
                             ));
                     }
@@ -118,7 +119,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
                     assert_eq!(TypeId::of::<IF>(), TypeId::of::<PF<EF>>());
                     unsafe {
                         self.air
-                            .eval(transmute::<_, &mut ConstraintChecker<PF<EF>, EF>>(
+                            .eval(transmute::<_, &mut ConstraintChecker<'_, PF<EF>, EF>>(
                                 &mut constraints_checker,
                             ));
                     }

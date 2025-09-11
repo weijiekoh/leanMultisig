@@ -25,6 +25,7 @@ use zk_vm_trace::WitnessDotProduct;
 const DOT_PRODUCT_AIR_COLUMNS: usize = 9;
 pub const DOT_PRODUCT_AIR_COLUMN_GROUPS: [Range<usize>; 5] = [0..1, 1..2, 2..5, 5..8, 8..9];
 
+#[derive(Debug)]
 pub struct DotProductAir;
 
 impl<F> BaseAir<F> for DotProductAir {

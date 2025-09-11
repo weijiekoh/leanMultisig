@@ -2,16 +2,19 @@ use rand::Rng;
 
 use crate::*;
 
+#[derive(Debug)]
 pub struct XmssSecretKey<const LOG_LIFETIME: usize> {
     pub wots_secret_keys: Vec<WotsSecretKey>,
     pub merkle_tree: Vec<Vec<Digest>>,
 }
 
+#[derive(Debug)]
 pub struct XmssSignature {
     pub wots_signature: WotsSignature,
     pub merkle_proof: Vec<(bool, Digest)>,
 }
 
+#[derive(Debug)]
 pub struct XmssPublicKey<const LOG_LIFETIME: usize>(pub Digest);
 
 impl<const LOG_LIFETIME: usize> XmssSecretKey<LOG_LIFETIME> {
