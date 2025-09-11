@@ -7,7 +7,10 @@ use crate::{
     },
     precompiles::Precompile,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::{Display, Formatter},
+};
 use utils::ToUsize;
 use vm::LocationInSourceCode;
 
@@ -1891,26 +1894,21 @@ fn replace_vars_by_const_in_lines(lines: &mut [Line], map: &BTreeMap<Var, F>) {
         }
     }
 }
-
-impl ToString for SimpleLine {
-    fn to_string(&self) -> String {
-        self.to_string_with_indent(0)
+impl Display for SimpleLine {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string_with_indent(0))
     }
 }
 
-impl ToString for VarOrConstMallocAccess {
-    fn to_string(&self) -> String {
+impl Display for VarOrConstMallocAccess {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            VarOrConstMallocAccess::Var(var) => var.to_string(),
+            VarOrConstMallocAccess::Var(var) => write!(f, "{}", var),
             VarOrConstMallocAccess::ConstMallocAccess {
                 malloc_label,
                 offset,
             } => {
-                format!(
-                    "ConstMallocAccess({}, {})",
-                    malloc_label,
-                    offset.to_string()
-                )
+                write!(f, "ConstMallocAccess({}, {})", malloc_label, offset)
             }
         }
     }
@@ -1927,7 +1925,7 @@ impl SimpleLine {
                     .map(|(pattern, stmt)| {
                         format!(
                             "{} => {}",
-                            pattern.to_string(),
+                            pattern,
                             stmt.iter()
                                 .map(|line| line.to_string_with_indent(indent + 1))
                                 .collect::<Vec<_>>()
@@ -1937,7 +1935,7 @@ impl SimpleLine {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                format!("match {} {{\n{}\n{}}}", value.to_string(), arms_str, spaces)
+                format!("match {} {{\n{}\n{}}}", value, arms_str, spaces)
             }
             SimpleLine::Assignment {
                 var,
@@ -1945,13 +1943,7 @@ impl SimpleLine {
                 arg0,
                 arg1,
             } => {
-                format!(
-                    "{} = {} {} {}",
-                    var.to_string(),
-                    arg0.to_string(),
-                    operation.to_string(),
-                    arg1.to_string()
-                )
+                format!("{} = {} {} {}", var, arg0, operation, arg1)
             }
             SimpleLine::DecomposeBits {
                 var: result,
@@ -1960,24 +1952,19 @@ impl SimpleLine {
             } => {
                 format!(
                     "{} = decompose_bits({})",
-                    result.to_string(),
+                    result,
                     to_decompose
                         .iter()
-                        .map(|expr| expr.to_string())
+                        .map(|expr| format!("{}", expr))
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
             }
             SimpleLine::CounterHint { var: result } => {
-                format!("{} = counter_hint()", result.to_string(),)
+                format!("{} = counter_hint()", result)
             }
             SimpleLine::RawAccess { res, index, shift } => {
-                format!(
-                    "{} = memory[{} + {}]",
-                    res.to_string(),
-                    index.to_string(),
-                    shift.to_string()
-                )
+                format!("memory[{} + {}] = {}", index, shift, res)
             }
             SimpleLine::IfNotZero {
                 condition,
@@ -1997,20 +1984,11 @@ impl SimpleLine {
                     .join("\n");
 
                 if else_branch.is_empty() {
-                    format!(
-                        "if {} != 0 {{\n{}\n{}}}",
-                        condition.to_string(),
-                        then_str,
-                        spaces
-                    )
+                    format!("if {} != 0 {{\n{}\n{}}}", condition, then_str, spaces)
                 } else {
                     format!(
                         "if {} != 0 {{\n{}\n{}}} else {{\n{}\n{}}}",
-                        condition.to_string(),
-                        then_str,
-                        spaces,
-                        else_str,
-                        spaces
+                        condition, then_str, spaces, else_str, spaces
                     )
                 }
             }
@@ -2021,12 +1999,12 @@ impl SimpleLine {
             } => {
                 let args_str = args
                     .iter()
-                    .map(|arg| arg.to_string())
+                    .map(|arg| format!("{}", arg))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let return_data_str = return_data
                     .iter()
-                    .map(|var| var.to_string())
+                    .map(|var| format!("{}", var))
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -2039,7 +2017,7 @@ impl SimpleLine {
             SimpleLine::FunctionRet { return_data } => {
                 let return_data_str = return_data
                     .iter()
-                    .map(|arg| arg.to_string())
+                    .map(|arg| format!("{}", arg))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("return {}", return_data_str)
@@ -2047,9 +2025,9 @@ impl SimpleLine {
             SimpleLine::Precompile { precompile, args } => {
                 format!(
                     "{}({})",
-                    &precompile.name.to_string(),
+                    &precompile.name,
                     args.iter()
-                        .map(|arg| arg.to_string())
+                        .map(|arg| format!("{}", arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
@@ -2060,7 +2038,7 @@ impl SimpleLine {
             } => {
                 let content_str = content
                     .iter()
-                    .map(|c| c.to_string())
+                    .map(|c| format!("{}", c))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("print({})", content_str)
@@ -2075,14 +2053,14 @@ impl SimpleLine {
                 } else {
                     "malloc"
                 };
-                format!("{} = {}({})", var.to_string(), alloc_type, size.to_string())
+                format!("{} = {}({})", var, alloc_type, size)
             }
             SimpleLine::ConstMalloc {
                 var,
                 size,
                 label: _,
             } => {
-                format!("{} = malloc({})", var.to_string(), size.to_string())
+                format!("{} = malloc({})", var, size)
             }
             SimpleLine::Panic => "panic".to_string(),
             SimpleLine::LocationReport { .. } => Default::default(),
@@ -2091,12 +2069,12 @@ impl SimpleLine {
     }
 }
 
-impl ToString for SimpleFunction {
-    fn to_string(&self) -> String {
+impl Display for SimpleFunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let args_str = self
             .arguments
             .iter()
-            .map(|arg| arg.to_string())
+            .map(|arg| format!("{}", arg))
             .collect::<Vec<_>>()
             .join(", ");
 
@@ -2108,12 +2086,14 @@ impl ToString for SimpleFunction {
             .join("\n");
 
         if self.instructions.is_empty() {
-            format!(
+            write!(
+                f,
                 "fn {}({}) -> {} {{}}",
                 self.name, args_str, self.n_returned_vars
             )
         } else {
-            format!(
+            write!(
+                f,
                 "fn {}({}) -> {} {{\n{}\n}}",
                 self.name, args_str, self.n_returned_vars, instructions_str
             )
@@ -2121,15 +2101,16 @@ impl ToString for SimpleFunction {
     }
 }
 
-impl ToString for SimpleProgram {
-    fn to_string(&self) -> String {
-        let mut result = String::new();
-        for (i, function) in self.functions.values().enumerate() {
-            if i > 0 {
-                result.push('\n');
+impl Display for SimpleProgram {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+        for function in self.functions.values() {
+            if !first {
+                writeln!(f)?;
             }
-            result.push_str(&function.to_string());
+            write!(f, "{}", function)?;
+            first = false;
         }
-        result
+        Ok(())
     }
 }

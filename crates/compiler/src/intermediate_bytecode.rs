@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
+use std::fmt::Formatter;
 
 use p3_field::PrimeCharacteristicRing;
 use p3_field::PrimeField64;
@@ -197,81 +199,67 @@ impl IntermediateInstruction {
     }
 }
 
-impl ToString for IntermediateValue {
-    fn to_string(&self) -> String {
+impl Display for IntermediateValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            IntermediateValue::Constant(value) => value.to_string(),
-            IntermediateValue::Fp => "fp".to_string(),
+            IntermediateValue::Constant(value) => write!(f, "{}", value),
+            IntermediateValue::Fp => write!(f, "fp"),
             IntermediateValue::MemoryAfterFp { offset } => {
-                format!("m[fp + {}]", offset.to_string())
+                write!(f, "m[fp + {}]", offset)
             }
         }
     }
 }
 
-impl ToString for IntermediaryMemOrFpOrConstant {
-    fn to_string(&self) -> String {
+impl Display for IntermediaryMemOrFpOrConstant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MemoryAfterFp { offset } => format!("m[fp + {}]", offset.to_string()),
-            Self::Fp => "fp".to_string(),
-            Self::Constant(c) => format!("{}", c.to_string()),
+            Self::MemoryAfterFp { offset } => write!(f, "m[fp + {}]", offset),
+            Self::Fp => write!(f, "fp"),
+            Self::Constant(c) => write!(f, "{}", c),
         }
     }
 }
 
-impl ToString for IntermediateInstruction {
-    fn to_string(&self) -> String {
+impl Display for IntermediateInstruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Deref {
                 shift_0,
                 shift_1,
                 res,
-            } => format!(
-                "{} = m[m[fp + {}] + {}]",
-                res.to_string(),
-                shift_0.to_string(),
-                shift_1.to_string()
-            ),
+            } => write!(f, "{} = m[m[fp + {}] + {}]", res, shift_0, shift_1),
             Self::DotProduct {
                 arg0,
                 arg1,
                 res,
                 size,
-            } => format!(
-                "dot_product({}, {}, {}, {})",
-                arg0.to_string(),
-                arg1.to_string(),
-                res.to_string(),
-                size.to_string()
-            ),
+            } => write!(f, "dot_product({}, {}, {}, {})", arg0, arg1, res, size),
             Self::MultilinearEval {
                 coeffs,
                 point,
                 res,
                 n_vars,
-            } => format!(
+            } => write!(
+                f,
                 "multilinear_eval({}, {}, {}, {})",
-                coeffs.to_string(),
-                point.to_string(),
-                res.to_string(),
-                n_vars.to_string()
+                coeffs, point, res, n_vars
             ),
             Self::DecomposeBits {
                 res_offset,
                 to_decompose,
             } => {
-                format!(
-                    "m[fp + {}..] = decompose_bits({})",
-                    res_offset,
-                    to_decompose
-                        .iter()
-                        .map(|expr| expr.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+                write!(f, "m[fp + {}..] = decompose_bits(", res_offset)?;
+                for (i, expr) in to_decompose.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", expr)?;
+                }
+                write!(f, ")")
             }
             Self::CounterHint { res_offset } => {
-                format!("m[fp + {}] = counter_hint()", res_offset)
+                write!(f, "m[fp + {}] = counter_hint()", res_offset)
             }
             Self::Computation {
                 operation,
@@ -279,20 +267,14 @@ impl ToString for IntermediateInstruction {
                 arg_c,
                 res,
             } => {
-                format!(
-                    "{} = {} {} {}",
-                    res.to_string(),
-                    arg_a.to_string(),
-                    operation.to_string(),
-                    arg_c.to_string()
-                )
+                write!(f, "{} = {} {} {}", res, arg_a, operation, arg_c)
             }
-            Self::Panic => "panic".to_string(),
+            Self::Panic => write!(f, "panic"),
             Self::Jump { dest, updated_fp } => {
                 if let Some(fp) = updated_fp {
-                    format!("jump {} with fp = {}", dest.to_string(), fp.to_string())
+                    write!(f, "jump {} with fp = {}", dest, fp)
                 } else {
-                    format!("jump {}", dest.to_string())
+                    write!(f, "jump {}", dest)
                 }
             }
             Self::JumpIfNotZero {
@@ -301,98 +283,84 @@ impl ToString for IntermediateInstruction {
                 updated_fp,
             } => {
                 if let Some(fp) = updated_fp {
-                    format!(
+                    write!(
+                        f,
                         "jump_if_not_zero {} to {} with fp = {}",
-                        condition.to_string(),
-                        dest.to_string(),
-                        fp.to_string()
+                        condition, dest, fp
                     )
                 } else {
-                    format!(
-                        "jump_if_not_zero {} to {}",
-                        condition.to_string(),
-                        dest.to_string()
-                    )
+                    write!(f, "jump_if_not_zero {} to {}", condition, dest)
                 }
             }
             Self::Poseidon2_16 { arg_a, arg_b, res } => {
-                format!(
-                    "{} = poseidon2_16({}, {})",
-                    arg_a.to_string(),
-                    arg_b.to_string(),
-                    res.to_string(),
-                )
+                write!(f, "{} = poseidon2_16({}, {})", res, arg_a, arg_b)
             }
             Self::Poseidon2_24 { arg_a, arg_b, res } => {
-                format!(
-                    "{} = poseidon2_24({}, {})",
-                    res.to_string(),
-                    arg_a.to_string(),
-                    arg_b.to_string(),
-                )
+                write!(f, "{} = poseidon2_24({}, {})", res, arg_a, arg_b)
             }
             Self::Inverse { arg, res_offset } => {
-                format!("m[fp + {}] = inverse({})", res_offset, arg.to_string())
+                write!(f, "m[fp + {}] = inverse({})", res_offset, arg)
             }
             Self::RequestMemory {
                 offset,
                 size,
                 vectorized,
-            } => format!(
+            } => write!(
+                f,
                 "m[fp + {}] = {}({})",
-                offset.to_string(),
+                offset,
                 if *vectorized { "malloc_vec" } else { "malloc" },
-                size.to_string(),
+                size
             ),
-            Self::Print { line_info, content } => format!(
-                "print {}: {}",
-                line_info,
-                content
-                    .iter()
-                    .map(|c| c.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Self::LocationReport { .. } => Default::default(),
+            Self::Print { line_info, content } => {
+                write!(f, "print {}: ", line_info)?;
+                for (i, c) in content.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", c)?;
+                }
+                Ok(())
+            }
+            Self::LocationReport { .. } => Ok(()),
         }
     }
 }
 
-impl ToString for HighLevelOperation {
-    fn to_string(&self) -> String {
+impl Display for HighLevelOperation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            HighLevelOperation::Add => "+".to_string(),
-            HighLevelOperation::Mul => "*".to_string(),
-            HighLevelOperation::Sub => "-".to_string(),
-            HighLevelOperation::Div => "/".to_string(),
-            HighLevelOperation::Exp => "**".to_string(),
-            HighLevelOperation::Mod => "%".to_string(),
+            HighLevelOperation::Add => write!(f, "+"),
+            HighLevelOperation::Mul => write!(f, "*"),
+            HighLevelOperation::Sub => write!(f, "-"),
+            HighLevelOperation::Div => write!(f, "/"),
+            HighLevelOperation::Exp => write!(f, "**"),
+            HighLevelOperation::Mod => write!(f, "%"),
         }
     }
 }
 
-impl ToString for IntermediateBytecode {
-    fn to_string(&self) -> String {
-        let mut res = String::new();
+impl Display for IntermediateBytecode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for (label, instructions) in &self.bytecode {
-            res.push_str(&format!("\n{}:\n", label));
+            writeln!(f, "\n{}:", label)?;
             for instruction in instructions {
-                res.push_str(&format!("  {}\n", instruction.to_string()));
+                writeln!(f, "  {}", instruction)?;
             }
         }
         for (i, match_blocks) in self.match_blocks.iter().enumerate() {
-            res.push_str(&format!("\nMatch {}:\n", i));
+            writeln!(f, "\nMatch {}:", i)?;
             for (j, case) in match_blocks.iter().enumerate() {
-                res.push_str(&format!("  Case {}:\n", j));
+                writeln!(f, "  Case {}:", j)?;
                 for instruction in case {
-                    res.push_str(&format!("    {}\n", instruction.to_string()));
+                    writeln!(f, "    {}", instruction)?;
                 }
             }
         }
-        res.push_str("\nMemory size per function:\n");
+        writeln!(f, "\nMemory size per function:")?;
         for (function_name, size) in &self.memory_size_per_function {
-            res.push_str(&format!("{}: {}\n", function_name, size));
+            writeln!(f, "{}: {}", function_name, size)?;
         }
-        res
+        Ok(())
     }
 }

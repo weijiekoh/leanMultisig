@@ -1,5 +1,6 @@
 use p3_field::PrimeCharacteristicRing;
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use utils::ToUsize;
 use vm::*;
 
@@ -328,25 +329,19 @@ pub enum Line {
         location: LocationInSourceCode,
     },
 }
-
-impl ToString for Expression {
-    fn to_string(&self) -> String {
+impl Display for Expression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expression::Value(val) => val.to_string(),
+            Expression::Value(val) => write!(f, "{}", val),
             Expression::ArrayAccess { array, index } => {
-                format!("{}[{}]", array.to_string(), index.to_string())
+                write!(f, "{}[{}]", array, index)
             }
             Expression::Binary {
                 left,
                 operation,
                 right,
             } => {
-                format!(
-                    "({} {} {})",
-                    left.to_string(),
-                    operation.to_string(),
-                    right.to_string()
-                )
+                write!(f, "({} {} {})", left, operation, right)
             }
         }
     }
@@ -369,33 +364,23 @@ impl Line {
                             .map(|line| line.to_string_with_indent(indent + 1))
                             .collect::<Vec<_>>()
                             .join("\n");
-                        format!(
-                            "{} => {{\n{}\n{}}}",
-                            const_expr.to_string(),
-                            body_str,
-                            spaces
-                        )
+                        format!("{} => {{\n{}\n{}}}", const_expr, body_str, spaces)
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
-                format!("match {} {{\n{}\n{}}}", value.to_string(), arms_str, spaces)
+                format!("match {} {{\n{}\n{}}}", value, arms_str, spaces)
             }
             Line::Assignment { var, value } => {
-                format!("{} = {}", var.to_string(), value.to_string())
+                format!("{} = {}", var, value)
             }
             Line::ArrayAssign {
                 array,
                 index,
                 value,
             } => {
-                format!(
-                    "{}[{}] = {}",
-                    array.to_string(),
-                    index.to_string(),
-                    value.to_string()
-                )
+                format!("{}[{}] = {}", array, index, value)
             }
-            Line::Assert(condition) => format!("assert {}", condition.to_string()),
+            Line::Assert(condition) => format!("assert {}", condition),
             Line::IfCondition {
                 condition,
                 then_branch,
@@ -414,25 +399,16 @@ impl Line {
                     .join("\n");
 
                 if else_branch.is_empty() {
-                    format!(
-                        "if {} {{\n{}\n{}}}",
-                        condition.to_string(),
-                        then_str,
-                        spaces
-                    )
+                    format!("if {} {{\n{}\n{}}}", condition, then_str, spaces)
                 } else {
                     format!(
                         "if {} {{\n{}\n{}}} else {{\n{}\n{}}}",
-                        condition.to_string(),
-                        then_str,
-                        spaces,
-                        else_str,
-                        spaces
+                        condition, then_str, spaces, else_str, spaces
                     )
                 }
             }
             Line::CounterHint { var } => {
-                format!("{} = counter_hint({})", var.to_string(), var.to_string())
+                format!("{} = counter_hint({})", var, var)
             }
             Line::ForLoop {
                 iterator,
@@ -449,10 +425,10 @@ impl Line {
                     .join("\n");
                 format!(
                     "for {} in {}{}..{} {}{{\n{}\n{}}}",
-                    iterator.to_string(),
-                    start.to_string(),
+                    iterator,
+                    start,
                     if *rev { "rev " } else { "" },
-                    end.to_string(),
+                    end,
                     if *unroll { "unroll " } else { "" },
                     body_str,
                     spaces
@@ -465,12 +441,12 @@ impl Line {
             } => {
                 let args_str = args
                     .iter()
-                    .map(|arg| arg.to_string())
+                    .map(|arg| format!("{}", arg))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let return_data_str = return_data
                     .iter()
-                    .map(|var| var.to_string())
+                    .map(|var| format!("{}", var))
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -483,7 +459,7 @@ impl Line {
             Line::FunctionRet { return_data } => {
                 let return_data_str = return_data
                     .iter()
-                    .map(|arg| arg.to_string())
+                    .map(|arg| format!("{}", arg))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("return {}", return_data_str)
@@ -491,9 +467,9 @@ impl Line {
             Line::Precompile { precompile, args } => {
                 format!(
                     "{}({})",
-                    precompile.name.to_string(),
+                    precompile.name,
                     args.iter()
-                        .map(|arg| arg.to_string())
+                        .map(|arg| format!("{}", arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
@@ -504,7 +480,7 @@ impl Line {
             } => {
                 let content_str = content
                     .iter()
-                    .map(|c| c.to_string())
+                    .map(|c| format!("{}", c))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("print({})", content_str)
@@ -515,19 +491,15 @@ impl Line {
                 vectorized,
             } => {
                 if *vectorized {
-                    format!(
-                        "{} = malloc_vectorized({})",
-                        var.to_string(),
-                        size.to_string()
-                    )
+                    format!("{} = malloc_vectorized({})", var, size)
                 } else {
-                    format!("{} = malloc({})", var.to_string(), size.to_string())
+                    format!("{} = malloc({})", var, size)
                 }
             }
             Line::DecomposeBits { var, to_decompose } => {
                 format!(
                     "{} = decompose_bits({})",
-                    var.to_string(),
+                    var,
                     to_decompose
                         .iter()
                         .map(|expr| expr.to_string())
@@ -542,96 +514,92 @@ impl Line {
     }
 }
 
-impl ToString for Boolean {
-    fn to_string(&self) -> String {
+impl Display for Boolean {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Boolean::Equal { left, right } => {
-                format!("{} == {}", left.to_string(), right.to_string())
+                write!(f, "{} == {}", left, right)
             }
             Boolean::Different { left, right } => {
-                format!("{} != {}", left.to_string(), right.to_string())
+                write!(f, "{} != {}", left, right)
             }
         }
     }
 }
 
-impl ToString for ConstantValue {
-    fn to_string(&self) -> String {
+impl Display for ConstantValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstantValue::Scalar(scalar) => scalar.to_string(),
-            ConstantValue::PublicInputStart => "@public_input_start".to_string(),
-            ConstantValue::PointerToZeroVector => "@pointer_to_zero_vector".to_string(),
-            ConstantValue::PointerToOneVector => "@pointer_to_one_vector".to_string(),
+            ConstantValue::Scalar(scalar) => write!(f, "{}", scalar),
+            ConstantValue::PublicInputStart => write!(f, "@public_input_start"),
+            ConstantValue::PointerToZeroVector => write!(f, "@pointer_to_zero_vector"),
+            ConstantValue::PointerToOneVector => write!(f, "@pointer_to_one_vector"),
             ConstantValue::FunctionSize { function_name } => {
-                format!("@function_size_{}", function_name)
+                write!(f, "@function_size_{}", function_name)
             }
-            ConstantValue::Label(label) => label.to_string(),
+            ConstantValue::Label(label) => write!(f, "{}", label),
             ConstantValue::MatchFirstBlockStart { match_index } => {
-                format!("@match_first_block_start_{}", match_index)
+                write!(f, "@match_first_block_start_{}", match_index)
             }
             ConstantValue::MatchBlockSize { match_index } => {
-                format!("@match_block_size_{}", match_index)
+                write!(f, "@match_block_size_{}", match_index)
             }
         }
     }
 }
 
-impl ToString for SimpleExpr {
-    fn to_string(&self) -> String {
+impl Display for SimpleExpr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SimpleExpr::Var(var) => var.to_string(),
-            SimpleExpr::Constant(constant) => constant.to_string(),
+            SimpleExpr::Var(var) => write!(f, "{}", var),
+            SimpleExpr::Constant(constant) => write!(f, "{}", constant),
             SimpleExpr::ConstMallocAccess {
                 malloc_label,
                 offset,
             } => {
-                format!("malloc_access({}, {})", malloc_label, offset.to_string())
+                write!(f, "malloc_access({}, {})", malloc_label, offset)
             }
         }
     }
 }
 
-impl ToString for ConstExpression {
-    fn to_string(&self) -> String {
+impl Display for ConstExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstExpression::Value(value) => value.to_string(),
+            ConstExpression::Value(value) => write!(f, "{}", value),
             ConstExpression::Binary {
                 left,
                 operation,
                 right,
             } => {
-                format!(
-                    "({} {} {})",
-                    left.to_string(),
-                    operation.to_string(),
-                    right.to_string()
-                )
+                write!(f, "({} {} {})", left, operation, right)
             }
         }
     }
 }
 
-impl ToString for Line {
-    fn to_string(&self) -> String {
-        self.to_string_with_indent(0)
+impl Display for Line {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string_with_indent(0))
     }
 }
 
-impl ToString for Program {
-    fn to_string(&self) -> String {
-        let mut result = String::new();
-        for (i, function) in self.functions.values().enumerate() {
-            if i > 0 {
-                result.push('\n');
+impl Display for Program {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+        for function in self.functions.values() {
+            if !first {
+                writeln!(f)?;
             }
-            result.push_str(&function.to_string());
+            write!(f, "{}", function)?;
+            first = false;
         }
-        result
+        Ok(())
     }
 }
 
-impl ToString for Function {
-    fn to_string(&self) -> String {
+impl Display for Function {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let args_str = self
             .arguments
             .iter()
@@ -650,12 +618,14 @@ impl ToString for Function {
             .join("\n");
 
         if self.body.is_empty() {
-            format!(
+            write!(
+                f,
                 "fn {}({}) -> {} {{}}",
                 self.name, args_str, self.n_returned_vars
             )
         } else {
-            format!(
+            write!(
+                f,
                 "fn {}({}) -> {} {{\n{}\n}}",
                 self.name, args_str, self.n_returned_vars, instructions_str
             )
