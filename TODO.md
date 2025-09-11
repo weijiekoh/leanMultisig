@@ -7,7 +7,7 @@
 - inverse folding ordering in WHIR to enable Packing during sumcheck (more generally, TODO packing everywhere)
 - one can "move out" the variable of the eq(.) polynomials out of the sumcheck computation in WHIR (as done in the PIOP)
 - Structured AIR: often no all the columns use both up/down -> only handle the used ones to speed up the PIOP zerocheck
-- use RowMAjorMatrix instead of Vec<Vec> for witness
+- use RowMAjorMatrix instead of Vec<Vec> for witness, and avoid any transpositions as suggested by Thomas
 - Fill Precompile tables during bytecode execution
 - Use Univariate Skip to commit to tables with k.2^n rows (k small)
 - increase density of multi commitments -> we can almost reduce by 2x commitment costs (question: will perf be good enough in order to avoid using the "jagged pcs" (cf sp1 hypercube)?)
