@@ -20,6 +20,7 @@ fn test_xmss_aggregate() {
 
     const V = 68;
     const W = 4;
+    const TARGET_SUM = 114;
     const LOG_LIFETIME = LOG_LIFETIME_PLACE_HOLDER;
     const N_PUBLIC_KEYS = N_PUBLIC_KEYS_PLACE_HOLDER;
     const XMSS_SIG_SIZE = XMSS_SIG_SIZE_PLACE_HOLDER; // vectorized and padded
@@ -75,7 +76,7 @@ fn test_xmss_aggregate() {
             }
         }
 
-        // we need to check that the (hinted) bit decomposition is valid
+        // we need to check that the (hinted) bit decomposition corresponds to the field elements derived from poseidon
 
         for i in 0..6 unroll {
             powers_scaled_w = malloc(12);
@@ -100,6 +101,15 @@ fn test_xmss_aggregate() {
 
             assert powers_scaled_sum_w[10] + powers_scaled_sum_2[5] == compressed_ptr[i];
         }
+
+        // we need to check the target sum
+        sums = malloc(V);
+        sums[0] = encoding[0];
+        for i in 1..V unroll {
+            sums[i] = sums[i - 1] + encoding[i];
+        }
+        assert sums[V - 1] == TARGET_SUM;
+
 
         public_key = malloc_vec(V * 2);
 
