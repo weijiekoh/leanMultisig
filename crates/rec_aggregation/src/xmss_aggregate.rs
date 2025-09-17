@@ -1,16 +1,16 @@
 use std::{env, time::Instant};
 
-use compiler::*;
+use lean_compiler::*;
 use p3_field::Field;
 use p3_field::PrimeCharacteristicRing;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 
-use vm::*;
-use xmss::{PhonyXmssSecretKey, V, XmssSignature};
-use zk_vm::{
+use lean_prover::{
     build_batch_pcs, prove_execution::prove_execution, verify_execution::verify_execution,
 };
+use lean_vm::*;
+use xmss::{PhonyXmssSecretKey, V, XmssSignature};
 
 #[test]
 fn test_xmss_aggregate() {
