@@ -80,7 +80,7 @@ fn prove_air<
     let columns_for_zero_check_packed = columns_for_zero_check.by_ref().pack();
 
     let (outer_sumcheck_challenge, inner_sums, _) = info_span!("zerocheck").in_scope(|| {
-        sumcheck::prove::<_, _, _>(
+        sumcheck::prove::<_, _, _, _>(
             univariate_skips,
             columns_for_zero_check_packed,
             &table.air,
@@ -266,7 +266,7 @@ fn open_structured_columns<'a, EF: ExtensionField<PF<EF>> + ExtensionField<IF>, 
     ]);
 
     let n_groups = witness.column_groups.len();
-    let (inner_challenges, inner_evals, _) = sumcheck::prove::<EF, _, _>(
+    let (inner_challenges, inner_evals, _) = sumcheck::prove::<EF, _, _, _>(
         1,
         inner_mle,
         &ProductComputation,
