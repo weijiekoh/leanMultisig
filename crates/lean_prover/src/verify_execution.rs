@@ -1,7 +1,6 @@
 use crate::common::*;
 use crate::*;
 use ::air::table::AirTable;
-use ::air::verify_many_air_2;
 use lean_vm::*;
 use lookup::verify_gkr_product;
 use lookup::verify_logup_star;
@@ -420,19 +419,18 @@ pub fn verify_execution(
         &DOT_PRODUCT_AIR_COLUMN_GROUPS,
     )?;
 
-    let [p16_evals_to_verify, p24_evals_to_verify] = verify_many_air_2(
+    let p16_evals_to_verify = p16_table.verify(
         &mut verifier_state,
-        &[&p16_table],
-        &[&p24_table],
         UNIVARIATE_SKIPS,
-        &[log_n_p16, log_n_p24],
-        &[
-            poseidon_16_column_groups(&p16_air),
-            poseidon_24_column_groups(&p24_air),
-        ],
-    )?
-    .try_into()
-    .unwrap();
+        log_n_p16,
+        &poseidon_16_column_groups(&p16_air),
+    )?;
+    let p24_evals_to_verify = p24_table.verify(
+        &mut verifier_state,
+        UNIVARIATE_SKIPS,
+        log_n_p24,
+        &poseidon_24_column_groups(&p24_air),
+    )?;
 
     let poseidon_logup_star_alpha = verifier_state.sample();
     let memory_folding_challenges = MultilinearPoint(verifier_state.sample_vec(LOG_VECTOR_LEN));

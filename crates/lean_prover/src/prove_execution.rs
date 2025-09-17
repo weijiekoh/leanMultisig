@@ -1,6 +1,5 @@
 use crate::common::*;
 use crate::*;
-use ::air::prove_many_air_2;
 use ::air::{table::AirTable, witness::AirWitness};
 use lean_vm::*;
 use lookup::prove_gkr_product;
@@ -590,19 +589,11 @@ pub fn prove_execution(
     let dot_product_evals_to_prove = info_span!("DotProduct AIR proof")
         .in_scope(|| dot_product_table.prove_extension(&mut prover_state, 1, dot_product_witness));
 
-    let [p16_evals_to_prove, p24_evals_to_prove] = info_span!("Poseidons AIR proof")
-        .in_scope(|| {
-            prove_many_air_2(
-                &mut prover_state,
-                UNIVARIATE_SKIPS,
-                &[&p16_table],
-                &[&p24_table],
-                &[p16_witness],
-                &[p24_witness],
-            )
-        })
-        .try_into()
-        .unwrap();
+    let p16_evals_to_prove = info_span!("Poseidon-16 AIR proof")
+        .in_scope(|| p16_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, p16_witness));
+
+    let p24_evals_to_prove = info_span!("Poseidon-24 AIR proof")
+        .in_scope(|| p24_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, p24_witness));
 
     let max_n_poseidons = poseidons_16
         .len()
