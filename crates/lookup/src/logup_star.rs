@@ -75,18 +75,12 @@ where
     let table_eval = inner_evals[0];
     prover_state.add_extension_scalar(table_eval);
     // delayed opening
-    let on_table = Evaluation {
-        point: sc_point.clone(),
-        value: table_eval,
-    };
+    let on_table = Evaluation::new(sc_point.clone(), table_eval);
 
     let pushforwardt_eval = inner_evals[1];
     prover_state.add_extension_scalar(pushforwardt_eval);
     // delayed opening
-    let mut on_pushforward = vec![Evaluation {
-        point: sc_point,
-        value: pushforwardt_eval,
-    }];
+    let mut on_pushforward = vec![Evaluation::new(sc_point, pushforwardt_eval)];
 
     // sanity check
     assert_eq!(prod, table_eval * pushforwardt_eval);
@@ -129,20 +123,16 @@ where
     let (claim_right, pushforward_final_eval, _) =
         prove_gkr_quotient(prover_state, gkr_layer_right);
 
-    let final_point_left = MultilinearPoint(claim_left.point[1..].to_vec());
+    let final_point_left = claim_left.point[1..].to_vec();
     let indexes_final_eval = random_challenge - eval_c_minux_indexes;
     prover_state.add_extension_scalar(indexes_final_eval);
-    let on_indexes = Evaluation {
-        point: final_point_left,
-        value: indexes_final_eval,
-    };
+    let on_indexes = Evaluation::new(final_point_left, indexes_final_eval);
 
-    let final_point_right = MultilinearPoint(claim_right.point[1..].to_vec());
     prover_state.add_extension_scalar(pushforward_final_eval);
-    on_pushforward.push(Evaluation {
-        point: final_point_right,
-        value: pushforward_final_eval,
-    });
+    on_pushforward.push(Evaluation::new(
+        claim_right.point[1..].to_vec(),
+        pushforward_final_eval,
+    ));
 
     // These statements remained to be proven
     LogupStarStatements {
@@ -179,14 +169,8 @@ where
     let table_eval = verifier_state.next_extension_scalar()?;
     let pushforward_eval = verifier_state.next_extension_scalar()?;
 
-    let on_table = Evaluation {
-        point: postponed.point.clone(),
-        value: table_eval,
-    };
-    let mut on_pushforward = vec![Evaluation {
-        point: postponed.point,
-        value: pushforward_eval,
-    }];
+    let on_table = Evaluation::new(postponed.point.clone(), table_eval);
+    let mut on_pushforward = vec![Evaluation::new(postponed.point, pushforward_eval)];
 
     if table_eval * pushforward_eval != postponed.value {
         return Err(ProofError::InvalidProof);
@@ -203,10 +187,7 @@ where
 
     let final_point_left = MultilinearPoint(claim_left.point[1..].to_vec());
     let index_openined_value = verifier_state.next_extension_scalar()?;
-    let on_indexes = Evaluation {
-        point: final_point_left.clone(),
-        value: index_openined_value,
-    };
+    let on_indexes = Evaluation::new(final_point_left.clone(), index_openined_value);
     if claim_left.value
         != claims
             .iter()
@@ -219,12 +200,12 @@ where
         return Err(ProofError::InvalidProof);
     }
 
-    let final_point_right = MultilinearPoint(claim_right.point[1..].to_vec());
+    let final_point_right = claim_right.point[1..].to_vec();
     let pushforward_opening_value = verifier_state.next_extension_scalar()?;
-    on_pushforward.push(Evaluation {
-        point: final_point_right.clone(),
-        value: pushforward_opening_value,
-    });
+    on_pushforward.push(Evaluation::new(
+        final_point_right.clone(),
+        pushforward_opening_value,
+    ));
 
     let big_endian_mle = final_point_right
         .iter()
@@ -315,9 +296,9 @@ mod tests {
         let eval = values.evaluate(&point);
 
         let time = std::time::Instant::now();
-        let poly_eq_point = info_span!("eval_eq").in_scope(|| eval_eq(&point.0));
+        let poly_eq_point = info_span!("eval_eq").in_scope(|| eval_eq(&point));
         let pushforward = compute_pushforward(&indexes, table_length, &poly_eq_point);
-        let claim = Evaluation { point, value: eval };
+        let claim = Evaluation::new(point, eval);
 
         prove_logup_star(
             &mut prover_state,

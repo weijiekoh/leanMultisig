@@ -325,10 +325,10 @@ pub fn packed_pcs_global_statements_for_prover<
                 );
                 assert!(chunks[0].offset_in_packed.unwrap() % (1 << chunks[0].n_vars) == 0);
 
-                sub_packed_statements.push(Evaluation {
-                    point: chunks[0].global_point_for_statement(&statement.point, packed_vars),
-                    value: statement.value,
-                });
+                sub_packed_statements.push(Evaluation::new(
+                    chunks[0].global_point_for_statement(&statement.point, packed_vars),
+                    statement.value,
+                ));
             } else {
                 let initial_booleans = statement
                     .point
@@ -374,10 +374,10 @@ pub fn packed_pcs_global_statements_for_prover<
                             ..chunk.offset_in_original + (1 << chunk.n_vars)])
                             .evaluate(&sub_point);
                         (
-                            Some(Evaluation {
-                                point: chunk.global_point_for_statement(&sub_point, packed_vars),
-                                value: sub_value,
-                            }),
+                            Some(Evaluation::new(
+                                chunk.global_point_for_statement(&sub_point, packed_vars),
+                                sub_value,
+                            )),
                             sub_value,
                         )
                     })
@@ -412,13 +412,8 @@ pub fn packed_pcs_global_statements_for_prover<
 
                     let initial_packed_point =
                         chunks[0].global_point_for_statement(&initial_sub_point, packed_vars);
-                    sub_packed_statements.insert(
-                        0,
-                        Evaluation {
-                            point: initial_packed_point,
-                            value: initial_sub_value,
-                        },
-                    );
+                    sub_packed_statements
+                        .insert(0, Evaluation::new(initial_packed_point, initial_sub_value));
                     evals_to_send.insert(0, initial_sub_value);
                 }
             }
@@ -473,10 +468,10 @@ pub fn packed_pcs_global_statements_for_verifier<
                 assert!(!chunks[0].public_data, "TODO");
                 assert_eq!(chunks[0].n_vars, statement.point.0.len());
                 assert!(chunks[0].offset_in_packed.unwrap() % (1 << chunks[0].n_vars) == 0);
-                packed_statements.push(Evaluation {
-                    point: chunks[0].global_point_for_statement(&statement.point, packed_n_vars),
-                    value: statement.value,
-                });
+                packed_statements.push(Evaluation::new(
+                    chunks[0].global_point_for_statement(&statement.point, packed_n_vars),
+                    statement.value,
+                ));
             } else {
                 let initial_booleans = statement
                     .point
@@ -511,10 +506,10 @@ pub fn packed_pcs_global_statements_for_verifier<
                         sub_values.push(sub_value);
                         let sub_point =
                             MultilinearPoint(statement.point.0[missing_vars..].to_vec());
-                        packed_statements.push(Evaluation {
-                            point: chunk.global_point_for_statement(&sub_point, packed_n_vars),
-                            value: sub_value,
-                        });
+                        packed_statements.push(Evaluation::new(
+                            chunk.global_point_for_statement(&sub_point, packed_n_vars),
+                            sub_value,
+                        ));
                     }
                 }
                 // consistency check

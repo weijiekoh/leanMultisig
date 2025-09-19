@@ -70,78 +70,6 @@ pub fn poseidon_24_column_groups(poseidon_24_air: &Poseidon24Air<F>) -> Vec<Rang
     (0..poseidon_24_air.width()).map(|i| i..i + 1).collect()
 }
 
-// pub fn add_poseidon_lookup_index_statements(
-//     poseidon_index_evals: &[EF],
-//     n_poseidons_16: usize,
-//     n_poseidons_24: usize,
-//     poseidon_logup_star_statements_indexes_point: &MultilinearPoint<EF>,
-//     p16_indexes_a_statements: &mut Vec<Evaluation<EF>>,
-//     p16_indexes_b_statements: &mut Vec<Evaluation<EF>>,
-//     p16_indexes_res_statements: &mut Vec<Evaluation<EF>>,
-//     p24_indexes_a_statements: &mut Vec<Evaluation<EF>>,
-//     p24_indexes_b_statements: &mut Vec<Evaluation<EF>>,
-//     p24_indexes_res_statements: &mut Vec<Evaluation<EF>>,
-// ) -> Result<(), ProofError> {
-//     let log_n_p16 = log2_ceil_usize(n_poseidons_16);
-//     let log_n_p24 = log2_ceil_usize(n_poseidons_24);
-//     let correcting_factor = from_end(
-//         poseidon_logup_star_statements_indexes_point,
-//         log_n_p16.abs_diff(log_n_p24),
-//     )
-//     .iter()
-//     .map(|&x| EF::ONE - x)
-//     .product::<EF>();
-//     let (correcting_factor_p16, correcting_factor_p24) = if n_poseidons_16 > n_poseidons_24 {
-//         (EF::ONE, correcting_factor)
-//     } else {
-//         (correcting_factor, EF::ONE)
-//     };
-//     let mut idx_point_right_p16 =
-//         MultilinearPoint(poseidon_logup_star_statements_indexes_point[3..].to_vec());
-//     let mut idx_point_right_p24 = MultilinearPoint(
-//         remove_end(
-//             &poseidon_logup_star_statements_indexes_point[3..],
-//             log_n_p16.abs_diff(log_n_p24),
-//         )
-//         .to_vec(),
-//     );
-//     if n_poseidons_16 < n_poseidons_24 {
-//         std::mem::swap(&mut idx_point_right_p16, &mut idx_point_right_p24);
-//     }
-//     p16_indexes_a_statements.push(Evaluation {
-//         point: idx_point_right_p16.clone(),
-//         value: poseidon_index_evals[0] / correcting_factor_p16,
-//     });
-//     p16_indexes_b_statements.push(Evaluation {
-//         point: idx_point_right_p16.clone(),
-//         value: poseidon_index_evals[1] / correcting_factor_p16,
-//     });
-//     p16_indexes_res_statements.push(Evaluation {
-//         point: idx_point_right_p16.clone(),
-//         value: poseidon_index_evals[2] / correcting_factor_p16,
-//     });
-//     p24_indexes_a_statements.push(Evaluation {
-//         point: idx_point_right_p24.clone(),
-//         value: poseidon_index_evals[4] / correcting_factor_p24,
-//     });
-//     p24_indexes_b_statements.push(Evaluation {
-//         point: idx_point_right_p24.clone(),
-//         value: poseidon_index_evals[6] / correcting_factor_p24,
-//     });
-//     p24_indexes_res_statements.push(Evaluation {
-//         point: idx_point_right_p24.clone(),
-//         value: poseidon_index_evals[7] / correcting_factor_p24,
-//     });
-
-//     if poseidon_index_evals[3] != poseidon_index_evals[2] + correcting_factor_p16 {
-//         return Err(ProofError::InvalidProof);
-//     }
-//     if poseidon_index_evals[5] != poseidon_index_evals[4] + correcting_factor_p24 {
-//         return Err(ProofError::InvalidProof);
-//     }
-//     Ok(())
-// }
-
 pub fn fold_bytecode(bytecode: &Bytecode, folding_challenges: &MultilinearPoint<EF>) -> Vec<EF> {
     let encoded_bytecode = padd_with_zero_to_next_power_of_two(
         &bytecode
@@ -157,14 +85,11 @@ pub fn intitial_and_final_pc_conditions(
     bytecode: &Bytecode,
     log_n_cycles: usize,
 ) -> (Evaluation<EF>, Evaluation<EF>) {
-    let initial_pc_statement = Evaluation {
-        point: MultilinearPoint(EF::zero_vec(log_n_cycles)),
-        value: EF::ZERO,
-    };
-    let final_pc_statement = Evaluation {
-        point: MultilinearPoint(vec![EF::ONE; log_n_cycles]),
-        value: EF::from_usize(bytecode.ending_pc),
-    };
+    let initial_pc_statement = Evaluation::new(EF::zero_vec(log_n_cycles), EF::ZERO);
+    let final_pc_statement = Evaluation::new(
+        vec![EF::ONE; log_n_cycles],
+        EF::from_usize(bytecode.ending_pc),
+    );
     (initial_pc_statement, final_pc_statement)
 }
 

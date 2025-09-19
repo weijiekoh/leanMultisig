@@ -79,10 +79,10 @@ where
     prover_state.add_extension_scalars(&layers_not_packed[n - last_packed - 2]);
 
     let point = MultilinearPoint(vec![prover_state.sample()]);
-    let mut claim = Evaluation {
-        point: point.clone(),
-        value: layers_not_packed[n - last_packed - 2].evaluate(&point),
-    };
+    let mut claim = Evaluation::new(
+        point.clone(),
+        layers_not_packed[n - last_packed - 2].evaluate(&point),
+    );
 
     let (mut up_layer_eval_left, mut up_layer_eval_right) = (EF::ZERO, EF::ZERO);
     for layer in layers_not_packed.iter().rev().skip(1) {
@@ -135,13 +135,11 @@ where
 
     let mid_len = up_layer.len() / 2;
     let quarter_len = mid_len / 2;
-    let first_sumcheck_polynomial = &DensePolynomial::new(vec![
-        EF::ONE - claim.point[0],
-        claim.point[0].double() - EF::ONE,
-    ]) * &DensePolynomial::new(vec![
-        sum_one_minus_x,
-        sum_x - sum_one_minus_x,
-    ]);
+    let first_sumcheck_polynomial =
+        &DensePolynomial::new(vec![
+            EF::ONE - claim.point[0],
+            claim.point[0].double() - EF::ONE,
+        ]) * &DensePolynomial::new(vec![sum_one_minus_x, sum_x - sum_one_minus_x]);
 
     // sanity check
     assert_eq!(
@@ -262,13 +260,11 @@ where
     let sum_x = EFPacking::<EF>::to_ext_iter([sum_x_packed]).sum::<EF>();
     let sum_one_minus_x = EFPacking::<EF>::to_ext_iter([sum_one_minus_x_packed]).sum::<EF>();
 
-    let first_sumcheck_polynomial = &DensePolynomial::new(vec![
-        EF::ONE - claim.point[0],
-        claim.point[0].double() - EF::ONE,
-    ]) * &DensePolynomial::new(vec![
-        sum_one_minus_x,
-        sum_x - sum_one_minus_x,
-    ]);
+    let first_sumcheck_polynomial =
+        &DensePolynomial::new(vec![
+            EF::ONE - claim.point[0],
+            claim.point[0].double() - EF::ONE,
+        ]) * &DensePolynomial::new(vec![sum_one_minus_x, sum_x - sum_one_minus_x]);
 
     // sanity check
     assert_eq!(

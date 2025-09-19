@@ -195,18 +195,15 @@ fn open_unstructured_columns<
     for (group, sub_evals) in witness.column_groups.iter().zip(sub_evals) {
         assert_eq!(sub_evals.len(), 1 << epsilons.len());
 
-        evaluations_remaining_to_prove.push(Evaluation {
-            point: MultilinearPoint(
-                [
-                    from_end(&columns_batching_scalars, log2_ceil_usize(group.len())).to_vec(),
-                    epsilons.0.clone(),
-                    outer_sumcheck_challenge[1..witness.log_n_rows() - univariate_skips + 1]
-                        .to_vec(),
-                ]
-                .concat(),
-            ),
-            value: sub_evals.evaluate(&epsilons),
-        });
+        evaluations_remaining_to_prove.push(Evaluation::new(
+            [
+                from_end(&columns_batching_scalars, log2_ceil_usize(group.len())).to_vec(),
+                epsilons.0.clone(),
+                outer_sumcheck_challenge[1..witness.log_n_rows() - univariate_skips + 1].to_vec(),
+            ]
+            .concat(),
+            sub_evals.evaluate(&epsilons),
+        ));
     }
     evaluations_remaining_to_prove
 }

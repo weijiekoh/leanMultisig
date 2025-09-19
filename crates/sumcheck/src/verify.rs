@@ -2,10 +2,7 @@ use p3_field::ExtensionField;
 use utils::{FSVerifier, PF};
 use whir_p3::{
     fiat_shamir::{FSChallenger, errors::ProofError},
-    poly::{
-        dense::DensePolynomial,
-        multilinear::{Evaluation, MultilinearPoint},
-    },
+    poly::{dense::DensePolynomial, multilinear::Evaluation},
 };
 
 pub fn verify<EF>(
@@ -87,11 +84,5 @@ where
         target = pol.evaluate(challenge);
     }
 
-    Ok((
-        sum,
-        Evaluation {
-            point: MultilinearPoint(challenges),
-            value: target,
-        },
-    ))
+    Ok((sum, Evaluation::new(challenges, target)))
 }

@@ -88,12 +88,10 @@ fn verify_air<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>>(
             univariate_skips,
             &inner_sums,
             &column_groups,
-            &Evaluation {
-                point: MultilinearPoint(
-                    outer_statement.point[1..log_length - univariate_skips + 1].to_vec(),
-                ),
-                value: outer_statement.value,
-            },
+            &Evaluation::new(
+                outer_statement.point[1..log_length - univariate_skips + 1].to_vec(),
+                outer_statement.value,
+            ),
             &outer_selector_evals,
             log_length,
         )
@@ -177,10 +175,7 @@ fn verify_many_unstructured_columns<EF: ExtensionField<PF<EF>>>(
             ]
             .concat(),
         );
-        evaluations_remaining_to_verify.push(Evaluation {
-            point: final_point,
-            value: final_value,
-        });
+        evaluations_remaining_to_verify.push(Evaluation::new(final_point, final_value));
     }
 
     Ok(evaluations_remaining_to_verify)
