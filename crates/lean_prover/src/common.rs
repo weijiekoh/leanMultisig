@@ -1,6 +1,6 @@
 use p3_air::BaseAir;
 use p3_field::{ExtensionField, PrimeCharacteristicRing};
-use pcs::ColDims;
+use packed_pcs::ColDims;
 use rayon::prelude::*;
 use std::ops::Range;
 use sumcheck::{SumcheckComputation, SumcheckComputationPacked};

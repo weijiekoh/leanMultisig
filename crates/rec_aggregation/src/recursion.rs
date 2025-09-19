@@ -12,19 +12,11 @@ use p3_field::PrimeCharacteristicRing;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use utils::padd_with_zero_to_next_multiple_of;
 use utils::padd_with_zero_to_next_power_of_two;
-use utils::{
-    MyMerkleCompress, MyMerkleHash, build_merkle_compress, build_merkle_hash, build_prover_state,
-    build_verifier_state,
-};
+use utils::{build_merkle_compress, build_merkle_hash, build_prover_state, build_verifier_state};
 use whir_p3::{
     dft::EvalsDft,
     poly::{evals::EvaluationsList, multilinear::*},
-    whir::{
-        committer::{reader::*, writer::*},
-        config::{FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder},
-        prover::*,
-        verifier::*,
-    },
+    whir::config::{FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder},
 };
 
 #[test]
@@ -45,10 +37,7 @@ pub fn test_whir_recursion() {
         rs_domain_initial_reduction_factor: 3,
     };
 
-    let mut recursion_config = WhirConfig::<F, EF, MyMerkleHash, MyMerkleCompress, 8>::new(
-        recursion_config_builder.clone(),
-        num_variables,
-    );
+    let mut recursion_config = WhirConfig::new(recursion_config_builder.clone(), num_variables);
 
     // TODO remove overriding this
     {
@@ -118,14 +107,9 @@ pub fn test_whir_recursion() {
 
     let mut prover_state = build_prover_state();
 
-    // Commit to the polynomial and produce a witness
-    let committer = Commiter(&recursion_config);
-
     let dft = EvalsDft::<F>::new(1 << recursion_config.max_fft_size());
 
-    let witness = committer
-        .commit(&dft, &mut prover_state, &polynomial)
-        .unwrap();
+    let witness = recursion_config.commit(&dft, &mut prover_state, &polynomial);
 
     let mut public_input = prover_state.proof_data().to_vec();
     let commitment_size = public_input.len();
@@ -141,17 +125,13 @@ pub fn test_whir_recursion() {
         <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(&eval),
     ));
 
-    let prover = Prover(&recursion_config);
-
-    prover
-        .prove(
-            &dft,
-            &mut prover_state,
-            statement.clone(),
-            witness,
-            &polynomial,
-        )
-        .unwrap();
+    recursion_config.prove(
+        &dft,
+        &mut prover_state,
+        statement.clone(),
+        witness,
+        &polynomial,
+    );
 
     let first_folding_factor = recursion_config_builder.folding_factor.at_round(0);
 
@@ -197,11 +177,11 @@ pub fn test_whir_recursion() {
     let mut verifier_state = build_verifier_state(&prover_state);
 
     // Parse the commitment
-    let parsed_commitment = CommitmentReader(&recursion_config)
+    let parsed_commitment = recursion_config
         .parse_commitment(&mut verifier_state)
         .unwrap();
 
-    Verifier(&recursion_config)
+    recursion_config
         .verify(&mut verifier_state, &parsed_commitment, statement)
         .unwrap();
 

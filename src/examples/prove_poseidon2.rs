@@ -4,11 +4,8 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
 use p3_symmetric::Permutation;
-use p3_util::log2_ceil_usize;
-use pcs::{
-    ColDims, PCS, packed_pcs_commit, packed_pcs_global_statements_for_prover,
-    packed_pcs_global_statements_for_verifier, packed_pcs_parse_commitment,
-};
+use p3_util::{log2_ceil_usize, log2_strict_usize};
+use packed_pcs::*;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -19,7 +16,7 @@ use utils::{
     init_tracing, padd_with_zero_to_next_power_of_two,
 };
 use whir_p3::dft::EvalsDft;
-use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfigBuilder};
+use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder};
 
 type F = KoalaBear;
 type EF = QuinticExtensionFieldKB;
@@ -129,7 +126,7 @@ pub fn prove_poseidon2(
 
     let mut prover_state = build_prover_state();
 
-    let pcs = WhirConfigBuilder {
+    let whir_config_builder = WhirConfigBuilder {
         folding_factor,
         soundness_type,
         merkle_hash: build_merkle_hash(),
@@ -146,7 +143,7 @@ pub fn prove_poseidon2(
         1 << (log2_ceil_usize(n_columns_24)
             + log_n_poseidons_16.max(log_n_poseidons_24)
             + log_inv_rate
-            - pcs.folding_factor.at_round(0)),
+            - whir_config_builder.folding_factor.at_round(0)),
     );
 
     let commited_trace_polynomial_16 =
@@ -164,8 +161,14 @@ pub fn prove_poseidon2(
         commited_trace_polynomial_16.as_slice(),
         commited_trace_polynomial_24.as_slice(),
     ];
-    let commitment_witness =
-        packed_pcs_commit(&pcs, &commited_data, &dims, &dft, &mut prover_state, 0);
+    let commitment_witness = packed_pcs_commit(
+        &whir_config_builder,
+        &commited_data,
+        &dims,
+        &dft,
+        &mut prover_state,
+        0,
+    );
 
     let evaluations_remaining_to_prove_16 =
         table_16.prove_base(&mut prover_state, univariate_skips, witness_16);
@@ -182,7 +185,11 @@ pub fn prove_poseidon2(
         ],
         &mut prover_state,
     );
-    pcs.open(
+    let whir_config = WhirConfig::new(
+        whir_config_builder.clone(),
+        log2_strict_usize(commitment_witness.packed_polynomial.len()),
+    );
+    whir_config.prove(
         &dft,
         &mut prover_state,
         global_statements_to_prove,
@@ -196,7 +203,7 @@ pub fn prove_poseidon2(
     let mut verifier_state = build_verifier_state(&prover_state);
 
     let packed_parsed_commitment = packed_pcs_parse_commitment(
-        &pcs,
+        &whir_config_builder,
         &mut verifier_state,
         &dims,
         log_smallest_decomposition_chunk,
@@ -231,12 +238,13 @@ pub fn prove_poseidon2(
         &Default::default(),
     )
     .unwrap();
-    pcs.verify(
-        &mut verifier_state,
-        &packed_parsed_commitment,
-        global_statements_to_verify,
-    )
-    .unwrap();
+    whir_config
+        .verify(
+            &mut verifier_state,
+            &packed_parsed_commitment,
+            global_statements_to_verify,
+        )
+        .unwrap();
 
     let verifier_time = time.elapsed();
 

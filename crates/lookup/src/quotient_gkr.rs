@@ -21,7 +21,7 @@ use utils::unpack_extension;
 use utils::{EFPacking, FSProver, FSVerifier, PF, PFPacking};
 use whir_p3::fiat_shamir::FSChallenger;
 use whir_p3::fiat_shamir::errors::ProofError;
-use whir_p3::poly::dense::WhirDensePolynomial;
+use whir_p3::poly::dense::DensePolynomial;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::evals::eval_eq;
 use whir_p3::poly::multilinear::Evaluation;
@@ -135,10 +135,10 @@ where
 
     let mid_len = up_layer.len() / 2;
     let quarter_len = mid_len / 2;
-    let first_sumcheck_polynomial = &WhirDensePolynomial::from_coefficients_vec(vec![
+    let first_sumcheck_polynomial = &DensePolynomial::new(vec![
         EF::ONE - claim.point[0],
         claim.point[0].double() - EF::ONE,
-    ]) * &WhirDensePolynomial::from_coefficients_vec(vec![
+    ]) * &DensePolynomial::new(vec![
         sum_one_minus_x,
         sum_x - sum_one_minus_x,
     ]);
@@ -262,10 +262,10 @@ where
     let sum_x = EFPacking::<EF>::to_ext_iter([sum_x_packed]).sum::<EF>();
     let sum_one_minus_x = EFPacking::<EF>::to_ext_iter([sum_one_minus_x_packed]).sum::<EF>();
 
-    let first_sumcheck_polynomial = &WhirDensePolynomial::from_coefficients_vec(vec![
+    let first_sumcheck_polynomial = &DensePolynomial::new(vec![
         EF::ONE - claim.point[0],
         claim.point[0].double() - EF::ONE,
-    ]) * &WhirDensePolynomial::from_coefficients_vec(vec![
+    ]) * &DensePolynomial::new(vec![
         sum_one_minus_x,
         sum_x - sum_one_minus_x,
     ]);

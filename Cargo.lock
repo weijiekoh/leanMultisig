@@ -289,7 +289,7 @@ dependencies = [
  "p3-poseidon2-air",
  "p3-symmetric",
  "p3-util",
- "pcs",
+ "packed_pcs",
  "pest",
  "pest_derive",
  "rand",
@@ -318,7 +318,7 @@ dependencies = [
  "p3-poseidon2-air",
  "p3-symmetric",
  "p3-util",
- "pcs",
+ "packed_pcs",
  "pest",
  "pest_derive",
  "rand",
@@ -348,7 +348,7 @@ dependencies = [
  "p3-poseidon2-air",
  "p3-symmetric",
  "p3-util",
- "pcs",
+ "packed_pcs",
  "pest",
  "pest_derive",
  "rand",
@@ -694,18 +694,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "paste"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pcs"
+name = "packed_pcs"
 version = "0.1.0"
 dependencies = [
  "p3-field",
  "p3-koala-bear",
- "p3-symmetric",
  "p3-util",
  "rand",
  "rayon",
@@ -714,6 +707,12 @@ dependencies = [
  "utils",
  "whir-p3",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pest"
@@ -865,7 +864,7 @@ dependencies = [
  "p3-poseidon2-air",
  "p3-symmetric",
  "p3-util",
- "pcs",
+ "packed_pcs",
  "rand",
  "rayon",
  "sumcheck",
@@ -1172,7 +1171,7 @@ dependencies = [
  "p3-poseidon2-air",
  "p3-symmetric",
  "p3-util",
- "pcs",
+ "packed_pcs",
  "pest",
  "pest_derive",
  "rand",
@@ -1206,7 +1205,7 @@ dependencies = [
 [[package]]
 name = "whir-p3"
 version = "0.1.0"
-source = "git+https://github.com/TomWambsgans/whir-p3?branch=lean-multisig#1094a81585715999496d2312e3c3e7d07f1e76e9"
+source = "git+https://github.com/TomWambsgans/whir-p3?branch=lean-multisig#075c038ede4ae80c91d94d9b23f9dc5cc35063a3"
 dependencies = [
  "clap",
  "itertools",
@@ -1246,7 +1245,7 @@ dependencies = [
  "p3-symmetric",
  "p3-uni-stark",
  "p3-util",
- "pcs",
+ "packed_pcs",
  "rand",
  "utils",
  "whir-p3",
@@ -1459,7 +1458,7 @@ dependencies = [
  "p3-poseidon2-air",
  "p3-symmetric",
  "p3-util",
- "pcs",
+ "packed_pcs",
  "pest",
  "pest_derive",
  "rand",

@@ -9,10 +9,7 @@ use p3_field::BasedVectorSpace;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::dot_product;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
-use pcs::ColDims;
-use pcs::num_packed_vars_for_dims;
-use pcs::packed_pcs_global_statements_for_verifier;
-use pcs::packed_pcs_parse_commitment;
+use packed_pcs::*;
 use sumcheck::SumcheckComputation;
 use utils::dot_product_with_base;
 use utils::{PF, build_challenger, padd_with_zero_to_next_power_of_two};
@@ -1009,11 +1006,7 @@ pub fn verify_execution(
         &Default::default(),
     )?;
 
-    whir_p3::whir::verifier::Verifier(&WhirConfig::new(
-        whir_config_builder,
-        parsed_commitment_base.num_variables,
-    ))
-    .batch_verify(
+    WhirConfig::new(whir_config_builder, parsed_commitment_base.num_variables).batch_verify(
         &mut verifier_state,
         &parsed_commitment_base,
         global_statements_base,

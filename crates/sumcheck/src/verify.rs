@@ -3,7 +3,7 @@ use utils::{FSVerifier, PF};
 use whir_p3::{
     fiat_shamir::{FSChallenger, errors::ProofError},
     poly::{
-        dense::WhirDensePolynomial,
+        dense::DensePolynomial,
         multilinear::{Evaluation, MultilinearPoint},
     },
 };
@@ -73,7 +73,7 @@ where
         let deg = max_degree_per_vars[var];
         let sumation_set = &sumation_sets[var];
         let coeffs = verifier_state.next_extension_scalars_vec(deg + 1)?;
-        let pol = WhirDensePolynomial::from_coefficients_vec(coeffs);
+        let pol = DensePolynomial::new(coeffs);
         let computed_sum = sumation_set.iter().map(|&s| pol.evaluate(s)).sum();
         if first_round {
             first_round = false;

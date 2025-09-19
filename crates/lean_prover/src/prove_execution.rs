@@ -9,8 +9,7 @@ use p3_field::BasedVectorSpace;
 use p3_field::ExtensionField;
 use p3_field::PrimeCharacteristicRing;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
-use pcs::{ColDims, num_packed_vars_for_dims};
-use pcs::{packed_pcs_commit, packed_pcs_global_statements_for_prover};
+use packed_pcs::*;
 use rayon::prelude::*;
 use std::collections::BTreeMap;
 use sumcheck::MleGroupRef;
@@ -1353,10 +1352,10 @@ pub fn prove_execution(
         &mut prover_state,
     );
 
-    whir_p3::whir::prover::Prover(&WhirConfig::new(
+    WhirConfig::new(
         whir_config_builder,
         log2_strict_usize(packed_pcs_witness_base.packed_polynomial.len()),
-    ))
+    )
     .batch_prove(
         &dft,
         &mut prover_state,

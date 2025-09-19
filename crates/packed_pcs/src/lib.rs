@@ -1,22 +1,23 @@
 use std::{cmp::Reverse, collections::BTreeMap};
 
-use p3_field::{ExtensionField, Field};
+use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_util::{log2_ceil_usize, log2_strict_usize};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utils::{
-    FSProver, FSVerifier, PF, from_end, multilinear_eval_constants_at_right, to_big_endian_bits,
+    FSProver, FSVerifier, MY_DIGEST_ELEMS, MerkleCompress, MerkleHasher, PF, WhirParsedCommitment,
+    WhirWitness, from_end, multilinear_eval_constants_at_right, to_big_endian_bits,
     to_big_endian_in_field,
 };
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::multilinear::Evaluation;
+use whir_p3::whir::config::{WhirConfig, WhirConfigBuilder};
 use whir_p3::{
     dft::EvalsDft,
     fiat_shamir::{FSChallenger, errors::ProofError},
     poly::multilinear::MultilinearPoint,
 };
-
-use crate::PCS;
 
 #[derive(Debug, Clone)]
 struct Chunk {
@@ -185,21 +186,29 @@ pub fn num_packed_vars_for_dims<F: Field, EF: ExtensionField<F>>(
     packed_n_vars
 }
 
-#[derive(Debug, Clone)]
-pub struct MultiCommitmentWitness<F: Field, EF: ExtensionField<F>, Pcs: PCS<F, EF>> {
-    pub inner_witness: Pcs::Witness,
+#[derive(Debug)]
+pub struct MultiCommitmentWitness<F: Field, EF: ExtensionField<F>> {
+    pub inner_witness: WhirWitness<F, EF>,
     pub packed_polynomial: Vec<F>,
 }
 
 #[instrument(skip_all)]
-pub fn packed_pcs_commit<F: Field, EF: ExtensionField<F>, Pcs: PCS<F, EF>>(
-    pcs: &Pcs,
+pub fn packed_pcs_commit<F: Field, EF: ExtensionField<F>, H, C>(
+    whir_config_builder: &WhirConfigBuilder<H, C, MY_DIGEST_ELEMS>,
     polynomials: &[&[F]],
     dims: &[ColDims<F>],
     dft: &EvalsDft<PF<EF>>,
     prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
     log_smallest_decomposition_chunk: usize,
-) -> MultiCommitmentWitness<F, EF, Pcs> {
+) -> MultiCommitmentWitness<F, EF>
+where
+    PF<EF>: TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField + ExtensionField<PF<EF>>,
+    F: TwoAdicField + ExtensionField<PF<EF>>,
+    H: MerkleHasher<EF>,
+    C: MerkleCompress<EF>,
+    [PF<EF>; MY_DIGEST_ELEMS]: Serialize + for<'de> Deserialize<'de>,
+{
     assert_eq!(polynomials.len(), dims.len());
     for (i, (poly, dim)) in polynomials.iter().zip(dims.iter()).enumerate() {
         assert_eq!(
@@ -256,7 +265,11 @@ pub fn packed_pcs_commit<F: Field, EF: ExtensionField<F>, Pcs: PCS<F, EF>>(
             }
         });
 
-    let inner_witness = pcs.commit(dft, prover_state, &packed_polynomial);
+    let inner_witness = WhirConfig::new(whir_config_builder.clone(), packed_n_vars).commit(
+        dft,
+        prover_state,
+        &packed_polynomial,
+    );
     MultiCommitmentWitness {
         inner_witness,
         packed_polynomial,
@@ -421,14 +434,19 @@ pub fn packed_pcs_global_statements_for_prover<
     packed_statements
 }
 
-pub fn packed_pcs_parse_commitment<F: Field, EF: ExtensionField<F>, Pcs: PCS<F, EF>>(
-    pcs: &Pcs,
+pub fn packed_pcs_parse_commitment<
+    F: Field + TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField + ExtensionField<PF<EF>>,
+    H: MerkleHasher<EF>,
+    C: MerkleCompress<EF>,
+>(
+    whir_config_builder: &WhirConfigBuilder<H, C, MY_DIGEST_ELEMS>,
     verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
     dims: &[ColDims<F>],
     log_smallest_decomposition_chunk: usize,
-) -> Result<Pcs::ParsedCommitment, ProofError> {
+) -> Result<WhirParsedCommitment<F, EF>, ProofError> {
     let (_, packed_n_vars) = compute_chunks::<F, EF>(&dims, log_smallest_decomposition_chunk);
-    pcs.parse_commitment(verifier_state, packed_n_vars)
+    WhirConfig::new(whir_config_builder.clone(), packed_n_vars).parse_commitment(verifier_state)
 }
 
 pub fn packed_pcs_global_statements_for_verifier<
@@ -560,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_packed_pcs() {
-        let pcs = WhirConfigBuilder {
+        let whir_config_builder = WhirConfigBuilder {
             folding_factor: FoldingFactor::new(4, 4),
             soundness_type: SecurityAssumption::CapacityBound,
             merkle_hash: build_merkle_hash(),
@@ -644,7 +662,7 @@ mod tests {
 
         let polynomials_ref = polynomials.iter().map(|p| p.as_slice()).collect::<Vec<_>>();
         let witness = packed_pcs_commit(
-            &pcs,
+            &whir_config_builder,
             &polynomials_ref,
             &dims,
             &dft,
@@ -659,7 +677,8 @@ mod tests {
             &statements_per_polynomial,
             &mut prover_state,
         );
-        pcs.open(
+        let num_variables = log2_strict_usize(witness.packed_polynomial.len());
+        WhirConfig::new(whir_config_builder.clone(), num_variables).prove(
             &dft,
             &mut prover_state,
             packed_statements,
@@ -670,7 +689,7 @@ mod tests {
         let mut verifier_state = build_verifier_state(&prover_state);
 
         let parsed_commitment = packed_pcs_parse_commitment(
-            &pcs,
+            &whir_config_builder,
             &mut verifier_state,
             &dims,
             log_smallest_decomposition_chunk,
@@ -684,7 +703,8 @@ mod tests {
             &public_data,
         )
         .unwrap();
-        pcs.verify(&mut verifier_state, &parsed_commitment, packed_statements)
+        WhirConfig::new(whir_config_builder, num_variables)
+            .verify(&mut verifier_state, &parsed_commitment, packed_statements)
             .unwrap();
     }
 }
