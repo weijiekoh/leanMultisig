@@ -3,9 +3,6 @@
 mod pcs;
 pub use pcs::*;
 
-mod ring_switch;
-pub use ring_switch::*;
-
 mod packed_pcs;
 pub use packed_pcs::*;
 

@@ -710,7 +710,6 @@ dependencies = [
  "rand",
  "rayon",
  "serde",
- "sumcheck",
  "tracing",
  "utils",
  "whir-p3",
