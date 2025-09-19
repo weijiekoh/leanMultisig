@@ -12,7 +12,7 @@ use p3_util::{log2_ceil_usize, log2_strict_usize};
 use pcs::ColDims;
 use pcs::num_packed_vars_for_dims;
 use pcs::packed_pcs_global_statements_for_verifier;
-use pcs::{BatchPCS, NumVariables as _, packed_pcs_parse_commitment};
+use pcs::packed_pcs_parse_commitment;
 use sumcheck::SumcheckComputation;
 use utils::dot_product_with_base;
 use utils::{PF, build_challenger, padd_with_zero_to_next_power_of_two};
@@ -23,12 +23,14 @@ use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::evals::eval_eq;
 use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::multilinear::MultilinearPoint;
+use whir_p3::whir::config::WhirConfig;
+use whir_p3::whir::config::second_batched_whir_config_builder;
 
 pub fn verify_execution(
     bytecode: &Bytecode,
     public_input: &[F],
     proof_data: Vec<PF<EF>>,
-    pcs: &impl BatchPCS<PF<EF>, EF, EF>,
+    whir_config_builder: MyWhirConfigBuilder,
 ) -> Result<(), ProofError> {
     let mut verifier_state = VerifierState::new(proof_data, build_challenger());
 
@@ -192,7 +194,7 @@ pub fn verify_execution(
     );
 
     let parsed_commitment_base = packed_pcs_parse_commitment(
-        pcs.pcs_a(),
+        &whir_config_builder,
         &mut verifier_state,
         &base_dims,
         LOG_SMALLEST_DECOMPOSITION_CHUNK,
@@ -561,8 +563,9 @@ pub fn verify_execution(
     ];
 
     let parsed_commitment_extension = packed_pcs_parse_commitment(
-        &pcs.pcs_b(
-            parsed_commitment_base.num_variables(),
+        &second_batched_whir_config_builder::<EF, EF, _, _, _>(
+            whir_config_builder.clone(),
+            parsed_commitment_base.num_variables,
             num_packed_vars_for_dims::<EF, EF>(&extension_dims, LOG_SMALLEST_DECOMPOSITION_CHUNK),
         ),
         &mut verifier_state,
@@ -1006,7 +1009,11 @@ pub fn verify_execution(
         &Default::default(),
     )?;
 
-    pcs.batch_verify(
+    whir_p3::whir::verifier::Verifier(&WhirConfig::new(
+        whir_config_builder,
+        parsed_commitment_base.num_variables,
+    ))
+    .batch_verify(
         &mut verifier_state,
         &parsed_commitment_base,
         global_statements_base,

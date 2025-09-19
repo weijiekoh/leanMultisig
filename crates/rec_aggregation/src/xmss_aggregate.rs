@@ -1,14 +1,13 @@
 use std::{env, time::Instant};
 
 use lean_compiler::*;
+use lean_prover::whir_config_builder;
 use p3_field::Field;
 use p3_field::PrimeCharacteristicRing;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 
-use lean_prover::{
-    build_batch_pcs, prove_execution::prove_execution, verify_execution::verify_execution,
-};
+use lean_prover::{prove_execution::prove_execution, verify_execution::verify_execution};
 use lean_vm::*;
 use xmss::{PhonyXmssSecretKey, V, XmssSignature};
 
@@ -287,7 +286,6 @@ fn test_xmss_aggregate() {
     if env::var("PROVE_XMSS_AGGREGATED").unwrap_or("true".to_string()) == "true" {
         utils::init_tracing();
         let (bytecode, function_locations) = compile_program(&program_str);
-        let batch_pcs = build_batch_pcs();
         let time = Instant::now();
         let (proof_data, proof_size) = prove_execution(
             &bytecode,
@@ -295,11 +293,11 @@ fn test_xmss_aggregate() {
             &function_locations,
             &public_input,
             &private_input,
-            &batch_pcs,
+            whir_config_builder(),
             false,
         );
         let proving_time = time.elapsed();
-        verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
+        verify_execution(&bytecode, &public_input, proof_data, whir_config_builder()).unwrap();
         println!(
             "\nXMSS aggregation (n_signatures = {}, lifetime = 2^{})",
             n_public_keys / INV_BITFIELD_DENSITY,

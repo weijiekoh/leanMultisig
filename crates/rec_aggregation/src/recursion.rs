@@ -2,9 +2,9 @@ use std::path::Path;
 use std::time::Instant;
 
 use lean_compiler::compile_program;
-use lean_prover::build_batch_pcs;
 use lean_prover::prove_execution::prove_execution;
 use lean_prover::verify_execution::verify_execution;
+use lean_prover::whir_config_builder;
 use lean_vm::*;
 use p3_field::BasedVectorSpace;
 use p3_field::Field;
@@ -210,7 +210,6 @@ pub fn test_whir_recursion() {
 
     // utils::init_tracing();
     let (bytecode, function_locations) = compile_program(&program_str);
-    let batch_pcs = build_batch_pcs();
     let time = Instant::now();
     let (proof_data, proof_size) = prove_execution(
         &bytecode,
@@ -218,7 +217,7 @@ pub fn test_whir_recursion() {
         &function_locations,
         &public_input,
         &[],
-        &batch_pcs,
+        whir_config_builder(),
         false,
     );
     println!(
@@ -226,5 +225,5 @@ pub fn test_whir_recursion() {
         time.elapsed(),
         proof_size * F::bits() / (8 * 1024)
     );
-    verify_execution(&bytecode, &public_input, proof_data, &batch_pcs).unwrap();
+    verify_execution(&bytecode, &public_input, proof_data, whir_config_builder()).unwrap();
 }

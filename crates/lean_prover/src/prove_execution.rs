@@ -9,8 +9,8 @@ use p3_field::BasedVectorSpace;
 use p3_field::ExtensionField;
 use p3_field::PrimeCharacteristicRing;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
-use pcs::{BatchPCS, packed_pcs_commit, packed_pcs_global_statements_for_prover};
 use pcs::{ColDims, num_packed_vars_for_dims};
+use pcs::{packed_pcs_commit, packed_pcs_global_statements_for_prover};
 use rayon::prelude::*;
 use std::collections::BTreeMap;
 use sumcheck::MleGroupRef;
@@ -30,6 +30,7 @@ use whir_p3::poly::evals::{eval_eq, fold_multilinear};
 use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 use whir_p3::utils::{compute_eval_eq, compute_sparse_eval_eq};
+use whir_p3::whir::config::{WhirConfig, second_batched_whir_config_builder};
 
 pub fn prove_execution(
     bytecode: &Bytecode,
@@ -37,7 +38,7 @@ pub fn prove_execution(
     function_locations: &BTreeMap<usize, String>, // debug purpose
     public_input: &[F],
     private_input: &[F],
-    pcs: &impl BatchPCS<PF<EF>, EF, EF>,
+    whir_config_builder: MyWhirConfigBuilder,
     vm_profiler: bool,
 ) -> (Vec<PF<EF>>, usize) {
     let ExecutionTrace {
@@ -271,7 +272,7 @@ pub fn prove_execution(
 
     // 1st Commitment
     let packed_pcs_witness_base = packed_pcs_commit(
-        pcs.pcs_a(),
+        &whir_config_builder,
         &base_pols,
         &base_dims,
         &dft,
@@ -1019,7 +1020,8 @@ pub fn prove_execution(
     ];
 
     let packed_pcs_witness_extension = packed_pcs_commit(
-        &pcs.pcs_b(
+        &second_batched_whir_config_builder::<EF, EF, _, _, _>(
+            whir_config_builder.clone(),
             log2_strict_usize(packed_pcs_witness_base.packed_polynomial.len()),
             num_packed_vars_for_dims::<EF, EF>(&extension_dims, LOG_SMALLEST_DECOMPOSITION_CHUNK),
         ),
@@ -1351,7 +1353,11 @@ pub fn prove_execution(
         &mut prover_state,
     );
 
-    pcs.batch_open(
+    whir_p3::whir::prover::Prover(&WhirConfig::new(
+        whir_config_builder,
+        log2_strict_usize(packed_pcs_witness_base.packed_polynomial.len()),
+    ))
+    .batch_prove(
         &dft,
         &mut prover_state,
         global_statements_base,
