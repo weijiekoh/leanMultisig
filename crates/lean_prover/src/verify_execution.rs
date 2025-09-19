@@ -15,12 +15,13 @@ use pcs::packed_pcs_global_statements_for_verifier;
 use pcs::{BatchPCS, NumVariables as _, packed_pcs_parse_commitment};
 use sumcheck::SumcheckComputation;
 use utils::dot_product_with_base;
-use utils::{Evaluation, PF, build_challenger, padd_with_zero_to_next_power_of_two};
+use utils::{PF, build_challenger, padd_with_zero_to_next_power_of_two};
 use utils::{ToUsize, build_poseidon_16_air, build_poseidon_24_air};
 use vm_air::*;
 use whir_p3::fiat_shamir::{errors::ProofError, verifier::VerifierState};
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::evals::eval_eq;
+use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::multilinear::MultilinearPoint;
 
 pub fn verify_execution(
@@ -1008,9 +1009,9 @@ pub fn verify_execution(
     pcs.batch_verify(
         &mut verifier_state,
         &parsed_commitment_base,
-        &global_statements_base,
+        global_statements_base,
         &parsed_commitment_extension,
-        &global_statements_extension,
+        global_statements_extension,
     )?;
 
     Ok(())

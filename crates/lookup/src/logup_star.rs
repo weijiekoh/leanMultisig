@@ -7,14 +7,14 @@ https://eprint.iacr.org/2025/946.pdf
 
 use p3_field::{ExtensionField, Field, PrimeField64};
 use rayon::prelude::*;
-use utils::{Evaluation, ToUsize};
+use utils::ToUsize;
 
 use p3_field::PrimeCharacteristicRing;
 use sumcheck::{MleGroupRef, ProductComputation};
 use tracing::{info_span, instrument};
 use utils::{EFPacking, FSProver, FSVerifier, PF, pack_extension, packing_width};
 use whir_p3::fiat_shamir::FSChallenger;
-use whir_p3::poly::multilinear::MultilinearPoint;
+use whir_p3::poly::multilinear::{Evaluation, MultilinearPoint};
 use whir_p3::utils::parallel_clone;
 use whir_p3::{fiat_shamir::errors::ProofError, utils::uninitialized_vec};
 

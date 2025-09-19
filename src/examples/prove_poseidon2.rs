@@ -11,7 +11,6 @@ use pcs::{
 };
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::fmt;
-use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 use utils::{
     build_merkle_compress, build_merkle_hash, build_poseidon_16_air, build_poseidon_16_air_packed,
@@ -140,8 +139,6 @@ pub fn prove_poseidon2(
         rs_domain_initial_reduction_factor,
         security_level,
         starting_log_inv_rate: log_inv_rate,
-        base_field: PhantomData::<F>,
-        extension_field: PhantomData::<EF>,
     };
 
     // let pcs = RingSwitching::<F, EF, _, EXTENSION_DEGREE>::new(pcs);
@@ -188,7 +185,7 @@ pub fn prove_poseidon2(
     pcs.open(
         &dft,
         &mut prover_state,
-        &global_statements_to_prove,
+        global_statements_to_prove,
         commitment_witness.inner_witness,
         &commitment_witness.packed_polynomial,
     );
@@ -237,7 +234,7 @@ pub fn prove_poseidon2(
     pcs.verify(
         &mut verifier_state,
         &packed_parsed_commitment,
-        &global_statements_to_verify,
+        global_statements_to_verify,
     )
     .unwrap();
 
@@ -266,7 +263,7 @@ mod tests {
             13,
             12,
             4,
-            FoldingFactor::ConstantFromSecondRound(5, 3),
+            FoldingFactor::new(5, 3),
             2,
             SecurityAssumption::CapacityBound,
             13,

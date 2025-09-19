@@ -10,7 +10,7 @@ fn main() {
         17,
         17,
         4,
-        FoldingFactor::ConstantFromSecondRound(7, 4),
+        FoldingFactor::new(7, 4),
         1,
         SecurityAssumption::CapacityBound,
         16,

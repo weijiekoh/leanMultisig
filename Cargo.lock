@@ -1206,7 +1206,7 @@ dependencies = [
 [[package]]
 name = "whir-p3"
 version = "0.1.0"
-source = "git+https://github.com/TomWambsgans/whir-p3?branch=lean-multisig#6387b9157fee1f8994b4f4d7494de5c3e22e238e"
+source = "git+https://github.com/TomWambsgans/whir-p3?branch=lean-multisig#0ca889503fb88c19d1d90b1319265a423bcf812a"
 dependencies = [
  "clap",
  "itertools",

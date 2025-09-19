@@ -30,8 +30,7 @@ pub type FSVerifier<EF, Challenger> = VerifierState<PF<EF>, EF, Challenger>;
 pub type MyMerkleHash = PaddingFreeSponge<Poseidon24, 24, 16, 8>; // leaf hashing
 pub type MyMerkleCompress = TruncatedPermutation<Poseidon16, 2, 8, 16>; // 2-to-1 compression
 pub type MyChallenger = DuplexChallenger<KoalaBear, Poseidon16, 16, 8>;
-pub type MyWhirConfigBuilder<F, EF> =
-    WhirConfigBuilder<F, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>;
+pub type MyWhirConfigBuilder = WhirConfigBuilder<MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>;
 pub const MY_DIGEST_ELEMS: usize = 8;
 
 pub trait MerkleHasher<EF: Field>:

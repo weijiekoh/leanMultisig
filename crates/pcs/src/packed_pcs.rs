@@ -5,10 +5,11 @@ use p3_util::{log2_ceil_usize, log2_strict_usize};
 use rayon::prelude::*;
 use tracing::instrument;
 use utils::{
-    Evaluation, FSProver, FSVerifier, PF, from_end, multilinear_eval_constants_at_right,
-    to_big_endian_bits, to_big_endian_in_field,
+    FSProver, FSVerifier, PF, from_end, multilinear_eval_constants_at_right, to_big_endian_bits,
+    to_big_endian_in_field,
 };
 use whir_p3::poly::evals::EvaluationsList;
+use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::{
     dft::EvalsDft,
     fiat_shamir::{FSChallenger, errors::ProofError},
@@ -540,8 +541,6 @@ fn compute_multilinear_value_from_chunks<F: Field, EF: ExtensionField<F>>(
 
 #[cfg(test)]
 mod tests {
-    use std::marker::PhantomData;
-
     use p3_field::{PrimeCharacteristicRing, extension::BinomialExtensionField};
     use p3_koala_bear::KoalaBear;
     use p3_util::log2_strict_usize;
@@ -562,7 +561,7 @@ mod tests {
     #[test]
     fn test_packed_pcs() {
         let pcs = WhirConfigBuilder {
-            folding_factor: FoldingFactor::ConstantFromSecondRound(4, 4),
+            folding_factor: FoldingFactor::new(4, 4),
             soundness_type: SecurityAssumption::CapacityBound,
             merkle_hash: build_merkle_hash(),
             merkle_compress: build_merkle_compress(),
@@ -571,8 +570,6 @@ mod tests {
             rs_domain_initial_reduction_factor: 1,
             security_level: 75,
             starting_log_inv_rate: 1,
-            base_field: PhantomData::<F>,
-            extension_field: PhantomData::<EF>,
         };
 
         let mut rng = StdRng::seed_from_u64(0);
@@ -665,7 +662,7 @@ mod tests {
         pcs.open(
             &dft,
             &mut prover_state,
-            &packed_statements,
+            packed_statements,
             witness.inner_witness,
             &witness.packed_polynomial,
         );
@@ -687,7 +684,7 @@ mod tests {
             &public_data,
         )
         .unwrap();
-        pcs.verify(&mut verifier_state, &parsed_commitment, &packed_statements)
+        pcs.verify(&mut verifier_state, &parsed_commitment, packed_statements)
             .unwrap();
     }
 }

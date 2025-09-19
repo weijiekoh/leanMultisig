@@ -2,15 +2,14 @@ use crate::pcs::PCS;
 use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use serde::{Deserialize, Serialize};
-use utils::{Evaluation, FSProver, FSVerifier, PF, PFPacking};
+use utils::{FSProver, FSVerifier, PF, PFPacking};
 use whir_p3::{
     dft::EvalsDft,
     fiat_shamir::{FSChallenger, errors::ProofError},
-    poly::evals::EvaluationsList,
+    poly::{evals::EvaluationsList, multilinear::Evaluation},
     whir::{
         config::{FoldingFactor, WhirConfig, WhirConfigBuilder},
         prover::Prover,
-        statement::Statement,
         verifier::Verifier,
     },
 };
@@ -27,10 +26,10 @@ pub trait BatchPCS<FA: Field, FB: Field, EF: ExtensionField<FA> + ExtensionField
         &self,
         dft: &EvalsDft<PF<EF>>,
         prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
-        statements_a: &[Evaluation<EF>],
+        statements_a: Vec<Evaluation<EF>>,
         witness_a: <Self::PcsA as PCS<FA, EF>>::Witness,
         polynomial_a: &[FA],
-        statements_b: &[Evaluation<EF>],
+        statements_b: Vec<Evaluation<EF>>,
         witness_b: <Self::PcsB as PCS<FB, EF>>::Witness,
         polynomial_b: &[FB],
     );
@@ -39,20 +38,20 @@ pub trait BatchPCS<FA: Field, FB: Field, EF: ExtensionField<FA> + ExtensionField
         &self,
         verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
         parsed_commitment_a: &<Self::PcsA as PCS<FA, EF>>::ParsedCommitment,
-        statements_a: &[Evaluation<EF>],
+        statements_a: Vec<Evaluation<EF>>,
         parsed_commitment_b: &<Self::PcsB as PCS<FB, EF>>::ParsedCommitment,
-        statements_b: &[Evaluation<EF>],
+        statements_b: Vec<Evaluation<EF>>,
     ) -> Result<(), ProofError>;
 }
 
 #[derive(Debug)]
-pub struct WhirBatchPcs<FA, FB, EF, H, C, const DIGEST_ELEMS: usize>(
-    pub WhirConfigBuilder<FA, EF, H, C, DIGEST_ELEMS>,
-    pub WhirConfigBuilder<FB, EF, H, C, DIGEST_ELEMS>,
+pub struct WhirBatchPcs<H, C, const DIGEST_ELEMS: usize>(
+    pub WhirConfigBuilder<H, C, DIGEST_ELEMS>,
+    pub WhirConfigBuilder<H, C, DIGEST_ELEMS>,
 );
 
 impl<F, EF, H, C, const DIGEST_ELEMS: usize> BatchPCS<F, EF, EF>
-    for WhirBatchPcs<F, EF, EF, H, C, DIGEST_ELEMS>
+    for WhirBatchPcs<H, C, DIGEST_ELEMS>
 where
     PF<EF>: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField + ExtensionField<PF<EF>>,
@@ -65,8 +64,8 @@ where
         + Sync,
     [PF<EF>; DIGEST_ELEMS]: Serialize + for<'de> Deserialize<'de>,
 {
-    type PcsA = WhirConfigBuilder<F, EF, H, C, DIGEST_ELEMS>;
-    type PcsB = WhirConfigBuilder<EF, EF, H, C, DIGEST_ELEMS>;
+    type PcsA = WhirConfigBuilder<H, C, DIGEST_ELEMS>;
+    type PcsB = WhirConfigBuilder<H, C, DIGEST_ELEMS>;
 
     fn pcs_a(&self) -> &Self::PcsA {
         &self.0
@@ -81,10 +80,8 @@ where
             .at_round(0)
             .checked_sub(var_diff)
             .unwrap();
-        let new_folding_factor_b = FoldingFactor::ConstantFromSecondRound(
-            initial_folding_factor_b,
-            pcs_b.folding_factor.at_round(1),
-        );
+        let new_folding_factor_b =
+            FoldingFactor::new(initial_folding_factor_b, pcs_b.folding_factor.at_round(1));
         pcs_b.folding_factor = new_folding_factor_b;
         pcs_b
     }
@@ -93,32 +90,24 @@ where
         &self,
         dft: &EvalsDft<PF<EF>>,
         prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
-        statements_a: &[Evaluation<EF>],
+        statements_a: Vec<Evaluation<EF>>,
         witness_a: <Self::PcsA as PCS<F, EF>>::Witness,
         polynomial_a: &[F],
-        statements_b: &[Evaluation<EF>],
+        statements_b: Vec<Evaluation<EF>>,
         witness_b: <Self::PcsB as PCS<EF, EF>>::Witness,
         polynomial_b: &[EF],
     ) {
         // TODO need to improve inside WHIR repo
 
         let config_a = WhirConfig::new(self.0.clone(), polynomial_a.num_variables());
-        let mut whir_statements_a = Statement::new(polynomial_a.num_variables());
-        for statement in statements_a {
-            whir_statements_a.add_constraint(statement.point.clone(), statement.value);
-        }
-        let mut whir_statements_b = Statement::new(polynomial_b.num_variables());
-        for statement in statements_b {
-            whir_statements_b.add_constraint(statement.point.clone(), statement.value);
-        }
         Prover(&config_a)
             .batch_prove(
                 dft,
                 prover_state,
-                whir_statements_a,
+                statements_a,
                 witness_a,
                 polynomial_a,
-                whir_statements_b,
+                statements_b,
                 witness_b,
                 polynomial_b,
             )
@@ -129,25 +118,18 @@ where
         &self,
         verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
         parsed_commitment_a: &<Self::PcsA as PCS<F, EF>>::ParsedCommitment,
-        statements_a: &[Evaluation<EF>],
+        statements_a: Vec<Evaluation<EF>>,
         parsed_commitment_b: &<Self::PcsB as PCS<EF, EF>>::ParsedCommitment,
-        statements_b: &[Evaluation<EF>],
+        statements_b: Vec<Evaluation<EF>>,
     ) -> Result<(), ProofError> {
         let config = WhirConfig::new(self.0.clone(), parsed_commitment_a.num_variables);
-        let mut whir_statements_a = Statement::new(parsed_commitment_a.num_variables);
-        for statement in statements_a {
-            whir_statements_a.add_constraint(statement.point.clone(), statement.value);
-        }
-        let mut whir_statements_b = Statement::new(parsed_commitment_b.num_variables);
-        for statement in statements_b {
-            whir_statements_b.add_constraint(statement.point.clone(), statement.value);
-        }
+
         Verifier(&config).batch_verify(
             verifier_state,
             parsed_commitment_a,
-            &whir_statements_a,
+            statements_a,
             parsed_commitment_b,
-            &whir_statements_b,
+            statements_b,
         )?;
         Ok(())
     }

@@ -21,12 +21,13 @@ use utils::dot_product_with_base;
 use utils::field_slice_as_base;
 use utils::pack_extension;
 use utils::{
-    Evaluation, PF, build_poseidon_16_air, build_poseidon_24_air, build_prover_state,
+    PF, build_poseidon_16_air, build_poseidon_24_air, build_prover_state,
     padd_with_zero_to_next_power_of_two,
 };
 use vm_air::*;
 use whir_p3::dft::EvalsDft;
 use whir_p3::poly::evals::{eval_eq, fold_multilinear};
+use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 use whir_p3::utils::{compute_eval_eq, compute_sparse_eval_eq};
 
@@ -1353,10 +1354,10 @@ pub fn prove_execution(
     pcs.batch_open(
         &dft,
         &mut prover_state,
-        &global_statements_base,
+        global_statements_base,
         packed_pcs_witness_base.inner_witness,
         &packed_pcs_witness_base.packed_polynomial,
-        &global_statements_extension,
+        global_statements_extension,
         packed_pcs_witness_extension.inner_witness,
         &packed_pcs_witness_extension.packed_polynomial,
     );

@@ -1,11 +1,11 @@
 use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use serde::{Deserialize, Serialize};
-use utils::{Evaluation, FSProver, FSVerifier, PF, PFPacking};
+use utils::{FSProver, FSVerifier, PF, PFPacking};
 use whir_p3::{
     dft::EvalsDft,
     fiat_shamir::{FSChallenger, errors::ProofError},
-    poly::evals::EvaluationsList,
+    poly::{evals::EvaluationsList, multilinear::Evaluation},
     whir::{
         committer::{
             Witness,
@@ -14,7 +14,6 @@ use whir_p3::{
         },
         config::{WhirConfig, WhirConfigBuilder},
         prover::Prover,
-        statement::Statement,
         verifier::Verifier,
     },
 };
@@ -36,7 +35,7 @@ pub trait PCS<F: Field, EF: ExtensionField<F>> {
         &self,
         dft: &EvalsDft<PF<EF>>,
         prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
-        statements: &[Evaluation<EF>],
+        statements: Vec<Evaluation<EF>>,
         witness: Self::Witness,
         polynomial: &[F],
     );
@@ -49,7 +48,7 @@ pub trait PCS<F: Field, EF: ExtensionField<F>> {
         &self,
         verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
         parsed_commitment: &Self::ParsedCommitment,
-        statements: &[Evaluation<EF>],
+        statements: Vec<Evaluation<EF>>,
     ) -> Result<(), ProofError>;
 }
 
@@ -63,8 +62,7 @@ where
     }
 }
 
-impl<F, EF, H, C, const DIGEST_ELEMS: usize> PCS<F, EF>
-    for WhirConfigBuilder<F, EF, H, C, DIGEST_ELEMS>
+impl<F, EF, H, C, const DIGEST_ELEMS: usize> PCS<F, EF> for WhirConfigBuilder<H, C, DIGEST_ELEMS>
 where
     PF<EF>: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField + ExtensionField<PF<EF>>,
@@ -96,17 +94,13 @@ where
         &self,
         dft: &EvalsDft<PF<EF>>,
         prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
-        statements: &[Evaluation<EF>],
+        statements: Vec<Evaluation<EF>>,
         witness: Self::Witness,
         polynomial: &[F],
     ) {
         let config = WhirConfig::new(self.clone(), polynomial.num_variables());
-        let mut whir_statements = Statement::new(polynomial.num_variables());
-        for statement in statements {
-            whir_statements.add_constraint(statement.point.clone(), statement.value);
-        }
         Prover(&config)
-            .prove(dft, prover_state, whir_statements, witness, polynomial)
+            .prove(dft, prover_state, statements, witness, polynomial)
             .unwrap();
     }
     fn parse_commitment(
@@ -122,14 +116,10 @@ where
         &self,
         verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
         parsed_commitment: &Self::ParsedCommitment,
-        statements: &[Evaluation<EF>],
+        statements: Vec<Evaluation<EF>>,
     ) -> Result<(), ProofError> {
         let config = WhirConfig::new(self.clone(), parsed_commitment.num_variables());
-        let mut whir_statements = Statement::new(parsed_commitment.num_variables());
-        for statement in statements {
-            whir_statements.add_constraint(statement.point.clone(), statement.value);
-        }
-        Verifier(&config).verify(verifier_state, parsed_commitment, &whir_statements)?;
+        Verifier(&config).verify(verifier_state, parsed_commitment, statements)?;
         Ok(())
     }
 }

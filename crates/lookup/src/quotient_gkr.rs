@@ -6,7 +6,6 @@ https://eprint.iacr.org/2025/946.pdf
 with custom GKR
 
 */
-
 use p3_field::PackedFieldExtension;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::{ExtensionField, PrimeField64, dot_product};
@@ -19,12 +18,13 @@ use utils::pack_extension;
 use utils::packing_log_width;
 use utils::packing_width;
 use utils::unpack_extension;
-use utils::{EFPacking, Evaluation, FSProver, FSVerifier, PF, PFPacking};
+use utils::{EFPacking, FSProver, FSVerifier, PF, PFPacking};
 use whir_p3::fiat_shamir::FSChallenger;
 use whir_p3::fiat_shamir::errors::ProofError;
 use whir_p3::poly::dense::WhirDensePolynomial;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::evals::eval_eq;
+use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::multilinear::MultilinearPoint;
 
 /*
@@ -209,7 +209,7 @@ where
     ]));
 
     (
-        (next_point, next_claim).into(),
+        Evaluation::new(next_point, next_claim),
         up_layer_eval_left,
         up_layer_eval_right,
     )
@@ -339,7 +339,7 @@ where
     ]));
 
     (
-        (next_point, next_claim).into(),
+        Evaluation::new(next_point, next_claim),
         up_layer_eval_left,
         up_layer_eval_right,
     )
@@ -413,7 +413,7 @@ where
             .copied(),
     );
 
-    Ok((next_point, next_claim).into())
+    Ok(Evaluation::new(next_point, next_claim))
 }
 
 pub struct GKRQuotientComputation<EF> {

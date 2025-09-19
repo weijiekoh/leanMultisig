@@ -4,10 +4,11 @@ use pcs::ColDims;
 use rayon::prelude::*;
 use std::ops::Range;
 use sumcheck::{SumcheckComputation, SumcheckComputationPacked};
-use utils::{
-    EFPacking, Evaluation, PF, Poseidon16Air, Poseidon24Air, padd_with_zero_to_next_power_of_two,
+use utils::{EFPacking, PF, Poseidon16Air, Poseidon24Air, padd_with_zero_to_next_power_of_two};
+use whir_p3::poly::{
+    evals::fold_multilinear,
+    multilinear::{Evaluation, MultilinearPoint},
 };
-use whir_p3::poly::{evals::fold_multilinear, multilinear::MultilinearPoint};
 
 use crate::*;
 use lean_vm::*;

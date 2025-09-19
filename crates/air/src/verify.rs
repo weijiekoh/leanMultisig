@@ -3,11 +3,12 @@ use p3_field::{ExtensionField, cyclic_subgroup_known_order, dot_product};
 use p3_util::log2_ceil_usize;
 use std::ops::Range;
 use sumcheck::SumcheckComputation;
+use utils::from_end;
 use utils::univariate_selectors;
-use utils::{Evaluation, from_end};
 use utils::{FSVerifier, PF};
 use whir_p3::fiat_shamir::FSChallenger;
 use whir_p3::poly::evals::eval_eq;
+use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::{
     fiat_shamir::errors::ProofError,
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},

@@ -6,9 +6,10 @@ use p3_util::log2_ceil_usize;
 use sumcheck::{MleGroup, MleGroupOwned, MleGroupRef, ProductComputation};
 use tracing::{info_span, instrument};
 use utils::PF;
-use utils::{Evaluation, FSProver, add_multilinears, from_end, multilinears_linear_combination};
+use utils::{FSProver, add_multilinears, from_end, multilinears_linear_combination};
 use whir_p3::fiat_shamir::FSChallenger;
 use whir_p3::poly::evals::{eval_eq, fold_multilinear, scale_poly};
+use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 
 use crate::witness::AirWitness;

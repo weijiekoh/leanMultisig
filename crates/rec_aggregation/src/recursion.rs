@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::path::Path;
 use std::time::Instant;
 
@@ -24,7 +23,6 @@ use whir_p3::{
         committer::{reader::*, writer::*},
         config::{FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder},
         prover::*,
-        statement::Statement,
         verifier::*,
     },
 };
@@ -39,14 +37,12 @@ pub fn test_whir_recursion() {
         max_num_variables_to_send_coeffs: 6,
         security_level: 128,
         pow_bits: 17,
-        folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
+        folding_factor: FoldingFactor::new(7, 4),
         merkle_hash: build_merkle_hash(),
         merkle_compress: build_merkle_compress(),
         soundness_type: SecurityAssumption::CapacityBound,
         starting_log_inv_rate: 2,
         rs_domain_initial_reduction_factor: 3,
-        base_field: PhantomData,
-        extension_field: PhantomData,
     };
 
     let mut recursion_config = WhirConfig::<F, EF, MyMerkleHash, MyMerkleCompress, 8>::new(
@@ -116,9 +112,9 @@ pub fn test_whir_recursion() {
 
     let point = MultilinearPoint::<EF>::rand(&mut rng, num_variables);
 
-    let mut statement = Statement::<EF>::new(num_variables);
+    let mut statement = Vec::new();
     let eval = polynomial.evaluate(&point);
-    statement.add_constraint(point.clone(), eval);
+    statement.push(Evaluation::new(point.clone(), eval));
 
     let mut prover_state = build_prover_state();
 
@@ -206,7 +202,7 @@ pub fn test_whir_recursion() {
         .unwrap();
 
     Verifier(&recursion_config)
-        .verify(&mut verifier_state, &parsed_commitment, &statement)
+        .verify(&mut verifier_state, &parsed_commitment, statement)
         .unwrap();
 
     // #[rustfmt::skip] // debug

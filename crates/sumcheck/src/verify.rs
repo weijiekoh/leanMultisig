@@ -1,8 +1,11 @@
 use p3_field::ExtensionField;
-use utils::{Evaluation, FSVerifier, PF};
+use utils::{FSVerifier, PF};
 use whir_p3::{
     fiat_shamir::{FSChallenger, errors::ProofError},
-    poly::{dense::WhirDensePolynomial, multilinear::MultilinearPoint},
+    poly::{
+        dense::WhirDensePolynomial,
+        multilinear::{Evaluation, MultilinearPoint},
+    },
 };
 
 pub fn verify<EF>(
