@@ -19,7 +19,7 @@ fn bench_poseidon2(c: &mut Criterion) {
         log_n_poseidons_24: L24,
         univariate_skips: 4,
         folding_factor: FoldingFactor::new(7, 4),
-        log_inv_rate: 4,
+        log_inv_rate: 1,
         soundness_type: SecurityAssumption::CapacityBound,
         pow_bits: 16,
         security_level: 128,
