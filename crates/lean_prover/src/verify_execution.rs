@@ -174,10 +174,8 @@ pub fn verify_execution(
         log_public_memory,
         private_memory_len,
         bytecode.ending_pc,
-        n_poseidons_16,
-        n_poseidons_24,
-        p16_air.width(),
-        p24_air.width(),
+        (n_poseidons_16, n_poseidons_24),
+        (p16_air.width(), p24_air.width()),
         n_rows_table_dot_products,
     );
 
@@ -548,7 +546,7 @@ pub fn verify_execution(
         &second_batched_whir_config_builder::<EF, EF, _, _, _>(
             whir_config_builder.clone(),
             parsed_commitment_base.num_variables,
-            num_packed_vars_for_dims::<EF, EF>(&extension_dims, LOG_SMALLEST_DECOMPOSITION_CHUNK),
+            num_packed_vars_for_dims::<EF>(&extension_dims, LOG_SMALLEST_DECOMPOSITION_CHUNK),
         ),
         &mut verifier_state,
         &extension_dims,
@@ -859,8 +857,12 @@ pub fn verify_execution(
         );
 
         let mut dot_product_indexes_inner_evals_incr = vec![EF::ZERO; 8];
-        for i in 0..DIMENSION {
-            dot_product_indexes_inner_evals_incr[i] = dot_product_logup_star_indexes_inner_value
+        for (i, value) in dot_product_indexes_inner_evals_incr
+            .iter_mut()
+            .enumerate()
+            .take(DIMENSION)
+        {
+            *value = dot_product_logup_star_indexes_inner_value
                 + EF::from_usize(i)
                     * [F::ONE, F::ONE, F::ONE, F::ZERO].evaluate(&MultilinearPoint(
                         mem_lookup_eval_indexes_partial_point.0[3 + index_diff..5 + index_diff]
