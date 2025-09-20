@@ -105,41 +105,20 @@ fn generate_structured_trace<const N_COLUMNS: usize, const N_PREPROCESSED_COLUMN
         trace.push((0..n_rows).map(|_| rng.random()).collect::<Vec<F>>());
     }
     let mut witness_cols = vec![vec![F::ZERO]; N_COLUMNS - N_PREPROCESSED_COLUMNS];
-    let mut prev_values = vec![F::ZERO; N_COLUMNS - N_PREPROCESSED_COLUMNS];
-    let mut column_iters = trace[..N_PREPROCESSED_COLUMNS]
-        .iter()
-        .map(|col| col.iter())
-        .collect::<Vec<_>>();
-    if column_iters.is_empty() {
-        trace.extend(witness_cols);
-        return trace;
-    }
-    for iter in &mut column_iters {
-        iter.next(); // skip first row, already initialised
-    }
-    loop {
-        let mut row_product = F::ONE;
-        let mut progressed = true;
-        for iter in &mut column_iters {
-            match iter.next() {
-                Some(value) => row_product *= *value,
-                None => {
-                    progressed = false;
-                    break;
-                }
-            }
-        }
-        if !progressed {
-            break;
-        }
-        for (j, (witness_col, prev)) in witness_cols
+    for i in 1..n_rows {
+        for (j, witness_col) in witness_cols
             .iter_mut()
-            .zip(prev_values.iter_mut())
             .enumerate()
+            .take(N_COLUMNS - N_PREPROCESSED_COLUMNS)
         {
-            let next_val = *prev + F::from_usize(j + N_PREPROCESSED_COLUMNS) + row_product;
-            witness_col.push(next_val);
-            *prev = next_val;
+            let witness_cols_j_i_min_1 = witness_col[i - 1];
+            witness_col.push(
+                witness_cols_j_i_min_1
+                    + F::from_usize(j + N_PREPROCESSED_COLUMNS)
+                    + (0..N_PREPROCESSED_COLUMNS)
+                        .map(|k| trace[k][i])
+                        .product::<F>(),
+            );
         }
     }
     trace.extend(witness_cols);

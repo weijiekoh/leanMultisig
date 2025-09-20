@@ -99,16 +99,14 @@ pub fn execute_bytecode(
     let mut instruction_history = ExecutionHistory::default();
     let first_exec = match execute_bytecode_helper(
         bytecode,
-        ExecuteBytecodeParams {
-            public_input,
-            private_input,
-            no_vec_runtime_memory: MAX_MEMORY_SIZE / 2,
-            final_execution: false,
-            std_out: &mut std_out,
-            instruction_history: &mut instruction_history,
-            profiler: false,
-            function_locations,
-        },
+        public_input,
+        private_input,
+        MAX_MEMORY_SIZE / 2,
+        false,
+        &mut std_out,
+        &mut instruction_history,
+        false,
+        function_locations,
     ) {
         Ok(first_exec) => first_exec,
         Err(err) => {
@@ -131,16 +129,14 @@ pub fn execute_bytecode(
     instruction_history = ExecutionHistory::default();
     execute_bytecode_helper(
         bytecode,
-        ExecuteBytecodeParams {
-            public_input,
-            private_input,
-            no_vec_runtime_memory: first_exec.no_vec_runtime_memory,
-            final_execution: true,
-            std_out: &mut String::new(),
-            instruction_history: &mut instruction_history,
-            profiler,
-            function_locations,
-        },
+        public_input,
+        private_input,
+        first_exec.no_vec_runtime_memory,
+        true,
+        &mut String::new(),
+        &mut instruction_history,
+        profiler,
+        function_locations,
     )
     .unwrap()
 }
@@ -190,32 +186,18 @@ pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
     public_memory
 }
 
-#[derive(Debug)]
-struct ExecuteBytecodeParams<'a> {
-    public_input: &'a [F],
-    private_input: &'a [F],
-    no_vec_runtime_memory: usize,
-    final_execution: bool,
-    std_out: &'a mut String,
-    instruction_history: &'a mut ExecutionHistory,
-    profiler: bool,
-    function_locations: &'a BTreeMap<usize, String>,
-}
-
+#[allow(clippy::too_many_arguments)] // TODO
 fn execute_bytecode_helper(
     bytecode: &Bytecode,
-    params: ExecuteBytecodeParams<'_>,
+    public_input: &[F],
+    private_input: &[F],
+    no_vec_runtime_memory: usize,
+    final_execution: bool,
+    std_out: &mut String,
+    instruction_history: &mut ExecutionHistory,
+    profiler: bool,
+    function_locations: &BTreeMap<usize, String>,
 ) -> Result<ExecutionResult, RunnerError> {
-    let ExecuteBytecodeParams {
-        public_input,
-        private_input,
-        no_vec_runtime_memory,
-        final_execution,
-        std_out,
-        instruction_history,
-        profiler,
-        function_locations,
-    } = params;
     let poseidon_16 = get_poseidon16();
     let poseidon_24 = get_poseidon24();
 

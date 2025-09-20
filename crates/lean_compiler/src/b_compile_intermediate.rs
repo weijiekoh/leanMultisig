@@ -368,7 +368,7 @@ fn compile_lines(
             }
 
             SimpleLine::RawAccess { res, index, shift } => {
-                validate_vars_declared(std::slice::from_ref(index), declared_vars)?;
+                validate_vars_declared(&[index], declared_vars)?;
                 if let SimpleExpr::Var(var) = res {
                     declared_vars.insert(var.clone());
                 }
