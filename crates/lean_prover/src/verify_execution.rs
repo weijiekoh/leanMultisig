@@ -460,15 +460,26 @@ pub fn verify_execution(
     );
     let alpha_bytecode_lookup = verifier_state.sample();
 
+    let dot_product_values_mixing_challenges = MultilinearPoint(verifier_state.sample_vec(2));
+
     let dot_product_evals_spread = verifier_state.next_extension_scalars_vec(DIMENSION)?;
 
-    if dot_product_with_base(&dot_product_evals_spread) != dot_product_evals_to_verify[5].value {
+    let dot_product_values_mixed = [
+        dot_product_evals_to_verify[5].value,
+        dot_product_evals_to_verify[6].value,
+        dot_product_evals_to_verify[7].value,
+        EF::ZERO,
+    ]
+    .evaluate(&dot_product_values_mixing_challenges);
+
+    if dot_product_with_base(&dot_product_evals_spread) != dot_product_values_mixed {
         return Err(ProofError::InvalidProof);
     }
     let dot_product_values_batching_scalars = MultilinearPoint(verifier_state.sample_vec(3));
     let dot_product_values_batched_point = MultilinearPoint(
         [
             dot_product_values_batching_scalars.0.clone(),
+            dot_product_values_mixing_challenges.0.clone(),
             dot_product_evals_to_verify[5].point.0.clone(),
         ]
         .concat(),
@@ -783,14 +794,14 @@ pub fn verify_execution(
     let dot_product_computation_column_evals =
         verifier_state.next_extension_scalars_const::<DIMENSION>()?;
     if dot_product_with_base(&dot_product_computation_column_evals)
-        != dot_product_evals_to_verify[6].value
+        != dot_product_evals_to_verify[8].value
     {
         return Err(ProofError::InvalidProof);
     }
     let dot_product_computation_column_statements = (0..DIMENSION)
         .map(|i| {
             vec![Evaluation::new(
-                dot_product_evals_to_verify[6].point.clone(),
+                dot_product_evals_to_verify[8].point.clone(),
                 dot_product_computation_column_evals[i],
             )]
         })

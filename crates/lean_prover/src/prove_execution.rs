@@ -87,8 +87,6 @@ pub fn prove_execution(
     let exec_witness = AirWitness::<PF<EF>>::new(&exec_columns, &exec_column_groups());
     let exec_table = AirTable::<EF, _, _>::new(VMAir, VMAir);
 
-    // exec_table.check_trace_validity(&exec_witness).unwrap();
-
     let _validity_proof_span = info_span!("Validity proof generation").entered();
 
     let p16_air = build_poseidon_16_air();
@@ -829,13 +827,31 @@ pub fn prove_execution(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
+
+    let dot_product_values_mixing_challenges = MultilinearPoint(prover_state.sample_vec(2));
+    let dot_product_values_mixed = [
+        dot_product_evals_to_prove[5].value,
+        dot_product_evals_to_prove[6].value,
+        dot_product_evals_to_prove[7].value,
+        EF::ZERO,
+    ]
+    .evaluate(&dot_product_values_mixing_challenges);
+
     let dot_product_evals_spread = dot_product_values_spread
         .iter()
-        .map(|slice| slice.evaluate(&dot_product_evals_to_prove[5].point))
+        .map(|slice| {
+            slice.evaluate(&MultilinearPoint(
+                [
+                    dot_product_values_mixing_challenges.0.clone(),
+                    dot_product_evals_to_prove[5].point.0.clone(),
+                ]
+                .concat(),
+            ))
+        })
         .collect::<Vec<_>>();
     assert_eq!(
         dot_product_with_base(&dot_product_evals_spread),
-        dot_product_evals_to_prove[5].value
+        dot_product_values_mixed
     );
     prover_state.add_extension_scalars(&dot_product_evals_spread);
 
@@ -844,6 +860,7 @@ pub fn prove_execution(
     let dot_product_values_batched_point = MultilinearPoint(
         [
             dot_product_values_batching_scalars.0.clone(),
+            dot_product_values_mixing_challenges.0.clone(),
             dot_product_evals_to_prove[5].point.0.clone(),
         ]
         .concat(),
@@ -1144,13 +1161,13 @@ pub fn prove_execution(
         .collect::<Vec<_>>();
     assert_eq!(
         dot_product_with_base(&dot_product_computation_column_evals),
-        dot_product_evals_to_prove[6].value
+        dot_product_evals_to_prove[8].value
     );
     prover_state.add_extension_scalars(&dot_product_computation_column_evals);
     let dot_product_computation_column_statements = (0..DIMENSION)
         .map(|i| {
             vec![Evaluation::new(
-                dot_product_evals_to_prove[6].point.clone(),
+                dot_product_evals_to_prove[8].point.clone(),
                 dot_product_computation_column_evals[i],
             )]
         })
