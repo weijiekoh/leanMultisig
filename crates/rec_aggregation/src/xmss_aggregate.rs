@@ -309,7 +309,11 @@ pub fn bench_xmss(n: usize, log_lifetime: usize) -> Duration {
 #[test]
 fn test_xmss_aggregate() {
     use p3_field::Field;
-    let stats = run_xmss_benchmark::<32>(100);
+    let n_public_keys: usize = std::env::var("NUM_XMSS_AGGREGATED")
+        .unwrap_or("100".to_string())
+        .parse()
+        .unwrap();
+    let stats = run_xmss_benchmark::<32>(n_public_keys);
     println!(
         "\nXMSS aggregation (n_signatures = {}, lifetime = 2^{})",
         stats.verified_signatures, 32

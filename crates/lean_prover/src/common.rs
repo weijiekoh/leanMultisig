@@ -1,10 +1,8 @@
-use p3_air::BaseAir;
 use p3_field::{ExtensionField, PrimeCharacteristicRing};
 use packed_pcs::ColDims;
 use rayon::prelude::*;
-use std::ops::Range;
 use sumcheck::{SumcheckComputation, SumcheckComputationPacked};
-use utils::{EFPacking, PF, Poseidon16Air, Poseidon24Air, padd_with_zero_to_next_power_of_two};
+use utils::{EFPacking, PF, padd_with_zero_to_next_power_of_two};
 use whir_p3::poly::{
     evals::fold_multilinear,
     multilinear::{Evaluation, MultilinearPoint},
@@ -60,14 +58,6 @@ pub fn get_base_dims(
         vec![ColDims::padded(n_rows_table_dot_products, F::ZERO); DIMENSION], // dot product: computation
     ]
     .concat()
-}
-
-pub fn poseidon_16_column_groups(poseidon_16_air: &Poseidon16Air<F>) -> Vec<Range<usize>> {
-    (0..poseidon_16_air.width()).map(|i| i..i + 1).collect()
-}
-
-pub fn poseidon_24_column_groups(poseidon_24_air: &Poseidon24Air<F>) -> Vec<Range<usize>> {
-    (0..poseidon_24_air.width()).map(|i| i..i + 1).collect()
 }
 
 pub fn fold_bytecode(bytecode: &Bytecode, folding_challenges: &MultilinearPoint<EF>) -> Vec<EF> {

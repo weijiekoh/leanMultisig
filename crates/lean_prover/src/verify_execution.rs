@@ -397,32 +397,14 @@ pub fn verify_execution(
         grand_product_exec_sumcheck_inner_evals[COL_INDEX_FP],
     );
 
-    let exec_evals_to_verify = exec_table.verify(
-        &mut verifier_state,
-        UNIVARIATE_SKIPS,
-        log_n_cycles,
-        &exec_column_groups(),
-    )?;
+    let exec_evals_to_verify =
+        exec_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_cycles)?;
 
-    let dot_product_evals_to_verify = dot_product_table.verify(
-        &mut verifier_state,
-        1,
-        table_dot_products_log_n_rows,
-        &DOT_PRODUCT_AIR_COLUMN_GROUPS,
-    )?;
+    let dot_product_evals_to_verify =
+        dot_product_table.verify(&mut verifier_state, 1, table_dot_products_log_n_rows)?;
 
-    let p16_evals_to_verify = p16_table.verify(
-        &mut verifier_state,
-        UNIVARIATE_SKIPS,
-        log_n_p16,
-        &poseidon_16_column_groups(&p16_air),
-    )?;
-    let p24_evals_to_verify = p24_table.verify(
-        &mut verifier_state,
-        UNIVARIATE_SKIPS,
-        log_n_p24,
-        &poseidon_24_column_groups(&p24_air),
-    )?;
+    let p16_evals_to_verify = p16_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_p16)?;
+    let p24_evals_to_verify = p24_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_p24)?;
 
     let poseidon_logup_star_alpha = verifier_state.sample();
     let memory_folding_challenges = MultilinearPoint(verifier_state.sample_vec(LOG_VECTOR_LEN));

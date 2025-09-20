@@ -1,5 +1,4 @@
 #![cfg_attr(not(test), allow(unused_crate_dependencies))]
-use std::ops::Range;
 
 use lean_vm::{EF, F};
 use utils::*;
@@ -14,13 +13,6 @@ pub mod verify_execution;
 
 const UNIVARIATE_SKIPS: usize = 3;
 const LOG_SMALLEST_DECOMPOSITION_CHUNK: usize = 8; // TODO optimize
-
-fn exec_column_groups() -> Vec<Range<usize>> {
-    [(0..N_EXEC_AIR_COLUMNS)
-        .map(|i| i..i + 1)
-        .collect::<Vec<_>>()]
-    .concat()
-}
 
 pub fn whir_config_builder() -> MyWhirConfigBuilder {
     WhirConfigBuilder {

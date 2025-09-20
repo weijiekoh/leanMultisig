@@ -1,5 +1,4 @@
 use air::table::AirTable;
-use air::witness::AirWitness;
 use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
@@ -12,7 +11,6 @@ use packed_pcs::{
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::collections::BTreeMap;
 use std::fmt;
-use std::ops::Range;
 use std::time::{Duration, Instant};
 use utils::{
     FSProver, MY_DIGEST_ELEMS, MyChallenger, MyMerkleCompress, MyMerkleHash, MyWhirConfigBuilder,
@@ -20,7 +18,7 @@ use utils::{
     build_poseidon_16_air, build_poseidon_16_air_packed, build_poseidon_24_air,
     build_poseidon_24_air_packed, build_prover_state, build_verifier_state,
     generate_trace_poseidon_16, generate_trace_poseidon_24, get_poseidon16, get_poseidon24,
-    init_tracing, padd_with_zero_to_next_power_of_two,
+    init_tracing,
 };
 use whir_p3::dft::EvalsDft;
 use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder};
@@ -75,13 +73,10 @@ pub struct Poseidon2Config {
 }
 
 struct PoseidonSetup {
+    n_columns_16: usize,
     n_columns_24: usize,
-    log_table_area_16: usize,
-    log_table_area_24: usize,
     witness_columns_16: Vec<Vec<F>>,
     witness_columns_24: Vec<Vec<F>>,
-    column_groups_16: Vec<Range<usize>>,
-    column_groups_24: Vec<Range<usize>>,
     table_16: AirTable<EF, Poseidon16Air<F>, Poseidon16Air<PFPacking<F>>>,
     table_24: AirTable<EF, Poseidon24Air<F>, Poseidon24Air<PFPacking<F>>>,
 }
@@ -90,7 +85,7 @@ struct ProverArtifacts {
     prover_time: Duration,
     whir_config_builder: MyWhirConfigBuilder,
     whir_config: MyWhirConfig,
-    dims: [ColDims<F>; 2],
+    dims: Vec<ColDims<F>>,
 }
 
 fn prepare_poseidon(config: &Poseidon2Config) -> PoseidonSetup {
@@ -104,8 +99,6 @@ fn prepare_poseidon(config: &Poseidon2Config) -> PoseidonSetup {
 
     let n_columns_16 = poseidon_air_16.width();
     let n_columns_24 = poseidon_air_24.width();
-    let log_table_area_16 = config.log_n_poseidons_16 + log2_ceil_usize(n_columns_16);
-    let log_table_area_24 = config.log_n_poseidons_24 + log2_ceil_usize(n_columns_24);
 
     let mut rng = StdRng::seed_from_u64(0);
     let inputs_16: Vec<[F; 16]> = (0..n_poseidons_16).map(|_| Default::default()).collect();
@@ -140,14 +133,6 @@ fn prepare_poseidon(config: &Poseidon2Config) -> PoseidonSetup {
                 .to_vec()
         })
         .collect::<Vec<_>>();
-    let column_groups_16 = vec![Range {
-        start: 0,
-        end: n_columns_16,
-    }];
-    let column_groups_24 = vec![Range {
-        start: 0,
-        end: n_columns_24,
-    }];
 
     let table_16: AirTable<EF, Poseidon16Air<F>, Poseidon16Air<PFPacking<F>>> =
         AirTable::new(poseidon_air_16, poseidon_air_16_packed);
@@ -155,13 +140,10 @@ fn prepare_poseidon(config: &Poseidon2Config) -> PoseidonSetup {
         AirTable::new(poseidon_air_24, poseidon_air_24_packed);
 
     PoseidonSetup {
+        n_columns_16,
         n_columns_24,
-        log_table_area_16,
-        log_table_area_24,
         witness_columns_16,
         witness_columns_24,
-        column_groups_16,
-        column_groups_24,
         table_16,
         table_24,
     }
@@ -170,8 +152,8 @@ fn prepare_poseidon(config: &Poseidon2Config) -> PoseidonSetup {
 fn run_prover_phase(
     config: &Poseidon2Config,
     setup: &PoseidonSetup,
-    witness_16: AirWitness<'_, F>,
-    witness_24: AirWitness<'_, F>,
+    witness_16: &[&[F]],
+    witness_24: &[&[F]],
     prover_state: &mut FSProver<EF, MyChallenger>,
 ) -> ProverArtifacts {
     let start = Instant::now();
@@ -195,20 +177,18 @@ fn run_prover_phase(
             - whir_config_builder.folding_factor.at_round(0)),
     );
 
-    let commited_trace_polynomial_16 =
-        padd_with_zero_to_next_power_of_two(&setup.witness_columns_16.concat());
-    let commited_trace_polynomial_24 =
-        padd_with_zero_to_next_power_of_two(&setup.witness_columns_24.concat());
-
     let dims = [
-        ColDims::full(setup.log_table_area_16),
-        ColDims::full(setup.log_table_area_24),
-    ];
+        vec![ColDims::full(config.log_n_poseidons_16); setup.n_columns_16],
+        vec![ColDims::full(config.log_n_poseidons_24); setup.n_columns_24],
+    ]
+    .concat();
     let log_smallest_decomposition_chunk = 0;
-    let commited_slices = [
-        commited_trace_polynomial_16.as_slice(),
-        commited_trace_polynomial_24.as_slice(),
-    ];
+    let commited_slices = setup
+        .witness_columns_16
+        .iter()
+        .chain(setup.witness_columns_24.iter())
+        .map(Vec::as_slice)
+        .collect::<Vec<_>>();
 
     let commitment_witness = packed_pcs_commit(
         &whir_config_builder,
@@ -235,7 +215,11 @@ fn run_prover_phase(
         &[
             evaluations_remaining_to_prove_16,
             evaluations_remaining_to_prove_24,
-        ],
+        ]
+        .concat()
+        .into_iter()
+        .map(|s| vec![s])
+        .collect::<Vec<_>>(),
         prover_state,
     );
     let whir_config = WhirConfig::new(
@@ -266,7 +250,7 @@ fn run_verifier_phase(
 ) -> Duration {
     let start = Instant::now();
     let mut verifier_state = build_verifier_state(prover_state);
-    let log_smallest_decomposition_chunk = 0;
+    let log_smallest_decomposition_chunk = 0; // unused (everything is power of two)
 
     let packed_parsed_commitment = packed_pcs_parse_commitment(
         &artifacts.whir_config_builder,
@@ -282,7 +266,6 @@ fn run_verifier_phase(
             &mut verifier_state,
             config.univariate_skips,
             config.log_n_poseidons_16,
-            &setup.column_groups_16,
         )
         .unwrap();
     let evaluations_remaining_to_verify_24 = setup
@@ -291,7 +274,6 @@ fn run_verifier_phase(
             &mut verifier_state,
             config.univariate_skips,
             config.log_n_poseidons_24,
-            &setup.column_groups_24,
         )
         .unwrap();
 
@@ -301,7 +283,11 @@ fn run_verifier_phase(
         &[
             evaluations_remaining_to_verify_16,
             evaluations_remaining_to_verify_24,
-        ],
+        ]
+        .concat()
+        .into_iter()
+        .map(|s| vec![s])
+        .collect::<Vec<_>>(),
         &mut verifier_state,
         &BTreeMap::default(),
     )
@@ -325,11 +311,23 @@ pub fn prove_poseidon2(config: &Poseidon2Config) -> Poseidon2Benchmark {
     }
 
     let setup = prepare_poseidon(config);
-    let witness_16 = AirWitness::new(&setup.witness_columns_16, &setup.column_groups_16);
-    let witness_24 = AirWitness::new(&setup.witness_columns_24, &setup.column_groups_24);
 
     let mut prover_state = build_prover_state();
-    let artifacts = run_prover_phase(config, &setup, witness_16, witness_24, &mut prover_state);
+    let artifacts = run_prover_phase(
+        config,
+        &setup,
+        &setup
+            .witness_columns_16
+            .iter()
+            .map(Vec::as_slice)
+            .collect::<Vec<_>>(),
+        &setup
+            .witness_columns_24
+            .iter()
+            .map(Vec::as_slice)
+            .collect::<Vec<_>>(),
+        &mut prover_state,
+    );
     let verifier_time = run_verifier_phase(config, &setup, &artifacts, &prover_state);
 
     let proof_size = prover_state.proof_data().len() as f64 * (F::ORDER_U64 as f64).log2() / 8.0;

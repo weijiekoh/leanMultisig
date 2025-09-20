@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::*;
-use ::air::{table::AirTable, witness::AirWitness};
+use ::air::table::AirTable;
 use lean_vm::*;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
@@ -84,7 +84,6 @@ pub fn prove_execution(
             .map(Vec::as_slice)
             .collect::<Vec<_>>(),
     );
-    let exec_witness = AirWitness::<PF<EF>>::new(&exec_columns, &exec_column_groups());
     let exec_table = AirTable::<EF, _, _>::new(VMAir, VMAir);
 
     let _validity_proof_span = info_span!("Validity proof generation").entered();
@@ -99,11 +98,8 @@ pub fn prove_execution(
     let dot_product_table = AirTable::<EF, _, _>::new(DotProductAir, DotProductAir);
 
     let (p16_columns, p24_columns) = build_poseidon_columns(&poseidons_16, &poseidons_24);
-    let p16_witness = AirWitness::new(&p16_columns, &poseidon_16_column_groups(&p16_air));
-    let p24_witness = AirWitness::new(&p24_columns, &poseidon_24_column_groups(&p24_air));
 
     let (dot_product_columns, dot_product_padding_len) = build_dot_product_columns(&dot_products);
-    let dot_product_witness = AirWitness::new(&dot_product_columns, &DOT_PRODUCT_AIR_COLUMN_GROUPS);
 
     let dot_product_flags: Vec<PF<EF>> = field_slice_as_base(&dot_product_columns[0]).unwrap();
     let dot_product_lengths: Vec<PF<EF>> = field_slice_as_base(&dot_product_columns[1]).unwrap();
@@ -571,16 +567,23 @@ pub fn prove_execution(
     );
 
     let exec_evals_to_prove = info_span!("Execution AIR proof")
-        .in_scope(|| exec_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, exec_witness));
+        .in_scope(|| exec_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &exec_columns));
 
-    let dot_product_evals_to_prove = info_span!("DotProduct AIR proof")
-        .in_scope(|| dot_product_table.prove_extension(&mut prover_state, 1, dot_product_witness));
+    let dot_product_columns_ref = dot_product_columns
+        .iter()
+        .map(Vec::as_slice)
+        .collect::<Vec<_>>();
+    let dot_product_evals_to_prove = info_span!("DotProduct AIR proof").in_scope(|| {
+        dot_product_table.prove_extension(&mut prover_state, 1, &dot_product_columns_ref)
+    });
 
+    let p16_columns_ref = p16_columns.iter().map(Vec::as_slice).collect::<Vec<_>>();
     let p16_evals_to_prove = info_span!("Poseidon-16 AIR proof")
-        .in_scope(|| p16_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, p16_witness));
+        .in_scope(|| p16_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &p16_columns_ref));
 
+    let p24_columns_ref = p24_columns.iter().map(Vec::as_slice).collect::<Vec<_>>();
     let p24_evals_to_prove = info_span!("Poseidon-24 AIR proof")
-        .in_scope(|| p24_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, p24_witness));
+        .in_scope(|| p24_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &p24_columns_ref));
 
     let (
         all_poseidon_indexes,
