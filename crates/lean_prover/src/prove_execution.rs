@@ -622,10 +622,12 @@ pub fn prove_execution(
         let p24_folded_eval_addr_c = fold_evals(&p24_evals_to_prove[16..24]);
         let p24_folded_eval_addr_res = fold_evals(&p24_evals_to_prove[p24_air.width() - 8..]);
 
-        let padding_p16 =
-            EF::zero_vec(log2_ceil_usize(n_poseidons_24).abs_diff(log2_ceil_usize(n_poseidons_16)));
-        let padding_p24 =
-            EF::zero_vec(log2_ceil_usize(n_poseidons_16).abs_diff(log2_ceil_usize(n_poseidons_24)));
+        let padding_p16 = EF::zero_vec(
+            log2_ceil_usize(n_poseidons_24).saturating_sub(log2_ceil_usize(n_poseidons_16)),
+        );
+        let padding_p24 = EF::zero_vec(
+            log2_ceil_usize(n_poseidons_16).saturating_sub(log2_ceil_usize(n_poseidons_24)),
+        );
 
         let poseidon_lookup_statements = vec![
             Evaluation::new(
