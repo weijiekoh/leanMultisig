@@ -5,7 +5,11 @@ use rayon::prelude::*;
 
 use crate::*;
 
-pub(crate) const MAX_MEMORY_SIZE: usize = 1 << 24;
+pub const MAX_MEMORY_SIZE: usize = 1 << 29;
+
+// For now, we restrict ourselves to executions where memory usage < 2^24 words.
+// But the VM supports theorically a memory of size MAX_MEMORY_SIZE = 2^29.
+pub(crate) const MAX_RUNNER_MEMORY_SIZE: usize = 1 << 24;
 
 #[derive(Debug, Clone, Default)]
 pub struct Memory(pub Vec<Option<F>>);
@@ -29,7 +33,7 @@ impl Memory {
 
     pub fn set(&mut self, index: usize, value: F) -> Result<(), RunnerError> {
         if index >= self.0.len() {
-            if index >= MAX_MEMORY_SIZE {
+            if index >= MAX_RUNNER_MEMORY_SIZE {
                 return Err(RunnerError::OutOfMemory);
             }
             self.0.resize(index + 1, None);

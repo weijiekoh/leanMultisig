@@ -101,7 +101,7 @@ pub fn execute_bytecode(
         bytecode,
         public_input,
         private_input,
-        MAX_MEMORY_SIZE / 2,
+        MAX_RUNNER_MEMORY_SIZE / 2,
         false,
         &mut std_out,
         &mut instruction_history,

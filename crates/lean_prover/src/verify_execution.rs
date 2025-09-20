@@ -71,10 +71,13 @@ pub fn verify_execution(
     let n_cycles = 1 << log_n_cycles;
 
     let public_memory = build_public_memory(public_input);
-    let public_memory_len = public_memory.len();
 
-    let log_public_memory = log2_strict_usize(public_memory_len);
-    let log_memory = log2_ceil_usize(public_memory_len + private_memory_len);
+    if log2_ceil_usize(private_memory_len + private_memory_len) > MAX_MEMORY_SIZE {
+        return Err(ProofError::InvalidProof);
+    }
+
+    let log_public_memory = log2_strict_usize(public_memory.len());
+    let log_memory = log2_ceil_usize(public_memory.len() + private_memory_len);
     let log_n_p16 = log2_ceil_usize(n_poseidons_16);
     let log_n_p24 = log2_ceil_usize(n_poseidons_24);
 
