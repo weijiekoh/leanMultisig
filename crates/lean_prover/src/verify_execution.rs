@@ -537,12 +537,12 @@ pub fn verify_execution(
     let memory_poly_eq_point_alpha = verifier_state.sample();
 
     let extension_dims = vec![
-        ColDims::sparse(public_memory.len() + private_memory_len, EF::ZERO), // memory
-        ColDims::sparse(
+        ColDims::padded(public_memory.len() + private_memory_len, EF::ZERO), // memory
+        ColDims::padded(
             (public_memory.len() + private_memory_len).div_ceil(VECTOR_LEN),
             EF::ZERO,
         ), // memory (folded)
-        ColDims::sparse(bytecode.instructions.len(), EF::ZERO),
+        ColDims::padded(bytecode.instructions.len(), EF::ZERO),
     ];
 
     let parsed_commitment_extension = packed_pcs_parse_commitment(

@@ -201,8 +201,8 @@ fn run_prover_phase(
         padd_with_zero_to_next_power_of_two(&setup.witness_columns_24.concat());
 
     let dims = [
-        ColDims::dense(setup.log_table_area_16),
-        ColDims::dense(setup.log_table_area_24),
+        ColDims::full(setup.log_table_area_16),
+        ColDims::full(setup.log_table_area_24),
     ];
     let log_smallest_decomposition_chunk = 0;
     let commited_slices = [

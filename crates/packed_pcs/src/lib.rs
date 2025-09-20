@@ -63,36 +63,36 @@ General layout: [public data][committed data][repeated value] (the thing has len
 #[derive(Debug, Clone, Copy)]
 pub struct ColDims<F: Field> {
     pub n_vars: usize,
-    pub log_public: Option<usize>,
-    pub n_committed: usize,
+    pub log_public_data_size: Option<usize>,
+    pub committed_size: usize,
     pub default_value: F,
 }
 
 impl<F: Field> ColDims<F> {
-    pub fn dense(n_vars: usize) -> Self {
+    pub fn full(n_vars: usize) -> Self {
         Self {
             n_vars,
-            log_public: None,
-            n_committed: 1 << n_vars,
+            log_public_data_size: None,
+            committed_size: 1 << n_vars,
             default_value: F::ZERO,
         }
     }
 
-    pub fn sparse(n_committed: usize, default_value: F) -> Self {
-        Self::sparse_with_public_data(None, n_committed, default_value)
+    pub fn padded(committed_size: usize, default_value: F) -> Self {
+        Self::padded_with_public_data(None, committed_size, default_value)
     }
 
-    pub fn sparse_with_public_data(
-        log_public: Option<usize>,
-        n_committed: usize,
+    pub fn padded_with_public_data(
+        log_public_data_size: Option<usize>,
+        committed_size: usize,
         default_value: F,
     ) -> Self {
-        let n_public = log_public.map_or(0, |l| 1 << l);
-        let n_vars = log2_ceil_usize(n_public + n_committed);
+        let public_data_size = log_public_data_size.map_or(0, |l| 1 << l);
+        let n_vars = log2_ceil_usize(public_data_size + committed_size);
         Self {
             n_vars,
-            log_public,
-            n_committed,
+            log_public_data_size,
+            committed_size,
             default_value,
         }
     }
@@ -105,7 +105,7 @@ fn split_in_chunks<F: Field>(
 ) -> Vec<Chunk> {
     let mut offset_in_original = 0;
     let mut res = Vec::new();
-    if let Some(log_public) = dims.log_public {
+    if let Some(log_public) = dims.log_public_data_size {
         assert!(log_public >= log_smallest_decomposition_chunk);
         res.push(Chunk {
             original_poly_index: poly_index,
@@ -117,7 +117,7 @@ fn split_in_chunks<F: Field>(
         });
         offset_in_original += 1 << log_public;
     }
-    let mut remaining = dims.n_committed;
+    let mut remaining = dims.committed_size;
 
     loop {
         let mut chunk_size =
@@ -126,7 +126,7 @@ fn split_in_chunks<F: Field>(
             } else {
                 remaining.ilog2() as usize
             };
-        if let Some(log_public) = dims.log_public {
+        if let Some(log_public) = dims.log_public_data_size {
             chunk_size = chunk_size.min(log_public);
         }
 
@@ -225,7 +225,7 @@ where
 
     {
         // logging
-        let total_commited_data: usize = dims.iter().map(|d| d.n_committed).sum();
+        let total_commited_data: usize = dims.iter().map(|d| d.committed_size).sum();
         let packed_commited_data: usize = chunks_decomposition
             .values()
             .flatten()
@@ -393,7 +393,7 @@ pub fn packed_pcs_global_statements_for_prover<
                     });
 
                 // deduce the first sub_value, if it's not public
-                if dim.log_public.is_none() {
+                if dim.log_public_data_size.is_none() {
                     let retrieved_eval = compute_multilinear_value_from_chunks(
                         &chunks[1..],
                         &all_chunk_evals,
@@ -461,7 +461,7 @@ pub fn packed_pcs_global_statements_for_verifier<
     let mut packed_statements = Vec::new();
     for (poly_index, statements) in statements_per_polynomial.iter().enumerate() {
         let dim = &dims[poly_index];
-        let has_public_data = dim.log_public.is_some();
+        let has_public_data = dim.log_public_data_size.is_some();
         let chunks = chunks_decomposition
             .get(&poly_index)
             .expect("missing chunk definition for polynomial");
@@ -648,8 +648,8 @@ mod tests {
             polynomials.push(poly);
             dims.push(ColDims {
                 n_vars,
-                log_public: log_public_data,
-                n_committed: committed_length,
+                log_public_data_size: log_public_data,
+                committed_size: committed_length,
                 default_value,
             });
             statements_per_polynomial.push(statements);

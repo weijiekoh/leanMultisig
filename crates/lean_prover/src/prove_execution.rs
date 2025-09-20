@@ -985,9 +985,9 @@ pub fn prove_execution(
     ];
 
     let extension_dims = vec![
-        ColDims::sparse(memory.len(), EF::ZERO), // memory
-        ColDims::sparse(memory.len().div_ceil(VECTOR_LEN), EF::ZERO), // memory (folded)
-        ColDims::sparse(bytecode.instructions.len(), EF::ZERO), // bytecode
+        ColDims::padded(memory.len(), EF::ZERO), // memory
+        ColDims::padded(memory.len().div_ceil(VECTOR_LEN), EF::ZERO), // memory (folded)
+        ColDims::padded(bytecode.instructions.len(), EF::ZERO), // bytecode
     ];
 
     let packed_pcs_witness_extension = packed_pcs_commit(
