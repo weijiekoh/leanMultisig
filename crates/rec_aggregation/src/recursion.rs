@@ -209,6 +209,7 @@ pub fn bench_recursion() -> Duration {
 
 #[test]
 fn test_whir_recursion() {
+    use p3_field::Field;
     let stats = run_recursion_benchmark();
     println!(
         "\nWHIR recursion, proving time: {:?}, proof size: {} KiB (not optimized)",

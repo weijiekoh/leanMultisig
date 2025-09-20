@@ -2,12 +2,11 @@ use std::time::{Duration, Instant};
 
 use lean_compiler::*;
 use lean_prover::whir_config_builder;
+use lean_prover::{prove_execution::prove_execution, verify_execution::verify_execution};
+use lean_vm::*;
 use p3_field::PrimeCharacteristicRing;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
-
-use lean_prover::{prove_execution::prove_execution, verify_execution::verify_execution};
-use lean_vm::*;
 use xmss::{PhonyXmssSecretKey, V, XmssSignature};
 
 struct XmssBenchStats {
@@ -309,6 +308,7 @@ pub fn bench_xmss(n: usize, log_lifetime: usize) -> Duration {
 
 #[test]
 fn test_xmss_aggregate() {
+    use p3_field::Field;
     let stats = run_xmss_benchmark::<32>(100);
     println!(
         "\nXMSS aggregation (n_signatures = {}, lifetime = 2^{})",

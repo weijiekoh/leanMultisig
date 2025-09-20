@@ -233,7 +233,7 @@ where
             .map(|c| 1 << c.n_vars)
             .sum();
 
-        println!(
+        tracing::info!(
             "Total committed data (full granularity): {} = 2^{:.3} | packed to 2^{:.3} -> 2^{}",
             total_commited_data,
             (total_commited_data as f64).log2(),

@@ -318,6 +318,7 @@ fn run_verifier_phase(
     start.elapsed()
 }
 
+#[must_use]
 pub fn prove_poseidon2(config: &Poseidon2Config) -> Poseidon2Benchmark {
     if config.display_logs {
         init_tracing();
