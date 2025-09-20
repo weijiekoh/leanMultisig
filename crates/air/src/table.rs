@@ -100,6 +100,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
                 handle_errors(row, &mut constraints_checker)?;
             }
         } else {
+            #[allow(clippy::needless_range_loop)]
             for row in 0..n_rows {
                 let up = (0..self.n_columns())
                     .map(|j| witness[j][row])
