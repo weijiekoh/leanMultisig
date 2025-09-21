@@ -600,11 +600,7 @@ pub fn prove_execution(
         let index_a: F = dot_product_columns[2][i].as_base().unwrap();
         let index_b: F = dot_product_columns[3][i].as_base().unwrap();
         let index_res: F = dot_product_columns[4][i].as_base().unwrap();
-        for (j, column) in dot_product_indexes_spread
-            .iter_mut()
-            .enumerate()
-            .take(DIMENSION)
-        {
+        for (j, column) in dot_product_indexes_spread.iter_mut().enumerate() {
             column[i] = index_a + F::from_usize(j);
             column[i + dot_product_table_length] = index_b + F::from_usize(j);
             column[i + 2 * dot_product_table_length] = index_res + F::from_usize(j);
@@ -901,10 +897,7 @@ pub fn prove_execution(
         .par_iter()
         .map(|slice| slice.evaluate(&dot_product_air_point))
         .collect::<Vec<_>>();
-    assert_eq!(
-        dot_product_with_base(&dot_product_computation_column_evals),
-        dot_product_evals_to_prove[8]
-    );
+
     prover_state.add_extension_scalars(&dot_product_computation_column_evals);
     let dot_product_computation_column_statements = (0..DIMENSION)
         .map(|i| {
@@ -939,23 +932,6 @@ pub fn prove_execution(
         mem_lookup_eval_indexes_c,
         mem_lookup_eval_spread_indexes_dot_product,
     ]);
-
-    assert_eq!(
-        [
-            mem_lookup_eval_indexes_a,
-            mem_lookup_eval_indexes_b,
-            mem_lookup_eval_indexes_c,
-            mem_lookup_eval_spread_indexes_dot_product
-                * mem_lookup_eval_indexes_partial_point[..index_diff]
-                    .iter()
-                    .map(|x| EF::ONE - *x)
-                    .product::<EF>(),
-        ]
-        .evaluate(&MultilinearPoint(
-            base_memory_logup_star_statements.on_indexes.point[..2].to_vec(),
-        )),
-        base_memory_logup_star_statements.on_indexes.value
-    );
 
     let dot_product_logup_star_indexes_inner_point =
         MultilinearPoint(mem_lookup_eval_indexes_partial_point.0[5 + index_diff..].to_vec());
