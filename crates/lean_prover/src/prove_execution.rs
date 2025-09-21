@@ -408,23 +408,25 @@ pub fn prove_execution(
         grand_product_dot_product_sumcheck_point,
         grand_product_dot_product_sumcheck_inner_evals,
         _,
-    ) = sumcheck::prove(
-        1, // TODO univariate skip?
-        MleGroupRef::Extension(
-            dot_product_columns[..5]
-                .iter()
-                .map(|c| c.as_slice())
-                .collect::<Vec<_>>(),
-        ), // TODO packing
-        &dot_product_footprint_computation,
-        &dot_product_footprint_computation,
-        &[],
-        Some((grand_product_dot_product_statement.point.0.clone(), None)),
-        false,
-        &mut prover_state,
-        grand_product_dot_product_statement.value,
-        None,
-    );
+    ) = info_span!("Grand product sumcheck for Dot Product").in_scope(|| {
+        sumcheck::prove(
+            1, // TODO univariate skip?
+            MleGroupRef::Extension(
+                dot_product_columns[..5]
+                    .iter()
+                    .map(|c| c.as_slice())
+                    .collect::<Vec<_>>(),
+            ), // TODO packing
+            &dot_product_footprint_computation,
+            &dot_product_footprint_computation,
+            &[],
+            Some((grand_product_dot_product_statement.point.0.clone(), None)),
+            false,
+            &mut prover_state,
+            grand_product_dot_product_statement.value,
+            None,
+        )
+    });
     assert_eq!(grand_product_dot_product_sumcheck_inner_evals.len(), 5);
     prover_state.add_extension_scalars(&grand_product_dot_product_sumcheck_inner_evals);
 
@@ -460,21 +462,24 @@ pub fn prove_execution(
     };
 
     let (grand_product_exec_sumcheck_point, grand_product_exec_sumcheck_inner_evals, _) =
-        sumcheck::prove(
-            1, // TODO univariate skip?
-            MleGroupRef::Base(
-                // TODO not all columns re required
-                full_trace.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
-            ), // TODO packing
-            &precompile_foot_print_computation,
-            &precompile_foot_print_computation,
-            &[],
-            Some((grand_product_exec_statement.point.0.clone(), None)),
-            false,
-            &mut prover_state,
-            grand_product_exec_statement.value,
-            None,
-        );
+        info_span!("Grand product sumcheck for Execution").in_scope(|| {
+            sumcheck::prove(
+                1, // TODO univariate skip
+                MleGroupRef::Base(
+                    // TODO not all columns re required
+                    full_trace.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
+                )
+                .pack(),
+                &precompile_foot_print_computation,
+                &precompile_foot_print_computation,
+                &[],
+                Some((grand_product_exec_statement.point.0.clone(), None)),
+                false,
+                &mut prover_state,
+                grand_product_exec_statement.value,
+                None,
+            )
+        });
 
     prover_state.add_extension_scalars(&grand_product_exec_sumcheck_inner_evals);
     assert_eq!(

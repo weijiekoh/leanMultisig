@@ -1,4 +1,4 @@
-use p3_field::BasedVectorSpace;
+use p3_field::{Algebra, BasedVectorSpace};
 use p3_field::{ExtensionField, PrimeCharacteristicRing};
 use p3_util::log2_ceil_usize;
 use packed_pcs::ColDims;
@@ -157,7 +157,49 @@ pub struct PrecompileFootprint {
     pub multilinear_eval_powers: [EF; 6],
 }
 
-impl<N: ExtensionField<PF<EF>>> SumcheckComputation<N, EF> for PrecompileFootprint
+impl PrecompileFootprint {
+    fn air_eval<
+        PointF: PrimeCharacteristicRing + Copy,
+        ResultF: Algebra<EF> + Algebra<PointF> + Copy,
+    >(
+        &self,
+        point: &[PointF],
+        mul_point_f_and_ef: impl Fn(PointF, EF) -> ResultF,
+    ) -> ResultF {
+        let nu_a = (ResultF::ONE - point[COL_INDEX_FLAG_A]) * point[COL_INDEX_MEM_VALUE_A]
+            + point[COL_INDEX_FLAG_A] * point[COL_INDEX_OPERAND_A];
+        let nu_b = (ResultF::ONE - point[COL_INDEX_FLAG_B]) * point[COL_INDEX_MEM_VALUE_B]
+            + point[COL_INDEX_FLAG_B] * point[COL_INDEX_OPERAND_B];
+        let nu_c = (ResultF::ONE - point[COL_INDEX_FLAG_C]) * point[COL_INDEX_MEM_VALUE_C]
+            + point[COL_INDEX_FLAG_C] * point[COL_INDEX_FP];
+
+        (nu_a * self.p16_powers[2]
+            + nu_b * self.p16_powers[3]
+            + nu_c * self.p16_powers[4]
+            + self.p16_powers[1])
+            * point[COL_INDEX_POSEIDON_16]
+            + (nu_a * self.p24_powers[2]
+                + nu_b * self.p24_powers[3]
+                + nu_c * self.p24_powers[4]
+                + self.p24_powers[1])
+                * point[COL_INDEX_POSEIDON_24]
+            + (nu_a * self.dot_product_powers[2]
+                + nu_b * self.dot_product_powers[3]
+                + nu_c * self.dot_product_powers[4]
+                + mul_point_f_and_ef(point[COL_INDEX_AUX], self.dot_product_powers[5])
+                + self.dot_product_powers[1])
+                * point[COL_INDEX_DOT_PRODUCT]
+            + (nu_a * self.multilinear_eval_powers[2]
+                + nu_b * self.multilinear_eval_powers[3]
+                + nu_c * self.multilinear_eval_powers[4]
+                + mul_point_f_and_ef(point[COL_INDEX_AUX], self.multilinear_eval_powers[5])
+                + self.multilinear_eval_powers[1])
+                * point[COL_INDEX_MULTILINEAR_EVAL]
+            + self.global_challenge
+    }
+}
+
+impl<N: ExtensionField<F>> SumcheckComputation<N, EF> for PrecompileFootprint
 where
     EF: ExtensionField<N>,
 {
@@ -165,38 +207,7 @@ where
         3
     }
     fn eval(&self, point: &[N], _: &[EF]) -> EF {
-        // TODO not all columns are used
-
-        let nu_a = (EF::ONE - point[COL_INDEX_FLAG_A]) * point[COL_INDEX_MEM_VALUE_A]
-            + point[COL_INDEX_FLAG_A] * point[COL_INDEX_OPERAND_A];
-        let nu_b = (EF::ONE - point[COL_INDEX_FLAG_B]) * point[COL_INDEX_MEM_VALUE_B]
-            + point[COL_INDEX_FLAG_B] * point[COL_INDEX_OPERAND_B];
-        let nu_c = (EF::ONE - point[COL_INDEX_FLAG_C]) * point[COL_INDEX_MEM_VALUE_C]
-            + point[COL_INDEX_FLAG_C] * point[COL_INDEX_FP];
-
-        self.global_challenge
-            + (self.p16_powers[1]
-                + self.p16_powers[2] * nu_a
-                + self.p16_powers[3] * nu_b
-                + self.p16_powers[4] * nu_c)
-                * point[COL_INDEX_POSEIDON_16]
-            + (self.p24_powers[1]
-                + self.p24_powers[2] * nu_a
-                + self.p24_powers[3] * nu_b
-                + self.p24_powers[4] * nu_c)
-                * point[COL_INDEX_POSEIDON_24]
-            + (self.dot_product_powers[1]
-                + self.dot_product_powers[2] * nu_a
-                + self.dot_product_powers[3] * nu_b
-                + self.dot_product_powers[4] * nu_c
-                + self.dot_product_powers[5] * point[COL_INDEX_AUX])
-                * point[COL_INDEX_DOT_PRODUCT]
-            + (self.multilinear_eval_powers[1]
-                + self.multilinear_eval_powers[2] * nu_a
-                + self.multilinear_eval_powers[3] * nu_b
-                + self.multilinear_eval_powers[4] * nu_c
-                + self.multilinear_eval_powers[5] * point[COL_INDEX_AUX])
-                * point[COL_INDEX_MULTILINEAR_EVAL]
+        self.air_eval(point, |p, c| c * p)
     }
 }
 
@@ -205,12 +216,12 @@ impl SumcheckComputationPacked<EF> for PrecompileFootprint {
         3
     }
 
-    fn eval_packed_extension(&self, _point: &[EFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
-        todo!()
+    fn eval_packed_extension(&self, point: &[EFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
+        self.air_eval(point, |p, c| p * c)
     }
 
-    fn eval_packed_base(&self, _point: &[utils::PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
-        todo!()
+    fn eval_packed_base(&self, point: &[PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
+        self.air_eval::<PFPacking<EF>, EFPacking<EF>>(point, |p, c| EFPacking::<EF>::from(p) * c)
     }
 }
 
