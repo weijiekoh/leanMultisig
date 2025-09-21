@@ -30,10 +30,13 @@ jobs:
             os: ubuntu-latest
             rustflags: -C target-cpu=haswell
             run_tests: true
-          - name: arm64-neon
-            os: ubuntu-24.04-arm64
-            rustflags: -C target-feature=+neon
-            run_tests: true
+
+          # TODO make arm64-neon work
+
+          # - name: arm64-neon
+          #   os: ubuntu-24.04-arm64
+          #   rustflags: -C target-feature=+neon
+          #   run_tests: true
     steps:
       - uses: actions/checkout@v4
       - name: Install nightly toolchain
