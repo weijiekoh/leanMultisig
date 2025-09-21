@@ -71,6 +71,9 @@ pub fn prove_execution(
     let log_n_cycles = log2_strict_usize(n_cycles);
     assert!(full_trace.iter().all(|col| col.len() == 1 << log_n_cycles));
 
+    let log_n_p16 = log2_ceil_usize(n_poseidons_16);
+    let log_n_p24 = log2_ceil_usize(n_poseidons_24);
+
     let dft = EvalsDft::default();
 
     let mut exec_columns = full_trace[..N_INSTRUCTION_COLUMNS_IN_AIR]
@@ -528,106 +531,14 @@ pub fn prove_execution(
         let poseidon_logup_star_alpha = prover_state.sample();
         let memory_folding_challenges = MultilinearPoint(prover_state.sample_vec(LOG_VECTOR_LEN));
 
-        let p16_folded_eval_addr_a =
-            (&p16_evals_to_prove[..8]).evaluate(&memory_folding_challenges);
-        let p16_folded_eval_addr_b =
-            (&p16_evals_to_prove[8..16]).evaluate(&memory_folding_challenges);
-        let p16_folded_eval_addr_res_a = (&p16_evals_to_prove
-            [p16_air.width() - 16..p16_air.width() - 8])
-            .evaluate(&memory_folding_challenges);
-        let p16_folded_eval_addr_res_b =
-            (&p16_evals_to_prove[p16_air.width() - 8..]).evaluate(&memory_folding_challenges);
-
-        let p24_folded_eval_addr_a =
-            (&p24_evals_to_prove[..8]).evaluate(&memory_folding_challenges);
-        let p24_folded_eval_addr_b =
-            (&p24_evals_to_prove[8..16]).evaluate(&memory_folding_challenges);
-        let p24_folded_eval_addr_c =
-            (&p24_evals_to_prove[16..24]).evaluate(&memory_folding_challenges);
-        let p24_folded_eval_addr_res =
-            (&p24_evals_to_prove[p24_air.width() - 8..]).evaluate(&memory_folding_challenges);
-
-        let padding_p16 = EF::zero_vec(
-            log2_ceil_usize(n_poseidons_24).saturating_sub(log2_ceil_usize(n_poseidons_16)),
-        );
-        let padding_p24 = EF::zero_vec(
-            log2_ceil_usize(n_poseidons_16).saturating_sub(log2_ceil_usize(n_poseidons_24)),
+        let poseidon_lookup_statements = get_poseidon_lookup_statements(
+            (p16_air.width(), p24_air.width()),
+            (log_n_p16, log_n_p24),
+            (&p16_evals_to_prove, &p24_evals_to_prove),
+            (&p16_air_point, &p24_air_point),
+            &memory_folding_challenges,
         );
 
-        let poseidon_lookup_statements = vec![
-            Evaluation::new(
-                [
-                    vec![EF::ZERO; 3],
-                    padding_p16.clone(),
-                    p16_air_point.0.clone(),
-                ]
-                .concat(),
-                p16_folded_eval_addr_a,
-            ),
-            Evaluation::new(
-                [
-                    vec![EF::ZERO, EF::ZERO, EF::ONE],
-                    padding_p16.clone(),
-                    p16_air_point.0.clone(),
-                ]
-                .concat(),
-                p16_folded_eval_addr_b,
-            ),
-            Evaluation::new(
-                [
-                    vec![EF::ZERO, EF::ONE, EF::ZERO],
-                    padding_p16.clone(),
-                    p16_air_point.0.clone(),
-                ]
-                .concat(),
-                p16_folded_eval_addr_res_a,
-            ),
-            Evaluation::new(
-                [
-                    vec![EF::ZERO, EF::ONE, EF::ONE],
-                    padding_p16.clone(),
-                    p16_air_point.0.clone(),
-                ]
-                .concat(),
-                p16_folded_eval_addr_res_b,
-            ),
-            Evaluation::new(
-                [
-                    vec![EF::ONE, EF::ZERO, EF::ZERO],
-                    padding_p24.clone(),
-                    p24_air_point.0.clone(),
-                ]
-                .concat(),
-                p24_folded_eval_addr_a,
-            ),
-            Evaluation::new(
-                [
-                    vec![EF::ONE, EF::ZERO, EF::ONE],
-                    padding_p24.clone(),
-                    p24_air_point.0.clone(),
-                ]
-                .concat(),
-                p24_folded_eval_addr_b,
-            ),
-            Evaluation::new(
-                [
-                    vec![EF::ONE, EF::ONE, EF::ZERO],
-                    padding_p24.clone(),
-                    p24_air_point.0.clone(),
-                ]
-                .concat(),
-                p24_folded_eval_addr_c,
-            ),
-            Evaluation::new(
-                [
-                    vec![EF::ONE, EF::ONE, EF::ONE],
-                    padding_p24.clone(),
-                    p24_air_point.0.clone(),
-                ]
-                .concat(),
-                p24_folded_eval_addr_res,
-            ),
-        ];
         let max_n_poseidons = poseidons_16
             .len()
             .max(poseidons_24.len())
@@ -987,8 +898,6 @@ pub fn prove_execution(
     {
         // index opening for poseidon lookup
 
-        let log_n_p16 = log2_ceil_usize(n_poseidons_16);
-        let log_n_p24 = log2_ceil_usize(n_poseidons_24);
         let correcting_factor = poseidon_logup_star_statements.on_indexes.point
             [3..3 + log_n_p16.abs_diff(log_n_p24)]
             .iter()

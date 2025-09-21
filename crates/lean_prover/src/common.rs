@@ -274,3 +274,102 @@ impl SumcheckComputationPacked<EF> for DotProductFootprint {
         self.air_eval(point, |p, c| EFPacking::<EF>::from(p) * c)
     }
 }
+
+pub fn get_poseidon_lookup_statements(
+    (p16_air_width, p24_air_width): (usize, usize),
+    (log_n_p16, log_n_p24): (usize, usize),
+    (p16_evals, p24_evals): (&[EF], &[EF]),
+    (p16_air_point, p24_air_point): (&MultilinearPoint<EF>, &MultilinearPoint<EF>),
+    memory_folding_challenges: &MultilinearPoint<EF>,
+) -> Vec<Evaluation<EF>> {
+    let p16_folded_eval_addr_a = (&p16_evals[..8]).evaluate(memory_folding_challenges);
+    let p16_folded_eval_addr_b = (&p16_evals[8..16]).evaluate(memory_folding_challenges);
+    let p16_folded_eval_addr_res_a =
+        (&p16_evals[p16_air_width - 16..p16_air_width - 8]).evaluate(memory_folding_challenges);
+    let p16_folded_eval_addr_res_b =
+        (&p16_evals[p16_air_width - 8..]).evaluate(memory_folding_challenges);
+
+    let p24_folded_eval_addr_a = (&p24_evals[..8]).evaluate(memory_folding_challenges);
+    let p24_folded_eval_addr_b = (&p24_evals[8..16]).evaluate(memory_folding_challenges);
+    let p24_folded_eval_addr_c = (&p24_evals[16..24]).evaluate(memory_folding_challenges);
+    let p24_folded_eval_addr_res =
+        (&p24_evals[p24_air_width - 8..]).evaluate(memory_folding_challenges);
+
+    let padding_p16 = EF::zero_vec(log_n_p16.max(log_n_p24) - log_n_p16);
+    let padding_p24 = EF::zero_vec(log_n_p16.max(log_n_p24) - log_n_p24);
+
+    vec![
+        Evaluation::new(
+            [
+                vec![EF::ZERO; 3],
+                padding_p16.clone(),
+                p16_air_point.0.clone(),
+            ]
+            .concat(),
+            p16_folded_eval_addr_a,
+        ),
+        Evaluation::new(
+            [
+                vec![EF::ZERO, EF::ZERO, EF::ONE],
+                padding_p16.clone(),
+                p16_air_point.0.clone(),
+            ]
+            .concat(),
+            p16_folded_eval_addr_b,
+        ),
+        Evaluation::new(
+            [
+                vec![EF::ZERO, EF::ONE, EF::ZERO],
+                padding_p16.clone(),
+                p16_air_point.0.clone(),
+            ]
+            .concat(),
+            p16_folded_eval_addr_res_a,
+        ),
+        Evaluation::new(
+            [
+                vec![EF::ZERO, EF::ONE, EF::ONE],
+                padding_p16.clone(),
+                p16_air_point.0.clone(),
+            ]
+            .concat(),
+            p16_folded_eval_addr_res_b,
+        ),
+        Evaluation::new(
+            [
+                vec![EF::ONE, EF::ZERO, EF::ZERO],
+                padding_p24.clone(),
+                p24_air_point.0.clone(),
+            ]
+            .concat(),
+            p24_folded_eval_addr_a,
+        ),
+        Evaluation::new(
+            [
+                vec![EF::ONE, EF::ZERO, EF::ONE],
+                padding_p24.clone(),
+                p24_air_point.0.clone(),
+            ]
+            .concat(),
+            p24_folded_eval_addr_b,
+        ),
+        Evaluation::new(
+            [
+                vec![EF::ONE, EF::ONE, EF::ZERO],
+                padding_p24.clone(),
+                p24_air_point.0.clone(),
+            ]
+            .concat(),
+            p24_folded_eval_addr_c,
+        ),
+        Evaluation::new(
+            [
+                vec![EF::ONE, EF::ONE, EF::ONE],
+                padding_p24.clone(),
+                p24_air_point.0.clone(),
+            ]
+            .concat(),
+            p24_folded_eval_addr_res,
+        ),
+    ]
+}
