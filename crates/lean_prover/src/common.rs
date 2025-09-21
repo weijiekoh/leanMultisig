@@ -221,13 +221,32 @@ impl SumcheckComputationPacked<EF> for PrecompileFootprint {
     }
 
     fn eval_packed_base(&self, point: &[PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
-        self.air_eval::<PFPacking<EF>, EFPacking<EF>>(point, |p, c| EFPacking::<EF>::from(p) * c)
+        self.air_eval(point, |p, c| EFPacking::<EF>::from(p) * c)
     }
 }
 
 pub struct DotProductFootprint {
     pub global_challenge: EF,
     pub dot_product_challenge: [EF; 6],
+}
+
+impl DotProductFootprint {
+    fn air_eval<
+        PointF: PrimeCharacteristicRing + Copy,
+        ResultF: Algebra<EF> + Algebra<PointF> + Copy,
+    >(
+        &self,
+        point: &[PointF],
+        mul_point_f_and_ef: impl Fn(PointF, EF) -> ResultF,
+    ) -> ResultF {
+        (mul_point_f_and_ef(point[2], self.dot_product_challenge[2])
+            + mul_point_f_and_ef(point[3], self.dot_product_challenge[3])
+            + mul_point_f_and_ef(point[4], self.dot_product_challenge[4])
+            + mul_point_f_and_ef(point[1], self.dot_product_challenge[5]))
+            * point[0]
+            + self.dot_product_challenge[1]
+            + self.global_challenge
+    }
 }
 
 impl<N: ExtensionField<PF<EF>>> SumcheckComputation<N, EF> for DotProductFootprint
@@ -239,13 +258,7 @@ where
     }
 
     fn eval(&self, point: &[N], _: &[EF]) -> EF {
-        self.global_challenge
-            + self.dot_product_challenge[1]
-            + (self.dot_product_challenge[2] * point[2]
-                + self.dot_product_challenge[3] * point[3]
-                + self.dot_product_challenge[4] * point[4]
-                + self.dot_product_challenge[5] * point[1])
-                * point[0]
+        self.air_eval(point, |p, c| c * p)
     }
 }
 
@@ -254,10 +267,10 @@ impl SumcheckComputationPacked<EF> for DotProductFootprint {
         2
     }
 
-    fn eval_packed_extension(&self, _point: &[EFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
-        todo!()
+    fn eval_packed_extension(&self, point: &[EFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
+        self.air_eval(point, |p, c| p * c)
     }
-    fn eval_packed_base(&self, _point: &[utils::PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
-        todo!()
+    fn eval_packed_base(&self, point: &[utils::PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
+        self.air_eval(point, |p, c| EFPacking::<EF>::from(p) * c)
     }
 }

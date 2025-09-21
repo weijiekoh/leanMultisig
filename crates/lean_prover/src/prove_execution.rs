@@ -410,13 +410,13 @@ pub fn prove_execution(
         _,
     ) = info_span!("Grand product sumcheck for Dot Product").in_scope(|| {
         sumcheck::prove(
-            1, // TODO univariate skip?
+            1,
             MleGroupRef::Extension(
                 dot_product_columns[..5]
                     .iter()
                     .map(|c| c.as_slice())
                     .collect::<Vec<_>>(),
-            ), // TODO packing
+            ), // we do not use packing here beacause it's slower in practice (this sumcheck is small)
             &dot_product_footprint_computation,
             &dot_product_footprint_computation,
             &[],
