@@ -5,7 +5,6 @@ use lean_vm::*;
 use lookup::verify_gkr_product;
 use lookup::verify_logup_star;
 use p3_air::BaseAir;
-use p3_field::BasedVectorSpace;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::dot_product;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
@@ -20,7 +19,6 @@ use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::evals::eval_eq;
 use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::multilinear::MultilinearPoint;
-use whir_p3::utils::flatten_scalars_to_base;
 use whir_p3::whir::config::WhirConfig;
 use whir_p3::whir::config::second_batched_whir_config_builder;
 
@@ -85,15 +83,6 @@ pub fn verify_execution(
     let dot_product_padding_len =
         n_rows_table_dot_products.next_power_of_two() - n_rows_table_dot_products;
 
-    struct RowMultilinearEval {
-        addr_coeffs: F,
-        addr_point: F,
-        addr_res: F,
-        n_vars: F,
-        point: Vec<EF>,
-        res: EF,
-    }
-
     let mut vm_multilinear_evals = Vec::new();
     for _ in 0..n_vm_multilinear_evals {
         let [addr_coeffs, addr_point, addr_res, n_vars] =
@@ -101,75 +90,23 @@ pub fn verify_execution(
         let point = verifier_state.next_extension_scalars_vec(n_vars.to_usize())?;
         let res = verifier_state.next_extension_scalar()?;
         vm_multilinear_evals.push(RowMultilinearEval {
-            addr_coeffs,
-            addr_point,
-            addr_res,
-            n_vars,
+            addr_coeffs: addr_coeffs.to_usize(),
+            addr_point: addr_point.to_usize(),
+            addr_res: addr_res.to_usize(),
             point,
             res,
         });
     }
 
     let mut memory_statements = vec![];
-    for row_multilinear_eval in &vm_multilinear_evals {
-        let addr_point = row_multilinear_eval.addr_point.to_usize();
-        let addr_coeffs = row_multilinear_eval.addr_coeffs.to_usize();
-        let addr_res = row_multilinear_eval.addr_res.to_usize();
-        let n_vars = row_multilinear_eval.n_vars.to_usize();
-
-        // point lookup into memory
-        let log_point_len = log2_ceil_usize(row_multilinear_eval.point.len() * DIMENSION);
-        let point_random_challenge = verifier_state.sample_vec(log_point_len);
-        let point_random_value = {
-            let mut point_mle = flatten_scalars_to_base::<PF<EF>, EF>(&row_multilinear_eval.point);
-            point_mle.resize(point_mle.len().next_power_of_two(), F::ZERO);
-            point_mle.evaluate(&MultilinearPoint(point_random_challenge.clone()))
-        };
-        memory_statements.push(Evaluation::new(
-            [
-                to_big_endian_in_field(addr_point, log_memory - log_point_len),
-                point_random_challenge.clone(),
-            ]
-            .concat(),
-            point_random_value,
-        ));
-
-        // result lookup into memory
-        let random_challenge = verifier_state.sample_vec(LOG_VECTOR_LEN);
-        let res_random_value = {
-            let mut res_mle = row_multilinear_eval
-                .res
-                .as_basis_coefficients_slice()
-                .to_vec();
-            res_mle.resize(VECTOR_LEN, F::ZERO);
-            res_mle.evaluate(&MultilinearPoint(random_challenge.clone()))
-        };
-        memory_statements.push(Evaluation::new(
-            [
-                to_big_endian_in_field(addr_res, log_memory - LOG_VECTOR_LEN),
-                random_challenge.clone(),
-            ]
-            .concat(),
-            res_random_value,
-        ));
-
-        {
-            if n_vars > log_memory {
-                return Err(ProofError::InvalidProof);
-            }
-            if addr_coeffs >= 1 << (log_memory - n_vars) {
-                return Err(ProofError::InvalidProof);
-            }
-            if n_vars >= log_public_memory {
-                todo!("vm multilinear eval accross multiple memory chunks")
-            }
-            let addr_bits = to_big_endian_in_field(addr_coeffs, log_memory - n_vars);
-            let statement = Evaluation::new(
-                [addr_bits, row_multilinear_eval.point.clone()].concat(),
-                row_multilinear_eval.res,
-            );
-            memory_statements.push(statement);
-        }
+    for entry in &vm_multilinear_evals {
+        add_memory_statements_for_dot_product_precompile(
+            entry,
+            log_memory,
+            log_public_memory,
+            &mut verifier_state,
+            &mut memory_statements,
+        )?;
     }
 
     let base_dims = get_base_dims(
@@ -207,10 +144,14 @@ pub fn verify_execution(
         .map(|vm_multilinear_eval| {
             grand_product_challenge_global
                 + grand_product_challenge_vm_multilinear_eval[1]
-                + grand_product_challenge_vm_multilinear_eval[2] * vm_multilinear_eval.addr_coeffs
-                + grand_product_challenge_vm_multilinear_eval[3] * vm_multilinear_eval.addr_point
-                + grand_product_challenge_vm_multilinear_eval[4] * vm_multilinear_eval.addr_res
-                + grand_product_challenge_vm_multilinear_eval[5] * vm_multilinear_eval.n_vars
+                + grand_product_challenge_vm_multilinear_eval[2]
+                    * F::from_usize(vm_multilinear_eval.addr_coeffs)
+                + grand_product_challenge_vm_multilinear_eval[3]
+                    * F::from_usize(vm_multilinear_eval.addr_point)
+                + grand_product_challenge_vm_multilinear_eval[4]
+                    * F::from_usize(vm_multilinear_eval.addr_res)
+                + grand_product_challenge_vm_multilinear_eval[5]
+                    * F::from_usize(vm_multilinear_eval.n_vars())
         })
         .product::<EF>();
 

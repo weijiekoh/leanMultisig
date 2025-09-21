@@ -30,3 +30,4 @@ lookup.workspace = true
 sumcheck.workspace = true
 lean_vm.workspace = true
 lean_compiler.workspace = true
+derive_more.workspace = true

@@ -25,14 +25,25 @@ pub struct WitnessDotProduct {
 }
 
 #[derive(Debug)]
-pub struct WitnessMultilinearEval {
-    pub cycle: usize,
-    pub addr_coeffs: usize, // vectorized pointer, of size 8.2^size
-    pub addr_point: usize,  // vectorized pointer, of size `size`
-    pub addr_res: usize,    // vectorized pointer
-    pub n_vars: usize,
+pub struct RowMultilinearEval {
+    pub addr_coeffs: usize,
+    pub addr_point: usize,
+    pub addr_res: usize,
     pub point: Vec<EF>,
     pub res: EF,
+}
+
+impl RowMultilinearEval {
+    pub fn n_vars(&self) -> usize {
+        self.point.len()
+    }
+}
+
+#[derive(Debug, derive_more::Deref)]
+pub struct WitnessMultilinearEval {
+    pub cycle: usize,
+    #[deref]
+    pub inner: RowMultilinearEval,
 }
 
 #[derive(Debug)]
@@ -255,12 +266,13 @@ pub fn get_execution_trace(
                 assert!(res[DIMENSION..].iter().all(|&x| x.is_zero()));
                 vm_multilinear_evals.push(WitnessMultilinearEval {
                     cycle,
-                    addr_coeffs,
-                    addr_point,
-                    addr_res,
-                    n_vars: *n_vars,
-                    point,
-                    res: EF::from_basis_coefficients_slice(&res[..DIMENSION]).unwrap(),
+                    inner: RowMultilinearEval {
+                        addr_coeffs,
+                        addr_point,
+                        addr_res,
+                        point,
+                        res: EF::from_basis_coefficients_slice(&res[..DIMENSION]).unwrap(),
+                    },
                 });
             }
             _ => {}

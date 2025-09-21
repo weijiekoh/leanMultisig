@@ -5,7 +5,6 @@ use lean_vm::*;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
 use p3_air::BaseAir;
-use p3_field::BasedVectorSpace;
 use p3_field::ExtensionField;
 use p3_field::PrimeCharacteristicRing;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
@@ -27,7 +26,7 @@ use whir_p3::dft::EvalsDft;
 use whir_p3::poly::evals::{eval_eq, fold_multilinear};
 use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
-use whir_p3::utils::{compute_eval_eq, compute_sparse_eval_eq, flatten_scalars_to_base};
+use whir_p3::utils::{compute_eval_eq, compute_sparse_eval_eq};
 use whir_p3::whir::config::{WhirConfig, second_batched_whir_config_builder};
 
 pub fn prove_execution(
@@ -131,63 +130,22 @@ pub fn prove_execution(
             F::from_usize(vm_multilinear_eval.addr_coeffs),
             F::from_usize(vm_multilinear_eval.addr_point),
             F::from_usize(vm_multilinear_eval.addr_res),
-            F::from_usize(vm_multilinear_eval.n_vars),
+            F::from_usize(vm_multilinear_eval.n_vars()),
         ]);
         prover_state.add_extension_scalars(&vm_multilinear_eval.point);
         prover_state.add_extension_scalar(vm_multilinear_eval.res);
     }
 
     let mut memory_statements = vec![];
-    for multilinear_eval in &vm_multilinear_evals {
-        let addr_point = multilinear_eval.addr_point;
-        let addr_coeffs = multilinear_eval.addr_coeffs;
-        let addr_res = multilinear_eval.addr_res;
-
-        // point lookup into memory
-        let log_point_len = log2_ceil_usize(multilinear_eval.point.len() * DIMENSION);
-        let point_random_challenge = prover_state.sample_vec(log_point_len);
-        let point_random_value = {
-            let mut point_mle = flatten_scalars_to_base::<PF<EF>, EF>(&multilinear_eval.point);
-            point_mle.resize(point_mle.len().next_power_of_two(), F::ZERO);
-            point_mle.evaluate(&MultilinearPoint(point_random_challenge.clone()))
-        };
-        memory_statements.push(Evaluation::new(
-            [
-                to_big_endian_in_field(addr_point, log_memory - log_point_len),
-                point_random_challenge.clone(),
-            ]
-            .concat(),
-            point_random_value,
-        ));
-
-        // result lookup into memory
-        let res_random_challenge = prover_state.sample_vec(LOG_VECTOR_LEN);
-        let res_random_value = {
-            let mut res_mle = multilinear_eval.res.as_basis_coefficients_slice().to_vec();
-            res_mle.resize(VECTOR_LEN, F::ZERO);
-            res_mle.evaluate(&MultilinearPoint(res_random_challenge.clone()))
-        };
-        memory_statements.push(Evaluation::new(
-            [
-                to_big_endian_in_field(addr_res, log_memory - LOG_VECTOR_LEN),
-                res_random_challenge.clone(),
-            ]
-            .concat(),
-            res_random_value,
-        ));
-
-        {
-            let n_vars = multilinear_eval.n_vars;
-            assert!(n_vars <= log_memory);
-            assert!(addr_coeffs < 1 << (log_memory - n_vars));
-
-            let addr_bits = to_big_endian_in_field(addr_coeffs, log_memory - n_vars);
-            let statement = Evaluation::new(
-                [addr_bits, multilinear_eval.point.clone()].concat(),
-                multilinear_eval.res,
-            );
-            memory_statements.push(statement);
-        }
+    for entry in &vm_multilinear_evals {
+        add_memory_statements_for_dot_product_precompile(
+            entry,
+            log_memory,
+            log_public_memory,
+            &mut prover_state,
+            &mut memory_statements,
+        )
+        .unwrap();
     }
     let p16_indexes = all_poseidon_16_indexes(&poseidons_16);
     let p24_indexes = all_poseidon_24_indexes(&poseidons_24);
@@ -298,7 +256,7 @@ pub fn prove_execution(
             + grand_product_challenge_vm_multilinear_eval[4]
                 * F::from_usize(multilinear_eval.addr_res)
             + grand_product_challenge_vm_multilinear_eval[5]
-                * F::from_usize(multilinear_eval.n_vars);
+                * F::from_usize(multilinear_eval.n_vars());
     }
 
     let (grand_product_exec_res, grand_product_exec_statement) = prove_gkr_product(
@@ -363,7 +321,7 @@ pub fn prove_execution(
                 + grand_product_challenge_vm_multilinear_eval[4]
                     * F::from_usize(vm_multilinear_eval.addr_res)
                 + grand_product_challenge_vm_multilinear_eval[5]
-                    * F::from_usize(vm_multilinear_eval.n_vars)
+                    * F::from_usize(vm_multilinear_eval.n_vars())
         })
         .product::<EF>();
 
