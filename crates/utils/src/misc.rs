@@ -68,6 +68,22 @@ pub fn field_slice_as_base<F: Field, EF: ExtensionField<F>>(slice: &[EF]) -> Opt
     slice.par_iter().map(|x| x.as_base()).collect()
 }
 
+pub fn transpose_slice_to_basis_coefficients<F: Field, EF: ExtensionField<F>>(
+    slice: &[EF],
+) -> Vec<Vec<F>> {
+    let res = vec![F::zero_vec(slice.len()); EF::DIMENSION];
+    slice.par_iter().enumerate().for_each(|(i, row)| {
+        let coeffs = EF::as_basis_coefficients_slice(row);
+        unsafe {
+            for (j, &coeff) in coeffs.iter().enumerate() {
+                let raw_ptr = res[j].as_ptr() as *mut F;
+                *raw_ptr.add(i) = coeff;
+            }
+        }
+    });
+    res
+}
+
 pub fn dot_product_with_base<EF: ExtensionField<PF<EF>>>(slice: &[EF]) -> EF {
     assert_eq!(slice.len(), <EF as BasedVectorSpace<PF<EF>>>::DIMENSION);
     (0..EF::DIMENSION)

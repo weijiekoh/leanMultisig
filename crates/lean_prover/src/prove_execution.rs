@@ -104,15 +104,8 @@ pub fn prove_execution(
     let dot_product_lengths: Vec<PF<EF>> = field_slice_as_base(&dot_product_columns[1]).unwrap();
 
     let dot_product_computations: &[EF] = &dot_product_columns[8];
-    let mut dot_product_computations_base = (0..DIMENSION).map(|_| Vec::new()).collect::<Vec<_>>();
-    for row in dot_product_computations {
-        for (j, coeff) in <EF as BasedVectorSpace<PF<EF>>>::as_basis_coefficients_slice(row)
-            .iter()
-            .enumerate()
-        {
-            dot_product_computations_base[j].push(*coeff);
-        }
-    }
+    let dot_product_computations_base =
+        transpose_slice_to_basis_coefficients::<F, EF>(dot_product_computations);
 
     let n_rows_table_dot_products = dot_product_columns[0].len() - dot_product_padding_len;
     let log_n_rows_dot_product_table = log2_strict_usize(dot_product_columns[0].len());
