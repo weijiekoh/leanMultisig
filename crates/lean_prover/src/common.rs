@@ -150,11 +150,11 @@ pub fn add_memory_statements_for_dot_product_precompile(
 }
 
 pub struct PrecompileFootprint {
-    pub grand_product_challenge_global: EF,
-    pub grand_product_challenge_p16: [EF; 5],
-    pub grand_product_challenge_p24: [EF; 5],
-    pub grand_product_challenge_dot_product: [EF; 6],
-    pub grand_product_challenge_vm_multilinear_eval: [EF; 6],
+    pub global_challenge: EF,
+    pub p16_powers: [EF; 5],
+    pub p24_powers: [EF; 5],
+    pub dot_product_powers: [EF; 6],
+    pub multilinear_eval_powers: [EF; 6],
 }
 
 impl<N: ExtensionField<PF<EF>>> SumcheckComputation<N, EF> for PrecompileFootprint
@@ -174,28 +174,28 @@ where
         let nu_c = (EF::ONE - point[COL_INDEX_FLAG_C]) * point[COL_INDEX_MEM_VALUE_C]
             + point[COL_INDEX_FLAG_C] * point[COL_INDEX_FP];
 
-        self.grand_product_challenge_global
-            + (self.grand_product_challenge_p16[1]
-                + self.grand_product_challenge_p16[2] * nu_a
-                + self.grand_product_challenge_p16[3] * nu_b
-                + self.grand_product_challenge_p16[4] * nu_c)
+        self.global_challenge
+            + (self.p16_powers[1]
+                + self.p16_powers[2] * nu_a
+                + self.p16_powers[3] * nu_b
+                + self.p16_powers[4] * nu_c)
                 * point[COL_INDEX_POSEIDON_16]
-            + (self.grand_product_challenge_p24[1]
-                + self.grand_product_challenge_p24[2] * nu_a
-                + self.grand_product_challenge_p24[3] * nu_b
-                + self.grand_product_challenge_p24[4] * nu_c)
+            + (self.p24_powers[1]
+                + self.p24_powers[2] * nu_a
+                + self.p24_powers[3] * nu_b
+                + self.p24_powers[4] * nu_c)
                 * point[COL_INDEX_POSEIDON_24]
-            + (self.grand_product_challenge_dot_product[1]
-                + self.grand_product_challenge_dot_product[2] * nu_a
-                + self.grand_product_challenge_dot_product[3] * nu_b
-                + self.grand_product_challenge_dot_product[4] * nu_c
-                + self.grand_product_challenge_dot_product[5] * point[COL_INDEX_AUX])
+            + (self.dot_product_powers[1]
+                + self.dot_product_powers[2] * nu_a
+                + self.dot_product_powers[3] * nu_b
+                + self.dot_product_powers[4] * nu_c
+                + self.dot_product_powers[5] * point[COL_INDEX_AUX])
                 * point[COL_INDEX_DOT_PRODUCT]
-            + (self.grand_product_challenge_vm_multilinear_eval[1]
-                + self.grand_product_challenge_vm_multilinear_eval[2] * nu_a
-                + self.grand_product_challenge_vm_multilinear_eval[3] * nu_b
-                + self.grand_product_challenge_vm_multilinear_eval[4] * nu_c
-                + self.grand_product_challenge_vm_multilinear_eval[5] * point[COL_INDEX_AUX])
+            + (self.multilinear_eval_powers[1]
+                + self.multilinear_eval_powers[2] * nu_a
+                + self.multilinear_eval_powers[3] * nu_b
+                + self.multilinear_eval_powers[4] * nu_c
+                + self.multilinear_eval_powers[5] * point[COL_INDEX_AUX])
                 * point[COL_INDEX_MULTILINEAR_EVAL]
     }
 }
@@ -215,8 +215,8 @@ impl SumcheckComputationPacked<EF> for PrecompileFootprint {
 }
 
 pub struct DotProductFootprint {
-    pub grand_product_challenge_global: EF,
-    pub grand_product_challenge_dot_product: [EF; 6],
+    pub global_challenge: EF,
+    pub dot_product_challenge: [EF; 6],
 }
 
 impl<N: ExtensionField<PF<EF>>> SumcheckComputation<N, EF> for DotProductFootprint
@@ -228,12 +228,12 @@ where
     }
 
     fn eval(&self, point: &[N], _: &[EF]) -> EF {
-        self.grand_product_challenge_global
-            + self.grand_product_challenge_dot_product[1]
-            + (self.grand_product_challenge_dot_product[2] * point[2]
-                + self.grand_product_challenge_dot_product[3] * point[3]
-                + self.grand_product_challenge_dot_product[4] * point[4]
-                + self.grand_product_challenge_dot_product[5] * point[1])
+        self.global_challenge
+            + self.dot_product_challenge[1]
+            + (self.dot_product_challenge[2] * point[2]
+                + self.dot_product_challenge[3] * point[3]
+                + self.dot_product_challenge[4] * point[4]
+                + self.dot_product_challenge[5] * point[1])
                 * point[0]
     }
 }

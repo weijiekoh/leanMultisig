@@ -6,6 +6,7 @@ use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
 use p3_air::BaseAir;
 use p3_field::ExtensionField;
+use p3_field::Field;
 use p3_field::PrimeCharacteristicRing;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
 use packed_pcs::*;
@@ -172,13 +173,9 @@ pub fn prove_execution(
             full_trace[COL_INDEX_MEM_ADDRESS_A].as_slice(),
             full_trace[COL_INDEX_MEM_ADDRESS_B].as_slice(),
             full_trace[COL_INDEX_MEM_ADDRESS_C].as_slice(),
-            p16_indexes[0].as_slice(),
-            p16_indexes[1].as_slice(),
-            p16_indexes[2].as_slice(),
-            p24_indexes[0].as_slice(),
-            p24_indexes[1].as_slice(),
-            p24_indexes[2].as_slice(),
         ],
+        p16_indexes.iter().map(Vec::as_slice).collect::<Vec<_>>(),
+        p24_indexes.iter().map(Vec::as_slice).collect::<Vec<_>>(),
         p16_columns[16..p16_air.width() - 16]
             .iter()
             .map(Vec::as_slice)
@@ -213,50 +210,38 @@ pub fn prove_execution(
 
     // Grand Product for consistency with precompiles
     let grand_product_challenge_global = prover_state.sample();
-    let grand_product_challenge_p16 = prover_state.sample().powers().collect_n(5);
-    let grand_product_challenge_p24 = prover_state.sample().powers().collect_n(5);
-    let grand_product_challenge_dot_product = prover_state.sample().powers().collect_n(6);
-    let grand_product_challenge_vm_multilinear_eval = prover_state.sample().powers().collect_n(6);
+    let grand_product_challenge_p16 = prover_state.sample();
+    let grand_product_challenge_p24 = prover_state.sample();
+    let grand_product_challenge_dot_product = prover_state.sample();
+    let grand_product_challenge_vm_multilinear_eval = prover_state.sample();
     let mut exec_column_for_grand_product = vec![grand_product_challenge_global; n_cycles];
-    for pos16 in &poseidons_16 {
-        let Some(cycle) = pos16.cycle else {
+    for pos_16 in &poseidons_16 {
+        let Some(cycle) = pos_16.cycle else {
             break;
         };
         exec_column_for_grand_product[cycle] = grand_product_challenge_global
-            + grand_product_challenge_p16[1]
-            + grand_product_challenge_p16[2] * F::from_usize(pos16.addr_input_a)
-            + grand_product_challenge_p16[3] * F::from_usize(pos16.addr_input_b)
-            + grand_product_challenge_p16[4] * F::from_usize(pos16.addr_output);
+            + finger_print(&pos_16.addresses_field_repr(), grand_product_challenge_p16);
     }
-    for pos24 in &poseidons_24 {
-        let Some(cycle) = pos24.cycle else {
+    for pos_24 in &poseidons_24 {
+        let Some(cycle) = pos_24.cycle else {
             break;
         };
         exec_column_for_grand_product[cycle] = grand_product_challenge_global
-            + grand_product_challenge_p24[1]
-            + grand_product_challenge_p24[2] * F::from_usize(pos24.addr_input_a)
-            + grand_product_challenge_p24[3] * F::from_usize(pos24.addr_input_b)
-            + grand_product_challenge_p24[4] * F::from_usize(pos24.addr_output);
+            + finger_print(&pos_24.addresses_field_repr(), grand_product_challenge_p24);
     }
     for dot_product in &dot_products {
         exec_column_for_grand_product[dot_product.cycle] = grand_product_challenge_global
-            + grand_product_challenge_dot_product[1]
-            + grand_product_challenge_dot_product[2] * F::from_usize(dot_product.addr_0)
-            + grand_product_challenge_dot_product[3] * F::from_usize(dot_product.addr_1)
-            + grand_product_challenge_dot_product[4] * F::from_usize(dot_product.addr_res)
-            + grand_product_challenge_dot_product[5] * F::from_usize(dot_product.len);
+            + finger_print(
+                &dot_product.addresses_and_len_field_repr(),
+                grand_product_challenge_dot_product,
+            );
     }
     for multilinear_eval in &vm_multilinear_evals {
         exec_column_for_grand_product[multilinear_eval.cycle] = grand_product_challenge_global
-            + grand_product_challenge_vm_multilinear_eval[1]
-            + grand_product_challenge_vm_multilinear_eval[2]
-                * F::from_usize(multilinear_eval.addr_coeffs)
-            + grand_product_challenge_vm_multilinear_eval[3]
-                * F::from_usize(multilinear_eval.addr_point)
-            + grand_product_challenge_vm_multilinear_eval[4]
-                * F::from_usize(multilinear_eval.addr_res)
-            + grand_product_challenge_vm_multilinear_eval[5]
-                * F::from_usize(multilinear_eval.n_vars());
+            + finger_print(
+                &multilinear_eval.addresses_and_n_vars_field_repr(),
+                grand_product_challenge_vm_multilinear_eval,
+            );
     }
 
     let (grand_product_exec_res, grand_product_exec_statement) = prove_gkr_product(
@@ -268,10 +253,7 @@ pub fn prove_execution(
         .par_iter()
         .map(|pos_16| {
             grand_product_challenge_global
-                + grand_product_challenge_p16[1]
-                + grand_product_challenge_p16[2] * F::from_usize(pos_16.addr_input_a)
-                + grand_product_challenge_p16[3] * F::from_usize(pos_16.addr_input_b)
-                + grand_product_challenge_p16[4] * F::from_usize(pos_16.addr_output)
+                + finger_print(&pos_16.addresses_field_repr(), grand_product_challenge_p16)
         })
         .collect::<Vec<_>>();
 
@@ -284,10 +266,7 @@ pub fn prove_execution(
         .par_iter()
         .map(|pos_24| {
             grand_product_challenge_global
-                + grand_product_challenge_p24[1]
-                + grand_product_challenge_p24[2] * F::from_usize(pos_24.addr_input_a)
-                + grand_product_challenge_p24[3] * F::from_usize(pos_24.addr_input_b)
-                + grand_product_challenge_p24[4] * F::from_usize(pos_24.addr_output)
+                + finger_print(&pos_24.addresses_field_repr(), grand_product_challenge_p24)
         })
         .collect::<Vec<_>>();
 
@@ -300,28 +279,30 @@ pub fn prove_execution(
         .into_par_iter()
         .map(|i| {
             grand_product_challenge_global
-                + grand_product_challenge_dot_product[1]
-                + (grand_product_challenge_dot_product[2] * dot_product_columns[2][i]
-                    + grand_product_challenge_dot_product[3] * dot_product_columns[3][i]
-                    + grand_product_challenge_dot_product[4] * dot_product_columns[4][i]
-                    + grand_product_challenge_dot_product[5] * dot_product_columns[1][i])
-                    * dot_product_columns[0][i]
+                + if dot_product_columns[0][i].is_zero() {
+                    grand_product_challenge_dot_product
+                } else {
+                    finger_print(
+                        &[
+                            dot_product_columns[2][i],
+                            dot_product_columns[3][i],
+                            dot_product_columns[4][i],
+                            dot_product_columns[1][i],
+                        ],
+                        grand_product_challenge_dot_product,
+                    )
+                }
         })
         .collect::<Vec<_>>();
 
     let vm_multilinear_eval_grand_product_res = vm_multilinear_evals
-        .iter()
+        .par_iter()
         .map(|vm_multilinear_eval| {
             grand_product_challenge_global
-                + grand_product_challenge_vm_multilinear_eval[1]
-                + grand_product_challenge_vm_multilinear_eval[2]
-                    * F::from_usize(vm_multilinear_eval.addr_coeffs)
-                + grand_product_challenge_vm_multilinear_eval[3]
-                    * F::from_usize(vm_multilinear_eval.addr_point)
-                + grand_product_challenge_vm_multilinear_eval[4]
-                    * F::from_usize(vm_multilinear_eval.addr_res)
-                + grand_product_challenge_vm_multilinear_eval[5]
-                    * F::from_usize(vm_multilinear_eval.n_vars())
+                + finger_print(
+                    &vm_multilinear_eval.addresses_and_n_vars_field_repr(),
+                    grand_product_challenge_vm_multilinear_eval,
+                )
         })
         .product::<EF>();
 
@@ -340,22 +321,22 @@ pub fn prove_execution(
         );
     let corrected_prod_p16 = grand_product_p16_res
         / (grand_product_challenge_global
-            + grand_product_challenge_p16[1]
-            + grand_product_challenge_p16[4] * F::from_usize(POSEIDON_16_NULL_HASH_PTR))
+            + grand_product_challenge_p16
+            + grand_product_challenge_p16.exp_u64(4) * F::from_usize(POSEIDON_16_NULL_HASH_PTR))
         .exp_u64((n_poseidons_16.next_power_of_two() - n_poseidons_16) as u64);
 
     let corrected_prod_p24 = grand_product_p24_res
         / (grand_product_challenge_global
-            + grand_product_challenge_p24[1]
-            + grand_product_challenge_p24[4] * F::from_usize(POSEIDON_24_NULL_HASH_PTR))
+            + grand_product_challenge_p24
+            + grand_product_challenge_p24.exp_u64(4) * F::from_usize(POSEIDON_24_NULL_HASH_PTR))
         .exp_u64((n_poseidons_24.next_power_of_two() - n_poseidons_24) as u64);
 
     let corrected_dot_product = grand_product_dot_product_res
         / ((grand_product_challenge_global
-            + grand_product_challenge_dot_product[1]
-            + grand_product_challenge_dot_product[5])
-            .exp_u64(dot_product_padding_len as u64)
-            * (grand_product_challenge_global + grand_product_challenge_dot_product[1]).exp_u64(
+            + grand_product_challenge_dot_product
+            + grand_product_challenge_dot_product.exp_u64(5))
+        .exp_u64(dot_product_padding_len as u64)
+            * (grand_product_challenge_global + grand_product_challenge_dot_product).exp_u64(
                 ((1 << log_n_rows_dot_product_table) - dot_product_padding_len - dot_products.len())
                     as u64,
             ));
@@ -419,11 +400,8 @@ pub fn prove_execution(
     )];
 
     let dot_product_footprint_computation = DotProductFootprint {
-        grand_product_challenge_global,
-        grand_product_challenge_dot_product: grand_product_challenge_dot_product
-            .clone()
-            .try_into()
-            .unwrap(),
+        global_challenge: grand_product_challenge_global,
+        dot_product_challenge: powers_const(grand_product_challenge_dot_product),
     };
 
     let (
@@ -474,15 +452,11 @@ pub fn prove_execution(
     );
 
     let precompile_foot_print_computation = PrecompileFootprint {
-        grand_product_challenge_global,
-        grand_product_challenge_p16: grand_product_challenge_p16.try_into().unwrap(),
-        grand_product_challenge_p24: grand_product_challenge_p24.try_into().unwrap(),
-        grand_product_challenge_dot_product: grand_product_challenge_dot_product
-            .try_into()
-            .unwrap(),
-        grand_product_challenge_vm_multilinear_eval: grand_product_challenge_vm_multilinear_eval
-            .try_into()
-            .unwrap(),
+        global_challenge: grand_product_challenge_global,
+        p16_powers: powers_const(grand_product_challenge_p16),
+        p24_powers: powers_const(grand_product_challenge_p24),
+        dot_product_powers: powers_const(grand_product_challenge_dot_product),
+        multilinear_eval_powers: powers_const(grand_product_challenge_vm_multilinear_eval),
     };
 
     let (grand_product_exec_sumcheck_point, grand_product_exec_sumcheck_inner_evals, _) =

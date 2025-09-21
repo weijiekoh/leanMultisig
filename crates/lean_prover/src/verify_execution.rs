@@ -127,10 +127,10 @@ pub fn verify_execution(
     )?;
 
     let grand_product_challenge_global = verifier_state.sample();
-    let grand_product_challenge_p16 = verifier_state.sample().powers().collect_n(5);
-    let grand_product_challenge_p24 = verifier_state.sample().powers().collect_n(5);
-    let grand_product_challenge_dot_product = verifier_state.sample().powers().collect_n(6);
-    let grand_product_challenge_vm_multilinear_eval = verifier_state.sample().powers().collect_n(6);
+    let grand_product_challenge_p16 = verifier_state.sample();
+    let grand_product_challenge_p24 = verifier_state.sample();
+    let grand_product_challenge_dot_product = verifier_state.sample();
+    let grand_product_challenge_vm_multilinear_eval = verifier_state.sample();
     let (grand_product_exec_res, grand_product_exec_statement) =
         verify_gkr_product(&mut verifier_state, log_n_cycles)?;
     let (grand_product_p16_res, grand_product_p16_statement) =
@@ -143,15 +143,10 @@ pub fn verify_execution(
         .iter()
         .map(|vm_multilinear_eval| {
             grand_product_challenge_global
-                + grand_product_challenge_vm_multilinear_eval[1]
-                + grand_product_challenge_vm_multilinear_eval[2]
-                    * F::from_usize(vm_multilinear_eval.addr_coeffs)
-                + grand_product_challenge_vm_multilinear_eval[3]
-                    * F::from_usize(vm_multilinear_eval.addr_point)
-                + grand_product_challenge_vm_multilinear_eval[4]
-                    * F::from_usize(vm_multilinear_eval.addr_res)
-                + grand_product_challenge_vm_multilinear_eval[5]
-                    * F::from_usize(vm_multilinear_eval.n_vars())
+                + finger_print(
+                    &vm_multilinear_eval.addresses_and_n_vars_field_repr(),
+                    grand_product_challenge_vm_multilinear_eval,
+                )
         })
         .product::<EF>();
 
@@ -165,22 +160,22 @@ pub fn verify_execution(
         );
     let corrected_prod_p16 = grand_product_p16_res
         / (grand_product_challenge_global
-            + grand_product_challenge_p16[1]
-            + grand_product_challenge_p16[4] * F::from_usize(POSEIDON_16_NULL_HASH_PTR))
+            + grand_product_challenge_p16
+            + grand_product_challenge_p16.exp_u64(4) * F::from_usize(POSEIDON_16_NULL_HASH_PTR))
         .exp_u64((n_poseidons_16.next_power_of_two() - n_poseidons_16) as u64);
 
     let corrected_prod_p24 = grand_product_p24_res
         / (grand_product_challenge_global
-            + grand_product_challenge_p24[1]
-            + grand_product_challenge_p24[4] * F::from_usize(POSEIDON_24_NULL_HASH_PTR))
+            + grand_product_challenge_p24
+            + grand_product_challenge_p24.exp_u64(4) * F::from_usize(POSEIDON_24_NULL_HASH_PTR))
         .exp_u64((n_poseidons_24.next_power_of_two() - n_poseidons_24) as u64);
 
     let corrected_dot_product = grand_product_dot_product_res
         / ((grand_product_challenge_global
-            + grand_product_challenge_dot_product[1]
-            + grand_product_challenge_dot_product[5])
-            .exp_u64(dot_product_padding_len as u64)
-            * (grand_product_challenge_global + grand_product_challenge_dot_product[1]).exp_u64(
+            + grand_product_challenge_dot_product
+            + grand_product_challenge_dot_product.exp_u64(5))
+        .exp_u64(dot_product_padding_len as u64)
+            * (grand_product_challenge_global + grand_product_challenge_dot_product).exp_u64(
                 ((1 << table_dot_products_log_n_rows) - dot_product_padding_len - n_dot_products)
                     as u64,
             ));
@@ -200,10 +195,14 @@ pub fn verify_execution(
         p16_grand_product_evals_on_indexes_res,
     ] = verifier_state.next_extension_scalars_const()?;
     if grand_product_challenge_global
-        + grand_product_challenge_p16[1]
-        + grand_product_challenge_p16[2] * p16_grand_product_evals_on_indexes_a
-        + grand_product_challenge_p16[3] * p16_grand_product_evals_on_indexes_b
-        + grand_product_challenge_p16[4] * p16_grand_product_evals_on_indexes_res
+        + finger_print(
+            &[
+                p16_grand_product_evals_on_indexes_a,
+                p16_grand_product_evals_on_indexes_b,
+                p16_grand_product_evals_on_indexes_res,
+            ],
+            grand_product_challenge_p16,
+        )
         != grand_product_p16_statement.value
     {
         return Err(ProofError::InvalidProof);
@@ -228,10 +227,14 @@ pub fn verify_execution(
         p24_grand_product_evals_on_indexes_res,
     ] = verifier_state.next_extension_scalars_const()?;
     if grand_product_challenge_global
-        + grand_product_challenge_p24[1]
-        + grand_product_challenge_p24[2] * p24_grand_product_evals_on_indexes_a
-        + grand_product_challenge_p24[3] * p24_grand_product_evals_on_indexes_b
-        + grand_product_challenge_p24[4] * p24_grand_product_evals_on_indexes_res
+        + finger_print(
+            &[
+                p24_grand_product_evals_on_indexes_a,
+                p24_grand_product_evals_on_indexes_b,
+                p24_grand_product_evals_on_indexes_res,
+            ],
+            grand_product_challenge_p24,
+        )
         != grand_product_p24_statement.value
     {
         return Err(ProofError::InvalidProof);
@@ -265,11 +268,8 @@ pub fn verify_execution(
             .eq_poly_outside(&grand_product_dot_product_statement.point)
             * {
                 DotProductFootprint {
-                    grand_product_challenge_global,
-                    grand_product_challenge_dot_product: grand_product_challenge_dot_product
-                        .clone()
-                        .try_into()
-                        .unwrap(),
+                    global_challenge: grand_product_challenge_global,
+                    dot_product_challenge: powers_const(grand_product_challenge_dot_product),
                 }
                 .eval(&grand_product_dot_product_sumcheck_inner_evals, &[])
             }
@@ -316,16 +316,13 @@ pub fn verify_execution(
             .eq_poly_outside(&grand_product_exec_statement.point)
             * {
                 PrecompileFootprint {
-                    grand_product_challenge_global,
-                    grand_product_challenge_p16: grand_product_challenge_p16.try_into().unwrap(),
-                    grand_product_challenge_p24: grand_product_challenge_p24.try_into().unwrap(),
-                    grand_product_challenge_dot_product: grand_product_challenge_dot_product
-                        .try_into()
-                        .unwrap(),
-                    grand_product_challenge_vm_multilinear_eval:
-                        grand_product_challenge_vm_multilinear_eval
-                            .try_into()
-                            .unwrap(),
+                    global_challenge: grand_product_challenge_global,
+                    p16_powers: powers_const(grand_product_challenge_p16),
+                    p24_powers: powers_const(grand_product_challenge_p24),
+                    dot_product_powers: powers_const(grand_product_challenge_dot_product),
+                    multilinear_eval_powers: powers_const(
+                        grand_product_challenge_vm_multilinear_eval,
+                    ),
                 }
                 .eval(&grand_product_exec_sumcheck_inner_evals, &[])
             }

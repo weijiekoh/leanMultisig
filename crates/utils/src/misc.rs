@@ -3,7 +3,7 @@ use std::{
     ops::Range,
 };
 
-use p3_field::{BasedVectorSpace, ExtensionField, Field};
+use p3_field::{BasedVectorSpace, ExtensionField, Field, dot_product};
 use rayon::prelude::*;
 
 use crate::PF;
@@ -129,4 +129,12 @@ pub fn debug_hash<A: Hash>(a: &A) -> u64 {
     let mut hasher = DefaultHasher::new();
     a.hash(&mut hasher);
     hasher.finish()
+}
+
+pub fn finger_print<F: Field, EF: ExtensionField<F>>(data: &[F], challenge: EF) -> EF {
+    challenge + dot_product::<EF, _, _>(challenge.powers().skip(2), data.iter().copied())
+}
+
+pub fn powers_const<F: Field, const N: usize>(base: F) -> [F; N] {
+    base.powers().collect_n(N).try_into().unwrap()
 }

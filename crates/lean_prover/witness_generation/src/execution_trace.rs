@@ -23,6 +23,16 @@ pub struct WitnessDotProduct {
     pub slice_1: Vec<EF>,
     pub res: EF,
 }
+impl WitnessDotProduct {
+    pub fn addresses_and_len_field_repr(&self) -> [F; 4] {
+        [
+            F::from_usize(self.addr_0),
+            F::from_usize(self.addr_1),
+            F::from_usize(self.addr_res),
+            F::from_usize(self.len),
+        ]
+    }
+}
 
 #[derive(Debug)]
 pub struct RowMultilinearEval {
@@ -36,6 +46,15 @@ pub struct RowMultilinearEval {
 impl RowMultilinearEval {
     pub fn n_vars(&self) -> usize {
         self.point.len()
+    }
+
+    pub fn addresses_and_n_vars_field_repr(&self) -> [F; 4] {
+        [
+            F::from_usize(self.addr_coeffs),
+            F::from_usize(self.addr_point),
+            F::from_usize(self.addr_res),
+            F::from_usize(self.n_vars()),
+        ]
     }
 }
 
@@ -67,6 +86,14 @@ impl WitnessPoseidon16 {
             output: get_poseidon16().permute([F::ZERO; 16]),
         }
     }
+
+    pub fn addresses_field_repr(&self) -> [F; 3] {
+        [
+            F::from_usize(self.addr_input_a),
+            F::from_usize(self.addr_input_b),
+            F::from_usize(self.addr_output),
+        ]
+    }
 }
 
 #[derive(Debug)]
@@ -91,6 +118,14 @@ impl WitnessPoseidon24 {
                 .try_into()
                 .unwrap(),
         }
+    }
+
+    pub fn addresses_field_repr(&self) -> [F; 3] {
+        [
+            F::from_usize(self.addr_input_a),
+            F::from_usize(self.addr_input_b),
+            F::from_usize(self.addr_output),
+        ]
     }
 }
 

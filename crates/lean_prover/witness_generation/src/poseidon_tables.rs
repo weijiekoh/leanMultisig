@@ -1,5 +1,6 @@
 use lean_vm::F;
 use p3_field::PrimeCharacteristicRing;
+use rayon::prelude::*;
 use utils::{
     generate_trace_poseidon_16, generate_trace_poseidon_24, padd_with_zero_to_next_power_of_two,
 };
@@ -24,15 +25,15 @@ pub fn build_poseidon_columns(
 pub fn all_poseidon_16_indexes(poseidons_16: &[WitnessPoseidon16]) -> [Vec<F>; 3] {
     [
         poseidons_16
-            .iter()
+            .par_iter()
             .map(|p| F::from_usize(p.addr_input_a))
             .collect::<Vec<_>>(),
         poseidons_16
-            .iter()
+            .par_iter()
             .map(|p| F::from_usize(p.addr_input_b))
             .collect::<Vec<_>>(),
         poseidons_16
-            .iter()
+            .par_iter()
             .map(|p| F::from_usize(p.addr_output))
             .collect::<Vec<_>>(),
     ]
