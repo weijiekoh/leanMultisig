@@ -48,7 +48,8 @@ pub fn prove_execution(
         dot_products,
         vm_multilinear_evals,
         public_memory_size,
-        memory,
+        non_zero_memory_size,
+        memory, // padded with zeros to next power of two
     } = info_span!("Witness generation").in_scope(|| {
         let execution_result = execute_bytecode(
             bytecode,
@@ -62,10 +63,9 @@ pub fn prove_execution(
     });
 
     let public_memory = &memory[..public_memory_size];
-    let private_memory = &memory[public_memory_size..];
-    let log_memory = log2_ceil_usize(memory.len());
+    let private_memory = &memory[public_memory_size..non_zero_memory_size];
+    let log_memory = log2_strict_usize(memory.len());
     let log_public_memory = log2_strict_usize(public_memory.len());
-    let padded_memory = padd_with_zero_to_next_power_of_two(&memory); // TODO avoid this padding
 
     let n_cycles = full_trace[0].len();
     let log_n_cycles = log2_strict_usize(n_cycles);
@@ -215,7 +215,7 @@ pub fn prove_execution(
 
     let base_pols = [
         vec![
-            padded_memory.as_slice(),
+            memory.as_slice(),
             full_trace[COL_INDEX_PC].as_slice(),
             full_trace[COL_INDEX_FP].as_slice(),
             full_trace[COL_INDEX_MEM_ADDRESS_A].as_slice(),
@@ -724,7 +724,7 @@ pub fn prove_execution(
                 });
         }
 
-        let poseidon_folded_memory = fold_multilinear(&padded_memory, &memory_folding_challenges);
+        let poseidon_folded_memory = fold_multilinear(&memory, &memory_folding_challenges);
 
         let mut poseidon_poly_eq_point = EF::zero_vec(max_n_poseidons * 8);
         for (i, statement) in poseidon_lookup_statements.iter().enumerate() {
@@ -977,7 +977,7 @@ pub fn prove_execution(
     );
     let base_memory_pushforward = compute_pushforward(
         &base_memory_indexes,
-        padded_memory.len(),
+        memory.len(),
         &base_memory_poly_eq_point,
     );
 
@@ -989,8 +989,8 @@ pub fn prove_execution(
     ];
 
     let extension_dims = vec![
-        ColDims::padded(memory.len(), EF::ZERO), // memory
-        ColDims::padded(memory.len().div_ceil(VECTOR_LEN), EF::ZERO), // memory (folded)
+        ColDims::padded(non_zero_memory_size, EF::ZERO), // memory
+        ColDims::padded(non_zero_memory_size.div_ceil(VECTOR_LEN), EF::ZERO), // memory (folded)
         ColDims::padded(bytecode.instructions.len(), EF::ZERO), // bytecode
     ];
 
@@ -1009,7 +1009,7 @@ pub fn prove_execution(
 
     let base_memory_logup_star_statements = prove_logup_star(
         &mut prover_state,
-        &padded_memory,
+        &memory,
         &base_memory_indexes,
         base_memory_lookup_statement_1.value
             + memory_poly_eq_point_alpha * base_memory_lookup_statement_2.value

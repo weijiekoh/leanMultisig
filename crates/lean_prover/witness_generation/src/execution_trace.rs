@@ -93,6 +93,7 @@ pub struct ExecutionTrace {
     pub dot_products: Vec<WitnessDotProduct>,
     pub vm_multilinear_evals: Vec<WitnessMultilinearEval>,
     pub public_memory_size: usize,
+    pub non_zero_memory_size: usize,
     pub memory: Vec<F>, // of length a multiple of public_memory_size
 }
 
@@ -277,11 +278,12 @@ pub fn get_execution_trace(
         }
     }
 
-    let memory = memory
+    let mut memory_padded = memory
         .0
         .par_iter()
         .map(|&v| v.unwrap_or(F::ZERO))
         .collect::<Vec<F>>();
+    memory_padded.resize(memory.0.len().next_power_of_two(), F::ZERO);
 
     let n_poseidons_16 = poseidons_16.len();
     let n_poseidons_24 = poseidons_24.len();
@@ -321,6 +323,7 @@ pub fn get_execution_trace(
         dot_products,
         vm_multilinear_evals,
         public_memory_size: execution_result.public_memory_size,
-        memory,
+        non_zero_memory_size: memory.0.len(),
+        memory: memory_padded,
     }
 }
