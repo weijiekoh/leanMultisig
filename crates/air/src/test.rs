@@ -181,20 +181,21 @@ fn test_structured_air() {
         ExampleStructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>,
     );
     table.check_trace_validity(&columns_ref).unwrap();
-    let evaluations_remaining_to_prove =
+    let (point_prover, evaluations_remaining_to_prove) =
         table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &columns_ref);
     let mut verifier_state = build_verifier_state(&prover_state);
-    let evaluations_remaining_to_verify = table
+    let (point_verifier, evaluations_remaining_to_verify) = table
         .verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_rows)
         .unwrap();
+    assert_eq!(point_prover, point_verifier);
     assert_eq!(
         &evaluations_remaining_to_prove,
         &evaluations_remaining_to_verify
     );
     for i in 0..N_COLUMNS {
         assert_eq!(
-            columns[i].evaluate(&evaluations_remaining_to_verify[i].point),
-            evaluations_remaining_to_verify[i].value
+            columns[i].evaluate(&point_prover),
+            evaluations_remaining_to_verify[i]
         );
     }
 }
@@ -214,20 +215,21 @@ fn test_unstructured_air() {
         ExampleUnstructuredAir::<N_COLUMNS, N_PREPROCESSED_COLUMNS>,
     );
     table.check_trace_validity(&columns_ref).unwrap();
-    let evaluations_remaining_to_prove =
+    let (point_prover, evaluations_remaining_to_prove) =
         table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &columns_ref);
     let mut verifier_state = build_verifier_state(&prover_state);
-    let evaluations_remaining_to_verify = table
+    let (point_verifier, evaluations_remaining_to_verify) = table
         .verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_rows)
         .unwrap();
+    assert_eq!(point_prover, point_verifier);
     assert_eq!(
         &evaluations_remaining_to_prove,
         &evaluations_remaining_to_verify
     );
     for i in 0..N_COLUMNS {
         assert_eq!(
-            columns[i].evaluate(&evaluations_remaining_to_verify[i].point),
-            evaluations_remaining_to_verify[i].value
+            columns[i].evaluate(&point_prover),
+            evaluations_remaining_to_verify[i]
         );
     }
 }

@@ -9,7 +9,6 @@ use utils::PF;
 use utils::{FSProver, add_multilinears, multilinears_linear_combination};
 use whir_p3::fiat_shamir::FSChallenger;
 use whir_p3::poly::evals::{eval_eq, fold_multilinear, scale_poly};
-use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 
 use crate::{NormalAir, PackedAir};
@@ -38,7 +37,7 @@ fn prove_air<
     univariate_skips: usize,
     table: &AirTable<EF, A, AP>,
     witness: &[&'a [WF]],
-) -> Vec<Evaluation<EF>> {
+) -> (MultilinearPoint<EF>, Vec<EF>) {
     let n_rows = witness[0].len();
     assert!(witness.iter().all(|col| col.len() == n_rows));
     let log_n_rows = log2_strict_usize(n_rows);
@@ -119,7 +118,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
         prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
         univariate_skips: usize,
         witness: &[&[PF<EF>]],
-    ) -> Vec<Evaluation<EF>> {
+    ) -> (MultilinearPoint<EF>, Vec<EF>) {
         prove_air::<PF<EF>, EF, A, AP>(prover_state, univariate_skips, self, witness)
     }
 
@@ -129,7 +128,7 @@ impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<E
         prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
         univariate_skips: usize,
         witness: &[&[EF]],
-    ) -> Vec<Evaluation<EF>> {
+    ) -> (MultilinearPoint<EF>, Vec<EF>) {
         prove_air::<EF, EF, A, AP>(prover_state, univariate_skips, self, witness)
     }
 }
@@ -143,7 +142,7 @@ fn open_unstructured_columns<
     univariate_skips: usize,
     witness: &[&[WF]],
     outer_sumcheck_challenge: &[EF],
-) -> Vec<Evaluation<EF>> {
+) -> (MultilinearPoint<EF>, Vec<EF>) {
     let log_n_rows = log2_strict_usize(witness[0].len());
 
     let columns_batching_scalars = prover_state.sample_vec(log2_ceil_usize(witness.len()));
@@ -170,20 +169,13 @@ fn open_unstructured_columns<
         .concat(),
     );
 
-    let mut evaluations_remaining_to_prove = vec![];
-    assert_eq!(sub_evals.len(), 1 << epsilons.len());
+    let evaluations_remaining_to_prove = witness
+        .iter()
+        .map(|col| col.evaluate(&common_point))
+        .collect::<Vec<_>>();
+    prover_state.add_extension_scalars(&evaluations_remaining_to_prove);
 
-    for col in witness {
-        // TODO compute oe time eq(.) then inner product with everything
-        let value = col.evaluate(&common_point);
-        prover_state.add_extension_scalars(&[value]);
-        evaluations_remaining_to_prove.push(Evaluation {
-            point: common_point.clone(),
-            value,
-        });
-    }
-
-    evaluations_remaining_to_prove
+    (common_point, evaluations_remaining_to_prove)
 }
 
 #[instrument(skip_all)]
@@ -192,7 +184,7 @@ fn open_structured_columns<EF: ExtensionField<PF<EF>> + ExtensionField<IF>, IF: 
     univariate_skips: usize,
     witness: &[&[IF]],
     outer_sumcheck_challenge: &[EF],
-) -> Vec<Evaluation<EF>> {
+) -> (MultilinearPoint<EF>, Vec<EF>) {
     let n_columns = witness.len();
     let n_rows = witness[0].len();
     let log_n_rows = log2_strict_usize(n_rows);
@@ -246,17 +238,11 @@ fn open_structured_columns<EF: ExtensionField<PF<EF>> + ExtensionField<IF>, IF: 
         None,
     );
 
-    // TODO using inner_evals[1], we can avoid 1 of the evaluations below (the last one)
+    let evaluations_remaining_to_prove = witness
+        .iter()
+        .map(|col| col.evaluate(&inner_challenges))
+        .collect::<Vec<_>>();
+    prover_state.add_extension_scalars(&evaluations_remaining_to_prove);
 
-    let mut evaluations_remaining_to_prove = vec![];
-    for col in witness {
-        let value = col.evaluate(&inner_challenges);
-        prover_state.add_extension_scalar(value);
-        evaluations_remaining_to_prove.push(Evaluation {
-            point: inner_challenges.clone(),
-            value,
-        });
-    }
-
-    evaluations_remaining_to_prove
+    (inner_challenges, evaluations_remaining_to_prove)
 }

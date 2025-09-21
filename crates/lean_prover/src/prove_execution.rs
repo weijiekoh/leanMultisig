@@ -15,7 +15,6 @@ use std::collections::BTreeMap;
 use sumcheck::MleGroupRef;
 use tracing::info_span;
 use utils::ToUsize;
-use utils::assert_eq_many;
 use utils::dot_product_with_base;
 use utils::field_slice_as_base;
 use utils::pack_extension;
@@ -566,23 +565,24 @@ pub fn prove_execution(
         grand_product_exec_sumcheck_inner_evals[COL_INDEX_FP],
     );
 
-    let exec_evals_to_prove = info_span!("Execution AIR proof")
+    let (exec_air_point, exec_evals_to_prove) = info_span!("Execution AIR proof")
         .in_scope(|| exec_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &exec_columns));
 
     let dot_product_columns_ref = dot_product_columns
         .iter()
         .map(Vec::as_slice)
         .collect::<Vec<_>>();
-    let dot_product_evals_to_prove = info_span!("DotProduct AIR proof").in_scope(|| {
-        dot_product_table.prove_extension(&mut prover_state, 1, &dot_product_columns_ref)
-    });
+    let (dot_product_air_point, dot_product_evals_to_prove) = info_span!("DotProduct AIR proof")
+        .in_scope(|| {
+            dot_product_table.prove_extension(&mut prover_state, 1, &dot_product_columns_ref)
+        });
 
     let p16_columns_ref = p16_columns.iter().map(Vec::as_slice).collect::<Vec<_>>();
-    let p16_evals_to_prove = info_span!("Poseidon-16 AIR proof")
+    let (p16_air_point, p16_evals_to_prove) = info_span!("Poseidon-16 AIR proof")
         .in_scope(|| p16_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &p16_columns_ref));
 
     let p24_columns_ref = p24_columns.iter().map(Vec::as_slice).collect::<Vec<_>>();
-    let p24_evals_to_prove = info_span!("Poseidon-24 AIR proof")
+    let (p24_air_point, p24_evals_to_prove) = info_span!("Poseidon-24 AIR proof")
         .in_scope(|| p24_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &p24_columns_ref));
 
     let (
@@ -598,28 +598,24 @@ pub fn prove_execution(
         let poseidon_logup_star_alpha = prover_state.sample();
         let memory_folding_challenges = MultilinearPoint(prover_state.sample_vec(LOG_VECTOR_LEN));
 
-        let p16_lookup_point = p16_evals_to_prove[0].point.0.clone();
-        let p24_lookup_point = p24_evals_to_prove[0].point.0.clone();
+        let p16_folded_eval_addr_a =
+            (&p16_evals_to_prove[..8]).evaluate(&memory_folding_challenges);
+        let p16_folded_eval_addr_b =
+            (&p16_evals_to_prove[8..16]).evaluate(&memory_folding_challenges);
+        let p16_folded_eval_addr_res_a = (&p16_evals_to_prove
+            [p16_air.width() - 16..p16_air.width() - 8])
+            .evaluate(&memory_folding_challenges);
+        let p16_folded_eval_addr_res_b =
+            (&p16_evals_to_prove[p16_air.width() - 8..]).evaluate(&memory_folding_challenges);
 
-        let fold_evals = |evals: &[Evaluation<EF>]| {
-            assert_eq!(evals.len(), VECTOR_LEN);
-            evals
-                .iter()
-                .map(|s| s.value)
-                .collect::<Vec<_>>()
-                .evaluate(&memory_folding_challenges)
-        };
-
-        let p16_folded_eval_addr_a = fold_evals(&p16_evals_to_prove[..8]);
-        let p16_folded_eval_addr_b = fold_evals(&p16_evals_to_prove[8..16]);
-        let p16_folded_eval_addr_res_a =
-            fold_evals(&p16_evals_to_prove[p16_air.width() - 16..p16_air.width() - 8]);
-        let p16_folded_eval_addr_res_b = fold_evals(&p16_evals_to_prove[p16_air.width() - 8..]);
-
-        let p24_folded_eval_addr_a = fold_evals(&p24_evals_to_prove[..8]);
-        let p24_folded_eval_addr_b = fold_evals(&p24_evals_to_prove[8..16]);
-        let p24_folded_eval_addr_c = fold_evals(&p24_evals_to_prove[16..24]);
-        let p24_folded_eval_addr_res = fold_evals(&p24_evals_to_prove[p24_air.width() - 8..]);
+        let p24_folded_eval_addr_a =
+            (&p24_evals_to_prove[..8]).evaluate(&memory_folding_challenges);
+        let p24_folded_eval_addr_b =
+            (&p24_evals_to_prove[8..16]).evaluate(&memory_folding_challenges);
+        let p24_folded_eval_addr_c =
+            (&p24_evals_to_prove[16..24]).evaluate(&memory_folding_challenges);
+        let p24_folded_eval_addr_res =
+            (&p24_evals_to_prove[p24_air.width() - 8..]).evaluate(&memory_folding_challenges);
 
         let padding_p16 = EF::zero_vec(
             log2_ceil_usize(n_poseidons_24).saturating_sub(log2_ceil_usize(n_poseidons_16)),
@@ -633,7 +629,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ZERO; 3],
                     padding_p16.clone(),
-                    p16_lookup_point.clone(),
+                    p16_air_point.0.clone(),
                 ]
                 .concat(),
                 p16_folded_eval_addr_a,
@@ -642,7 +638,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ZERO, EF::ZERO, EF::ONE],
                     padding_p16.clone(),
-                    p16_lookup_point.clone(),
+                    p16_air_point.0.clone(),
                 ]
                 .concat(),
                 p16_folded_eval_addr_b,
@@ -651,7 +647,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ZERO, EF::ONE, EF::ZERO],
                     padding_p16.clone(),
-                    p16_lookup_point.clone(),
+                    p16_air_point.0.clone(),
                 ]
                 .concat(),
                 p16_folded_eval_addr_res_a,
@@ -660,7 +656,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ZERO, EF::ONE, EF::ONE],
                     padding_p16.clone(),
-                    p16_lookup_point.clone(),
+                    p16_air_point.0.clone(),
                 ]
                 .concat(),
                 p16_folded_eval_addr_res_b,
@@ -669,7 +665,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ONE, EF::ZERO, EF::ZERO],
                     padding_p24.clone(),
-                    p24_lookup_point.clone(),
+                    p24_air_point.0.clone(),
                 ]
                 .concat(),
                 p24_folded_eval_addr_a,
@@ -678,7 +674,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ONE, EF::ZERO, EF::ONE],
                     padding_p24.clone(),
-                    p24_lookup_point.clone(),
+                    p24_air_point.0.clone(),
                 ]
                 .concat(),
                 p24_folded_eval_addr_b,
@@ -687,7 +683,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ONE, EF::ONE, EF::ZERO],
                     padding_p24.clone(),
-                    p24_lookup_point.clone(),
+                    p24_air_point.0.clone(),
                 ]
                 .concat(),
                 p24_folded_eval_addr_c,
@@ -696,7 +692,7 @@ pub fn prove_execution(
                 [
                     vec![EF::ONE, EF::ONE, EF::ONE],
                     padding_p24.clone(),
-                    p24_lookup_point.clone(),
+                    p24_air_point.0.clone(),
                 ]
                 .concat(),
                 p24_folded_eval_addr_res,
@@ -756,14 +752,10 @@ pub fn prove_execution(
         )
     };
 
-    for i in 1..N_INSTRUCTION_COLUMNS_IN_AIR {
-        assert_eq!(&exec_evals_to_prove[0].point, &exec_evals_to_prove[i].point);
-    }
-    let bytecode_lookup_point_1 = exec_evals_to_prove[0].point.clone();
     let non_used_precompiles_evals = full_trace
         [N_INSTRUCTION_COLUMNS_IN_AIR..N_INSTRUCTION_COLUMNS]
         .iter()
-        .map(|col| col.evaluate(&bytecode_lookup_point_1))
+        .map(|col| col.evaluate(&exec_air_point))
         .collect::<Vec<_>>();
     prover_state.add_extension_scalars(&non_used_precompiles_evals);
     let bytecode_compression_challenges =
@@ -772,11 +764,11 @@ pub fn prove_execution(
     let folded_bytecode = fold_bytecode(bytecode, &bytecode_compression_challenges);
 
     let bytecode_lookup_claim_1 = Evaluation::new(
-        bytecode_lookup_point_1.clone(),
+        exec_air_point.clone(),
         padd_with_zero_to_next_power_of_two(
             &[
                 (0..N_INSTRUCTION_COLUMNS_IN_AIR)
-                    .map(|i| exec_evals_to_prove[i].value)
+                    .map(|i| exec_evals_to_prove[i])
                     .collect::<Vec<_>>(),
                 non_used_precompiles_evals,
             ]
@@ -792,7 +784,7 @@ pub fn prove_execution(
     );
     let alpha_bytecode_lookup = prover_state.sample();
 
-    let mut bytecode_poly_eq_point = eval_eq(&bytecode_lookup_point_1);
+    let mut bytecode_poly_eq_point = eval_eq(&exec_air_point);
     compute_eval_eq::<PF<EF>, EF, true>(
         &bytecode_lookup_point_2,
         &mut bytecode_poly_eq_point,
@@ -833,9 +825,9 @@ pub fn prove_execution(
 
     let dot_product_values_mixing_challenges = MultilinearPoint(prover_state.sample_vec(2));
     let dot_product_values_mixed = [
-        dot_product_evals_to_prove[5].value,
-        dot_product_evals_to_prove[6].value,
-        dot_product_evals_to_prove[7].value,
+        dot_product_evals_to_prove[5],
+        dot_product_evals_to_prove[6],
+        dot_product_evals_to_prove[7],
         EF::ZERO,
     ]
     .evaluate(&dot_product_values_mixing_challenges);
@@ -846,7 +838,7 @@ pub fn prove_execution(
             slice.evaluate(&MultilinearPoint(
                 [
                     dot_product_values_mixing_challenges.0.clone(),
-                    dot_product_evals_to_prove[5].point.0.clone(),
+                    dot_product_air_point.0.clone(),
                 ]
                 .concat(),
             ))
@@ -864,7 +856,7 @@ pub fn prove_execution(
         [
             dot_product_values_batching_scalars.0.clone(),
             dot_product_values_mixing_challenges.0.clone(),
-            dot_product_evals_to_prove[5].point.0.clone(),
+            dot_product_air_point.0.clone(),
         ]
         .concat(),
     );
@@ -905,30 +897,22 @@ pub fn prove_execution(
         .evaluate(&grand_product_mem_values_mixing_challenges),
     );
 
-    assert_eq_many!(
-        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()].point,
-        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_B.index_in_air()].point,
-        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_C.index_in_air()].point
-    );
     let unused_2 = evaluate_as_larger_multilinear_pol(
         &concatenated_dot_product_values_spread,
-        &exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()].point,
+        &exec_air_point,
     );
     prover_state.add_extension_scalar(unused_2);
     let exec_air_mem_values_mixing_challenges = MultilinearPoint(prover_state.sample_vec(2));
     let base_memory_lookup_statement_2 = Evaluation::new(
         [
             exec_air_mem_values_mixing_challenges.0.clone(),
-            exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()]
-                .point
-                .0
-                .clone(),
+            exec_air_point.0.clone(),
         ]
         .concat(),
         [
-            exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()].value,
-            exec_evals_to_prove[COL_INDEX_MEM_VALUE_B.index_in_air()].value,
-            exec_evals_to_prove[COL_INDEX_MEM_VALUE_C.index_in_air()].value,
+            exec_evals_to_prove[COL_INDEX_MEM_VALUE_A.index_in_air()],
+            exec_evals_to_prove[COL_INDEX_MEM_VALUE_B.index_in_air()],
+            exec_evals_to_prove[COL_INDEX_MEM_VALUE_C.index_in_air()],
             unused_2,
         ]
         .evaluate(&exec_air_mem_values_mixing_challenges),
@@ -1160,17 +1144,17 @@ pub fn prove_execution(
 
     let dot_product_computation_column_evals = dot_product_computations_base
         .par_iter()
-        .map(|slice| slice.evaluate(&dot_product_evals_to_prove[6].point))
+        .map(|slice| slice.evaluate(&dot_product_air_point))
         .collect::<Vec<_>>();
     assert_eq!(
         dot_product_with_base(&dot_product_computation_column_evals),
-        dot_product_evals_to_prove[8].value
+        dot_product_evals_to_prove[8]
     );
     prover_state.add_extension_scalars(&dot_product_computation_column_evals);
     let dot_product_computation_column_statements = (0..DIMENSION)
         .map(|i| {
             vec![Evaluation::new(
-                dot_product_evals_to_prove[8].point.clone(),
+                dot_product_air_point.clone(),
                 dot_product_computation_column_evals[i],
             )]
         })
@@ -1246,6 +1230,19 @@ pub fn prove_execution(
         dot_product_logup_star_indexes_inner_value_res,
     );
 
+    let exec_air_statement = |col_index: usize| {
+        Evaluation::new(
+            exec_air_point.clone(),
+            exec_evals_to_prove[col_index.index_in_air()],
+        )
+    };
+    let dot_product_air_statement = |col_index: usize| {
+        Evaluation::new(
+            dot_product_air_point.clone(),
+            dot_product_evals_to_prove[col_index],
+        )
+    };
+
     // First Opening
     let global_statements_base = packed_pcs_global_statements_for_prover(
         &base_pols,
@@ -1255,31 +1252,28 @@ pub fn prove_execution(
             vec![
                 memory_statements,
                 vec![
-                    exec_evals_to_prove[COL_INDEX_PC.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_PC),
                     bytecode_logup_star_statements.on_indexes.clone(),
                     initial_pc_statement,
                     final_pc_statement,
                 ], // pc
+                vec![exec_air_statement(COL_INDEX_FP), grand_product_fp_statement], // fp
                 vec![
-                    exec_evals_to_prove[COL_INDEX_FP.index_in_air()].clone(),
-                    grand_product_fp_statement,
-                ], // fp
-                vec![
-                    exec_evals_to_prove[COL_INDEX_MEM_ADDRESS_A.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_MEM_ADDRESS_A),
                     Evaluation::new(
                         mem_lookup_eval_indexes_partial_point.clone(),
                         mem_lookup_eval_indexes_a,
                     ),
                 ], // exec memory address A
                 vec![
-                    exec_evals_to_prove[COL_INDEX_MEM_ADDRESS_B.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_MEM_ADDRESS_B),
                     Evaluation::new(
                         mem_lookup_eval_indexes_partial_point.clone(),
                         mem_lookup_eval_indexes_b,
                     ),
                 ], // exec memory address B
                 vec![
-                    exec_evals_to_prove[COL_INDEX_MEM_ADDRESS_C.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_MEM_ADDRESS_C),
                     Evaluation::new(
                         mem_lookup_eval_indexes_partial_point,
                         mem_lookup_eval_indexes_c,
@@ -1294,36 +1288,36 @@ pub fn prove_execution(
             ],
             p16_evals_to_prove[16..p16_air.width() - 16]
                 .iter()
-                .map(|e| vec![e.clone()])
+                .map(|&e| vec![Evaluation::new(p16_air_point.clone(), e)])
                 .collect(),
             p24_evals_to_prove[24..p24_air.width() - 24]
                 .iter()
-                .map(|e| vec![e.clone()])
+                .map(|&e| vec![Evaluation::new(p24_air_point.clone(), e)])
                 .collect(),
             vec![
                 vec![
-                    dot_product_evals_to_prove[0].clone(),
+                    dot_product_air_statement(0),
                     grand_product_dot_product_flag_statement,
                 ], // dot product: (start) flag
                 vec![
-                    dot_product_evals_to_prove[1].clone(),
+                    dot_product_air_statement(1),
                     grand_product_dot_product_len_statement,
                 ], // dot product: length
                 vec![
-                    dot_product_evals_to_prove[2].clone(), // // dot product: indexe a
+                    dot_product_air_statement(2),
                     dot_product_logup_star_indexes_statement_a,
                     grand_product_dot_product_table_indexes_statement_index_a,
-                ],
+                ], // dot product: indexe a
                 vec![
-                    dot_product_evals_to_prove[3].clone(), // // dot product: indexe b
+                    dot_product_air_statement(3),
                     dot_product_logup_star_indexes_statement_b,
                     grand_product_dot_product_table_indexes_statement_index_b,
-                ],
+                ], // dot product: indexe b
                 vec![
-                    dot_product_evals_to_prove[4].clone(), // // dot product: indexe res
+                    dot_product_air_statement(4),
                     dot_product_logup_star_indexes_statement_res,
                     grand_product_dot_product_table_indexes_statement_index_res,
-                ],
+                ], // dot product: indexe res
             ],
             dot_product_computation_column_statements,
         ]

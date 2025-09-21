@@ -21,6 +21,7 @@ use utils::{
     init_tracing,
 };
 use whir_p3::dft::EvalsDft;
+use whir_p3::poly::multilinear::Evaluation;
 use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder};
 
 type F = KoalaBear;
@@ -199,11 +200,11 @@ fn run_prover_phase(
         log_smallest_decomposition_chunk,
     );
 
-    let evaluations_remaining_to_prove_16 =
+    let (p16_point, evaluations_remaining_to_prove_16) =
         setup
             .table_16
             .prove_base(prover_state, config.univariate_skips, witness_16);
-    let evaluations_remaining_to_prove_24 =
+    let (p24_point, evaluations_remaining_to_prove_24) =
         setup
             .table_24
             .prove_base(prover_state, config.univariate_skips, witness_24);
@@ -212,14 +213,15 @@ fn run_prover_phase(
         &commited_slices,
         &dims,
         log_smallest_decomposition_chunk,
-        &[
-            evaluations_remaining_to_prove_16,
-            evaluations_remaining_to_prove_24,
-        ]
-        .concat()
-        .into_iter()
-        .map(|s| vec![s])
-        .collect::<Vec<_>>(),
+        &evaluations_remaining_to_prove_16
+            .into_iter()
+            .map(|v| vec![Evaluation::new(p16_point.clone(), v)])
+            .chain(
+                evaluations_remaining_to_prove_24
+                    .into_iter()
+                    .map(|v| vec![Evaluation::new(p24_point.clone(), v)]),
+            )
+            .collect::<Vec<_>>(),
         prover_state,
     );
     let whir_config = WhirConfig::new(
@@ -260,7 +262,7 @@ fn run_verifier_phase(
     )
     .unwrap();
 
-    let evaluations_remaining_to_verify_16 = setup
+    let (p16_point, evaluations_remaining_to_verify_16) = setup
         .table_16
         .verify(
             &mut verifier_state,
@@ -268,7 +270,7 @@ fn run_verifier_phase(
             config.log_n_poseidons_16,
         )
         .unwrap();
-    let evaluations_remaining_to_verify_24 = setup
+    let (p24_point, evaluations_remaining_to_verify_24) = setup
         .table_24
         .verify(
             &mut verifier_state,
@@ -280,14 +282,15 @@ fn run_verifier_phase(
     let global_statements_to_verify = packed_pcs_global_statements_for_verifier(
         &artifacts.dims,
         log_smallest_decomposition_chunk,
-        &[
-            evaluations_remaining_to_verify_16,
-            evaluations_remaining_to_verify_24,
-        ]
-        .concat()
-        .into_iter()
-        .map(|s| vec![s])
-        .collect::<Vec<_>>(),
+        &evaluations_remaining_to_verify_16
+            .into_iter()
+            .map(|v| vec![Evaluation::new(p16_point.clone(), v)])
+            .chain(
+                evaluations_remaining_to_verify_24
+                    .into_iter()
+                    .map(|v| vec![Evaluation::new(p24_point.clone(), v)]),
+            )
+            .collect::<Vec<_>>(),
         &mut verifier_state,
         &BTreeMap::default(),
     )

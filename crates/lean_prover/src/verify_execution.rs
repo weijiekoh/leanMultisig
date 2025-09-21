@@ -397,14 +397,16 @@ pub fn verify_execution(
         grand_product_exec_sumcheck_inner_evals[COL_INDEX_FP],
     );
 
-    let exec_evals_to_verify =
+    let (exec_air_point, exec_evals_to_verify) =
         exec_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_cycles)?;
 
-    let dot_product_evals_to_verify =
+    let (dot_product_air_point, dot_product_evals_to_verify) =
         dot_product_table.verify(&mut verifier_state, 1, table_dot_products_log_n_rows)?;
 
-    let p16_evals_to_verify = p16_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_p16)?;
-    let p24_evals_to_verify = p24_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_p24)?;
+    let (p16_air_point, p16_evals_to_verify) =
+        p16_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_p16)?;
+    let (p24_air_point, p24_evals_to_verify) =
+        p24_table.verify(&mut verifier_state, UNIVARIATE_SKIPS, log_n_p24)?;
 
     let poseidon_logup_star_alpha = verifier_state.sample();
     let memory_folding_challenges = MultilinearPoint(verifier_state.sample_vec(LOG_VECTOR_LEN));
@@ -414,19 +416,12 @@ pub fn verify_execution(
     let bytecode_compression_challenges =
         MultilinearPoint(verifier_state.sample_vec(log2_ceil_usize(N_INSTRUCTION_COLUMNS)));
 
-    for i in 1..N_INSTRUCTION_COLUMNS_IN_AIR {
-        assert_eq!(
-            &exec_evals_to_verify[0].point,
-            &exec_evals_to_verify[i].point
-        );
-    }
-    let bytecode_lookup_point_1 = exec_evals_to_verify[0].point.clone();
     let bytecode_lookup_claim_1 = Evaluation::new(
-        bytecode_lookup_point_1,
+        exec_air_point.clone(),
         padd_with_zero_to_next_power_of_two(
             &[
                 (0..N_INSTRUCTION_COLUMNS_IN_AIR)
-                    .map(|i| exec_evals_to_verify[i].value)
+                    .map(|i| exec_evals_to_verify[i])
                     .collect::<Vec<_>>(),
                 non_used_precompiles_evals,
             ]
@@ -447,9 +442,9 @@ pub fn verify_execution(
     let dot_product_evals_spread = verifier_state.next_extension_scalars_vec(DIMENSION)?;
 
     let dot_product_values_mixed = [
-        dot_product_evals_to_verify[5].value,
-        dot_product_evals_to_verify[6].value,
-        dot_product_evals_to_verify[7].value,
+        dot_product_evals_to_verify[5],
+        dot_product_evals_to_verify[6],
+        dot_product_evals_to_verify[7],
         EF::ZERO,
     ]
     .evaluate(&dot_product_values_mixing_challenges);
@@ -462,7 +457,7 @@ pub fn verify_execution(
         [
             dot_product_values_batching_scalars.0.clone(),
             dot_product_values_mixing_challenges.0.clone(),
-            dot_product_evals_to_verify[5].point.0.clone(),
+            dot_product_air_point.0.clone(),
         ]
         .concat(),
     );
@@ -492,16 +487,13 @@ pub fn verify_execution(
     let base_memory_lookup_statement_2 = Evaluation::new(
         [
             exec_air_mem_values_mixing_challenges.0.clone(),
-            exec_evals_to_verify[COL_INDEX_MEM_VALUE_A.index_in_air()]
-                .point
-                .0
-                .clone(),
+            exec_air_point.0.clone(),
         ]
         .concat(),
         [
-            exec_evals_to_verify[COL_INDEX_MEM_VALUE_A.index_in_air()].value,
-            exec_evals_to_verify[COL_INDEX_MEM_VALUE_B.index_in_air()].value,
-            exec_evals_to_verify[COL_INDEX_MEM_VALUE_C.index_in_air()].value,
+            exec_evals_to_verify[COL_INDEX_MEM_VALUE_A.index_in_air()],
+            exec_evals_to_verify[COL_INDEX_MEM_VALUE_B.index_in_air()],
+            exec_evals_to_verify[COL_INDEX_MEM_VALUE_C.index_in_air()],
             unused_2,
         ]
         .evaluate(&exec_air_mem_values_mixing_challenges),
@@ -563,28 +555,22 @@ pub fn verify_execution(
     )
     .unwrap();
 
-    let p16_lookup_point = p16_evals_to_verify[0].point.0.clone();
-    let p24_lookup_point = p24_evals_to_verify[0].point.0.clone();
-
     let max_n_poseidons = n_poseidons_16.max(n_poseidons_24).next_power_of_two();
 
-    #[rustfmt::skip]
-        let p16_folded_eval_addr_a = p16_evals_to_verify[..8].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
-    #[rustfmt::skip]
-        let p16_folded_eval_addr_b = p16_evals_to_verify[8..16].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
-    #[rustfmt::skip]
-        let p16_folded_eval_addr_res_a = p16_evals_to_verify[p16_air.width() - 16..p16_air.width() - 8].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
-    #[rustfmt::skip]
-        let p16_folded_eval_addr_res_b = p16_evals_to_verify[p16_air.width() - 8..].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
+    let p16_folded_eval_addr_a = (&p16_evals_to_verify[..8]).evaluate(&memory_folding_challenges);
+    let p16_folded_eval_addr_b = (&p16_evals_to_verify[8..16]).evaluate(&memory_folding_challenges);
+    let p16_folded_eval_addr_res_a = (&p16_evals_to_verify
+        [p16_air.width() - 16..p16_air.width() - 8])
+        .evaluate(&memory_folding_challenges);
+    let p16_folded_eval_addr_res_b =
+        (&p16_evals_to_verify[p16_air.width() - 8..]).evaluate(&memory_folding_challenges);
 
-    #[rustfmt::skip]
-        let p24_folded_eval_addr_a = p24_evals_to_verify[..8].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
-    #[rustfmt::skip]
-        let p24_folded_eval_addr_b = p24_evals_to_verify[8..16].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
-    #[rustfmt::skip]
-        let p24_folded_eval_addr_c = p24_evals_to_verify[16..24].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
-    #[rustfmt::skip]
-        let p24_folded_eval_addr_res = p24_evals_to_verify[p24_air.width() - 8..].iter().map(|s| s.value).collect::<Vec<_>>().evaluate(&memory_folding_challenges);
+    let p24_folded_eval_addr_a = (&p24_evals_to_verify[..8]).evaluate(&memory_folding_challenges);
+    let p24_folded_eval_addr_b = (&p24_evals_to_verify[8..16]).evaluate(&memory_folding_challenges);
+    let p24_folded_eval_addr_c =
+        (&p24_evals_to_verify[16..24]).evaluate(&memory_folding_challenges);
+    let p24_folded_eval_addr_res =
+        (&p24_evals_to_verify[p24_air.width() - 8..]).evaluate(&memory_folding_challenges);
 
     let padding_p16 = EF::zero_vec(log2_ceil_usize(max_n_poseidons) - log_n_p16);
     let padding_p24 = EF::zero_vec(log2_ceil_usize(max_n_poseidons) - log_n_p24);
@@ -594,7 +580,7 @@ pub fn verify_execution(
             [
                 vec![EF::ZERO; 3],
                 padding_p16.clone(),
-                p16_lookup_point.clone(),
+                p16_air_point.0.clone(),
             ]
             .concat(),
             p16_folded_eval_addr_a,
@@ -603,7 +589,7 @@ pub fn verify_execution(
             [
                 vec![EF::ZERO, EF::ZERO, EF::ONE],
                 padding_p16.clone(),
-                p16_lookup_point.clone(),
+                p16_air_point.0.clone(),
             ]
             .concat(),
             p16_folded_eval_addr_b,
@@ -612,7 +598,7 @@ pub fn verify_execution(
             [
                 vec![EF::ZERO, EF::ONE, EF::ZERO],
                 padding_p16.clone(),
-                p16_lookup_point.clone(),
+                p16_air_point.0.clone(),
             ]
             .concat(),
             p16_folded_eval_addr_res_a,
@@ -621,7 +607,7 @@ pub fn verify_execution(
             [
                 vec![EF::ZERO, EF::ONE, EF::ONE],
                 padding_p16.clone(),
-                p16_lookup_point.clone(),
+                p16_air_point.0.clone(),
             ]
             .concat(),
             p16_folded_eval_addr_res_b,
@@ -630,7 +616,7 @@ pub fn verify_execution(
             [
                 vec![EF::ONE, EF::ZERO, EF::ZERO],
                 padding_p24.clone(),
-                p24_lookup_point.clone(),
+                p24_air_point.0.clone(),
             ]
             .concat(),
             p24_folded_eval_addr_a,
@@ -639,7 +625,7 @@ pub fn verify_execution(
             [
                 vec![EF::ONE, EF::ZERO, EF::ONE],
                 padding_p24.clone(),
-                p24_lookup_point.clone(),
+                p24_air_point.0.clone(),
             ]
             .concat(),
             p24_folded_eval_addr_b,
@@ -648,7 +634,7 @@ pub fn verify_execution(
             [
                 vec![EF::ONE, EF::ONE, EF::ZERO],
                 padding_p24.clone(),
-                p24_lookup_point.clone(),
+                p24_air_point.0.clone(),
             ]
             .concat(),
             p24_folded_eval_addr_c,
@@ -657,7 +643,7 @@ pub fn verify_execution(
             [
                 vec![EF::ONE, EF::ONE, EF::ONE],
                 padding_p24.clone(),
-                p24_lookup_point.clone(),
+                p24_air_point.0.clone(),
             ]
             .concat(),
             p24_folded_eval_addr_res,
@@ -776,14 +762,14 @@ pub fn verify_execution(
     let dot_product_computation_column_evals =
         verifier_state.next_extension_scalars_const::<DIMENSION>()?;
     if dot_product_with_base(&dot_product_computation_column_evals)
-        != dot_product_evals_to_verify[8].value
+        != dot_product_evals_to_verify[8]
     {
         return Err(ProofError::InvalidProof);
     }
     let dot_product_computation_column_statements = (0..DIMENSION)
         .map(|i| {
             vec![Evaluation::new(
-                dot_product_evals_to_verify[8].point.clone(),
+                dot_product_air_point.clone(),
                 dot_product_computation_column_evals[i],
             )]
         })
@@ -873,6 +859,19 @@ pub fn verify_execution(
         }
     }
 
+    let exec_air_statement = |col_index: usize| {
+        Evaluation::new(
+            exec_air_point.clone(),
+            exec_evals_to_verify[col_index.index_in_air()],
+        )
+    };
+    let dot_product_air_statement = |col_index: usize| {
+        Evaluation::new(
+            dot_product_air_point.clone(),
+            dot_product_evals_to_verify[col_index],
+        )
+    };
+
     let global_statements_base = packed_pcs_global_statements_for_verifier(
         &base_dims,
         LOG_SMALLEST_DECOMPOSITION_CHUNK,
@@ -880,31 +879,28 @@ pub fn verify_execution(
             vec![
                 memory_statements,
                 vec![
-                    exec_evals_to_verify[COL_INDEX_PC.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_PC),
                     bytecode_logup_star_statements.on_indexes.clone(),
                     initial_pc_statement,
                     final_pc_statement,
                 ], // pc
+                vec![exec_air_statement(COL_INDEX_FP), grand_product_fp_statement], // fp
                 vec![
-                    exec_evals_to_verify[COL_INDEX_FP.index_in_air()].clone(),
-                    grand_product_fp_statement,
-                ], // fp
-                vec![
-                    exec_evals_to_verify[COL_INDEX_MEM_ADDRESS_A.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_MEM_ADDRESS_A),
                     Evaluation::new(
                         mem_lookup_eval_indexes_partial_point.clone(),
                         mem_lookup_eval_indexes_a,
                     ),
                 ], // exec memory address A
                 vec![
-                    exec_evals_to_verify[COL_INDEX_MEM_ADDRESS_B.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_MEM_ADDRESS_B),
                     Evaluation::new(
                         mem_lookup_eval_indexes_partial_point.clone(),
                         mem_lookup_eval_indexes_b,
                     ),
                 ], // exec memory address B
                 vec![
-                    exec_evals_to_verify[COL_INDEX_MEM_ADDRESS_C.index_in_air()].clone(),
+                    exec_air_statement(COL_INDEX_MEM_ADDRESS_C),
                     Evaluation::new(
                         mem_lookup_eval_indexes_partial_point,
                         mem_lookup_eval_indexes_c,
@@ -919,36 +915,36 @@ pub fn verify_execution(
             ],
             p16_evals_to_verify[16..p16_air.width() - 16]
                 .iter()
-                .map(|e| vec![e.clone()])
+                .map(|&e| vec![Evaluation::new(p16_air_point.clone(), e)])
                 .collect(),
             p24_evals_to_verify[24..p24_air.width() - 24]
                 .iter()
-                .map(|e| vec![e.clone()])
+                .map(|&e| vec![Evaluation::new(p24_air_point.clone(), e)])
                 .collect(),
             vec![
                 vec![
-                    dot_product_evals_to_verify[0].clone(),
+                    dot_product_air_statement(0),
                     grand_product_dot_product_flag_statement,
                 ], // dot product: (start) flag
                 vec![
-                    dot_product_evals_to_verify[1].clone(),
+                    dot_product_air_statement(1),
                     grand_product_dot_product_len_statement,
                 ], // dot product: length
                 vec![
-                    dot_product_evals_to_verify[2].clone(), // // dot product: indexe a
+                    dot_product_air_statement(2),
                     dot_product_logup_star_indexes_statement_a,
                     grand_product_dot_product_table_indexes_statement_index_a,
-                ],
+                ], // dot product: indexe a
                 vec![
-                    dot_product_evals_to_verify[3].clone(), // // dot product: indexe b
+                    dot_product_air_statement(3),
                     dot_product_logup_star_indexes_statement_b,
                     grand_product_dot_product_table_indexes_statement_index_b,
-                ],
+                ], // dot product: indexe b
                 vec![
-                    dot_product_evals_to_verify[4].clone(), // // dot product: indexe res
+                    dot_product_air_statement(4),
                     dot_product_logup_star_indexes_statement_res,
                     grand_product_dot_product_table_indexes_statement_index_res,
-                ],
+                ], // dot product: indexe res
             ],
             dot_product_computation_column_statements,
         ]
