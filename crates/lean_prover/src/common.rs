@@ -373,3 +373,48 @@ pub fn get_poseidon_lookup_statements(
         ),
     ]
 }
+
+pub fn poseidon_lookup_correcting_factors(
+    log_n_p16: usize,
+    log_n_p24: usize,
+    index_lookup_point: &MultilinearPoint<EF>,
+) -> (EF, EF) {
+    let correcting_factor = index_lookup_point[3..3 + log_n_p16.abs_diff(log_n_p24)]
+        .iter()
+        .map(|&x| EF::ONE - x)
+        .product::<EF>();
+    if log_n_p16 > log_n_p24 {
+        (EF::ONE, correcting_factor)
+    } else {
+        (correcting_factor, EF::ONE)
+    }
+}
+
+pub fn add_poseidon_lookup_statements_on_indexes(
+    log_n_p16: usize,
+    log_n_p24: usize,
+    index_lookup_point: &MultilinearPoint<EF>,
+    inner_values: &[EF],
+    p16_indexe_statements: [&mut Vec<Evaluation<EF>>; 3], // a, b, res
+    p24_indexe_statements: [&mut Vec<Evaluation<EF>>; 3], // a, b, res
+) {
+    assert_eq!(inner_values.len(), 6);
+    let mut idx_point_right_p16 = MultilinearPoint(index_lookup_point[3..].to_vec());
+    let mut idx_point_right_p24 =
+        MultilinearPoint(index_lookup_point[3 + log_n_p16.abs_diff(log_n_p24)..].to_vec());
+    if log_n_p16 < log_n_p24 {
+        std::mem::swap(&mut idx_point_right_p16, &mut idx_point_right_p24);
+    }
+    for (i, stmt) in p16_indexe_statements.into_iter().enumerate() {
+        stmt.push(Evaluation::new(
+            idx_point_right_p16.clone(),
+            inner_values[i],
+        ));
+    }
+    for (i, stmt) in p24_indexe_statements.into_iter().enumerate() {
+        stmt.push(Evaluation::new(
+            idx_point_right_p24.clone(),
+            inner_values[i + 3],
+        ));
+    }
+}

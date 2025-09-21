@@ -854,26 +854,11 @@ pub fn prove_execution(
     {
         // index opening for poseidon lookup
 
-        let correcting_factor = poseidon_logup_star_statements.on_indexes.point
-            [3..3 + log_n_p16.abs_diff(log_n_p24)]
-            .iter()
-            .map(|&x| EF::ONE - x)
-            .product::<EF>();
-        let (correcting_factor_p16, correcting_factor_p24) = if n_poseidons_16 > n_poseidons_24 {
-            (EF::ONE, correcting_factor)
-        } else {
-            (correcting_factor, EF::ONE)
-        };
-        let mut idx_point_right_p16 =
-            MultilinearPoint(poseidon_logup_star_statements.on_indexes.point[3..].to_vec());
-        let mut idx_point_right_p24 = MultilinearPoint(
-            poseidon_logup_star_statements.on_indexes.point[3 + log_n_p16.abs_diff(log_n_p24)..]
-                .to_vec(),
+        let (correcting_factor_p16, correcting_factor_p24) = poseidon_lookup_correcting_factors(
+            log_n_p16,
+            log_n_p24,
+            &poseidon_logup_star_statements.on_indexes.point,
         );
-        if n_poseidons_16 < n_poseidons_24 {
-            std::mem::swap(&mut idx_point_right_p16, &mut idx_point_right_p24);
-        }
-
         let poseidon_index_evals = fold_multilinear(
             &all_poseidon_indexes,
             &MultilinearPoint(poseidon_logup_star_statements.on_indexes.point[3..].to_vec()),
@@ -889,48 +874,23 @@ pub fn prove_execution(
             poseidon_index_evals[7] / correcting_factor_p24,
         ];
 
-        assert_eq!(
-            poseidon_index_evals[3] / correcting_factor_p16,
-            poseidon_index_evals[2] / correcting_factor_p16 + F::ONE
-        );
-
-        assert_eq!(
-            poseidon_index_evals[5] / correcting_factor_p24,
-            poseidon_index_evals[4] / correcting_factor_p24 + F::ONE
-        );
-
         prover_state.add_extension_scalars(&inner_values);
-        p16_indexes_a_statements.push(Evaluation::new(
-            idx_point_right_p16.clone(),
-            inner_values[0],
-        ));
-        p16_indexes_b_statements.push(Evaluation::new(
-            idx_point_right_p16.clone(),
-            inner_values[1],
-        ));
-        p16_indexes_res_statements.push(Evaluation::new(
-            idx_point_right_p16.clone(),
-            inner_values[2],
-        ));
-        p24_indexes_a_statements.push(Evaluation::new(
-            idx_point_right_p24.clone(),
-            inner_values[3],
-        ));
-        p24_indexes_b_statements.push(Evaluation::new(
-            idx_point_right_p24.clone(),
-            inner_values[4],
-        ));
-        p24_indexes_res_statements.push(Evaluation::new(
-            idx_point_right_p24.clone(),
-            inner_values[5],
-        ));
 
-        // sanity check
-        assert_eq!(
-            poseidon_index_evals.evaluate(&MultilinearPoint(
-                poseidon_logup_star_statements.on_indexes.point[..3].to_vec()
-            )),
-            poseidon_logup_star_statements.on_indexes.value
+        add_poseidon_lookup_statements_on_indexes(
+            log_n_p16,
+            log_n_p24,
+            &poseidon_logup_star_statements.on_indexes.point,
+            &inner_values,
+            [
+                &mut p16_indexes_a_statements,
+                &mut p16_indexes_b_statements,
+                &mut p16_indexes_res_statements,
+            ],
+            [
+                &mut p24_indexes_a_statements,
+                &mut p24_indexes_b_statements,
+                &mut p24_indexes_res_statements,
+            ],
         );
     }
 
