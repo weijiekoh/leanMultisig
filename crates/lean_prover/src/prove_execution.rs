@@ -518,80 +518,36 @@ pub fn prove_execution(
     let (p24_air_point, p24_evals_to_prove) = info_span!("Poseidon-24 AIR proof")
         .in_scope(|| p24_table.prove_base(&mut prover_state, UNIVARIATE_SKIPS, &p24_columns_ref));
 
-    let (
-        all_poseidon_indexes,
-        folded_memory,
-        poseidon_pushforward,
-        poseidon_lookup_statements,
-        poseidon_poly_eq_point,
-        memory_folding_challenges,
-        poseidon_logup_star_alpha,
-    ) = {
-        // Poseidons 16/24 memory addresses lookup
-        let poseidon_logup_star_alpha = prover_state.sample();
-        let memory_folding_challenges = MultilinearPoint(prover_state.sample_vec(LOG_VECTOR_LEN));
+    // Poseidons 16/24 memory addresses lookup
+    let poseidon_logup_star_alpha = prover_state.sample();
+    let memory_folding_challenges = MultilinearPoint(prover_state.sample_vec(LOG_VECTOR_LEN));
 
-        let poseidon_lookup_statements = get_poseidon_lookup_statements(
-            (p16_air.width(), p24_air.width()),
-            (log_n_p16, log_n_p24),
-            (&p16_evals_to_prove, &p24_evals_to_prove),
-            (&p16_air_point, &p24_air_point),
-            &memory_folding_challenges,
+    let poseidon_lookup_statements = get_poseidon_lookup_statements(
+        (p16_air.width(), p24_air.width()),
+        (log_n_p16, log_n_p24),
+        (&p16_evals_to_prove, &p24_evals_to_prove),
+        (&p16_air_point, &p24_air_point),
+        &memory_folding_challenges,
+    );
+
+    let all_poseidon_indexes = full_poseidon_indexes_poly(&poseidons_16, &poseidons_24);
+
+    let poseidon_folded_memory = fold_multilinear(&memory, &memory_folding_challenges);
+
+    let mut poseidon_poly_eq_point = EF::zero_vec(all_poseidon_indexes.len());
+    for (i, statement) in poseidon_lookup_statements.iter().enumerate() {
+        compute_sparse_eval_eq::<PF<EF>, EF>(
+            &statement.point,
+            &mut poseidon_poly_eq_point,
+            poseidon_logup_star_alpha.exp_u64(i as u64),
         );
+    }
 
-        let max_n_poseidons = poseidons_16
-            .len()
-            .max(poseidons_24.len())
-            .next_power_of_two();
-        let mut all_poseidon_indexes = F::zero_vec(8 * max_n_poseidons);
-        #[rustfmt::skip]
-        let chunks = [
-            poseidons_16.par_iter().map(|p| p.addr_input_a).collect::<Vec<_>>(),
-            poseidons_16.par_iter().map(|p| p.addr_input_b).collect::<Vec<_>>(),
-            poseidons_16.par_iter().map(|p| p.addr_output).collect::<Vec<_>>(),
-            poseidons_16.par_iter().map(|p| p.addr_output + 1).collect::<Vec<_>>(),
-            poseidons_24.par_iter().map(|p| p.addr_input_a).collect::<Vec<_>>(),
-            poseidons_24.par_iter().map(|p| p.addr_input_a + 1).collect::<Vec<_>>(),
-            poseidons_24.par_iter().map(|p| p.addr_input_b).collect::<Vec<_>>(),
-            poseidons_24.par_iter().map(|p| p.addr_output).collect::<Vec<_>>()
-        ];
-
-        for (chunk_idx, addrs) in chunks.into_iter().enumerate() {
-            all_poseidon_indexes[chunk_idx * max_n_poseidons..]
-                .par_iter_mut()
-                .zip(addrs)
-                .for_each(|(slot, addr)| {
-                    *slot = F::from_usize(addr);
-                });
-        }
-
-        let poseidon_folded_memory = fold_multilinear(&memory, &memory_folding_challenges);
-
-        let mut poseidon_poly_eq_point = EF::zero_vec(max_n_poseidons * 8);
-        for (i, statement) in poseidon_lookup_statements.iter().enumerate() {
-            compute_sparse_eval_eq::<PF<EF>, EF>(
-                &statement.point,
-                &mut poseidon_poly_eq_point,
-                poseidon_logup_star_alpha.exp_u64(i as u64),
-            );
-        }
-
-        let poseidon_pushforward = compute_pushforward(
-            &all_poseidon_indexes,
-            poseidon_folded_memory.len(),
-            &poseidon_poly_eq_point,
-        );
-
-        (
-            all_poseidon_indexes,
-            poseidon_folded_memory,
-            poseidon_pushforward,
-            poseidon_lookup_statements,
-            poseidon_poly_eq_point,
-            memory_folding_challenges,
-            poseidon_logup_star_alpha,
-        )
-    };
+    let poseidon_pushforward = compute_pushforward(
+        &all_poseidon_indexes,
+        poseidon_folded_memory.len(),
+        &poseidon_poly_eq_point,
+    );
 
     let non_used_precompiles_evals = full_trace
         [N_INSTRUCTION_COLUMNS_IN_AIR..N_INSTRUCTION_COLUMNS]
@@ -861,7 +817,7 @@ pub fn prove_execution(
 
     let poseidon_logup_star_statements = prove_logup_star(
         &mut prover_state,
-        &folded_memory,
+        &poseidon_folded_memory,
         &all_poseidon_indexes,
         poseidon_lookup_statements
             .iter()
