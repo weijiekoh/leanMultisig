@@ -60,7 +60,7 @@ if __name__ == "__main__":
         ('2025-09-09', 1.32),
         ('2025-09-10', 0.970),
         ('2025-09-14', 0.825),
-    ], target=0.25, target_label="Target (0.25 s)", title="Recursive WHIR opening", y_legend="Proving time (s)", file="recursive_whir_opening")
+    ], target=0.125, target_label="Target (0.125 s)", title="Recursive WHIR opening", y_legend="Proving time (s)", file="recursive_whir_opening")
 
     create_duration_graph(data=[
         ('2025-08-27', 14.2),
