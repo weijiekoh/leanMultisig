@@ -1,5 +1,6 @@
 //! VM execution runner
 
+use crate::HintExecutionContext;
 use crate::core::{
     DIMENSION, F, MAX_RUNNER_MEMORY_SIZE, ONE_VEC_PTR, POSEIDON_16_NULL_HASH_PTR,
     POSEIDON_24_NULL_HASH_PTR, PUBLIC_INPUT_START, VECTOR_LEN, ZERO_VEC_PTR,
@@ -8,7 +9,6 @@ use crate::diagnostics::{ExecutionResult, RunnerError};
 use crate::execution::{ExecutionHistory, Memory};
 use crate::isa::Bytecode;
 use crate::isa::instruction::InstructionContext;
-use crate::isa::operands::hint::HintExecutionContext;
 use crate::witness::{
     WitnessDotProduct, WitnessMultilinearEval, WitnessPoseidon16, WitnessPoseidon24,
 };
