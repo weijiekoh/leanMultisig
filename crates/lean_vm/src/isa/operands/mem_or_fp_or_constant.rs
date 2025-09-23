@@ -1,12 +1,10 @@
-//! Memory, frame pointer, or constant operand type
-
 use crate::core::F;
 use crate::diagnostics::RunnerError;
 use crate::execution::Memory;
 use p3_field::PrimeCharacteristicRing;
 use std::fmt::{Display, Formatter};
 
-/// Memory, frame pointer, or constant operand - the most flexible operand type
+/// Memory, frame pointer, or constant operand
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MemOrFpOrConstant {
     /// Memory address relative to frame pointer: m[fp + offset]

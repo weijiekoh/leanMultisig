@@ -11,6 +11,3 @@ pub use hint::*;
 pub use instruction::*;
 pub use operands::*;
 pub use operation::*;
-
-/// String label for bytecode locations
-pub type Label = String;

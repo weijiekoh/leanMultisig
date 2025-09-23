@@ -321,46 +321,32 @@ fn vm_precompile_events_capture_expected_data() {
     assert_eq!(mle_event.res, mle_res);
 }
 
-// #[test]
-// fn vm_precompile_events_only_final_pass() {
-//     let (bytecode, public_input) = build_test_case();
-//     let mut std_out = String::new();
-//     let mut history = ExecutionHistory::default();
+#[test]
+fn test_memory_operations() {
+    let mut memory = Memory::empty();
+    assert!(memory.set(0, F::from_usize(42)).is_ok());
+    assert_eq!(memory.get(0).unwrap(), F::from_usize(42));
+}
 
-//     let first_pass = execute_bytecode_helper(
-//         &bytecode,
-//         &public_input,
-//         &[],
-//         MAX_RUNNER_MEMORY_SIZE / 2,
-//         false,
-//         &mut std_out,
-//         &mut history,
-//         false,
-//         &BTreeMap::new(),
-//     )
-//     .expect("first execution should succeed");
+#[test]
+fn test_operation_compute() {
+    use crate::isa::Operation;
 
-//     assert!(first_pass.vm_poseidon16_events.is_empty());
-//     assert!(first_pass.vm_poseidon24_events.is_empty());
-//     assert!(first_pass.vm_dot_product_events.is_empty());
-//     assert!(first_pass.vm_multilinear_eval_events.is_empty());
+    let add = Operation::Add;
+    let mul = Operation::Mul;
 
-//     let mut history_final = ExecutionHistory::default();
-//     let final_pass = execute_bytecode_helper(
-//         &bytecode,
-//         &public_input,
-//         &[],
-//         first_pass.no_vec_runtime_memory,
-//         true,
-//         &mut String::new(),
-//         &mut history_final,
-//         false,
-//         &BTreeMap::new(),
-//     )
-//     .expect("final execution should succeed");
+    assert_eq!(
+        add.compute(F::from_usize(2), F::from_usize(3)),
+        F::from_usize(5)
+    );
+    assert_eq!(
+        mul.compute(F::from_usize(2), F::from_usize(3)),
+        F::from_usize(6)
+    );
+}
 
-//     assert_eq!(final_pass.vm_poseidon16_events.len(), 1);
-//     assert_eq!(final_pass.vm_poseidon24_events.len(), 1);
-//     assert_eq!(final_pass.vm_dot_product_events.len(), 1);
-//     assert_eq!(final_pass.vm_multilinear_eval_events.len(), 1);
-// }
+#[test]
+fn test_witness_creation() {
+    let witness = WitnessPoseidon16::poseidon_of_zero();
+    assert_eq!(witness.input, [F::ZERO; 16]);
+}

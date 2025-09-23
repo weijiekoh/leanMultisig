@@ -1,9 +1,6 @@
-//! Execution context and state management
-
 use crate::core::LocationInSourceCode;
 use std::collections::BTreeMap;
 
-/// Execution history for profiling and debugging
 #[derive(Debug, Clone, Default)]
 pub struct ExecutionHistory {
     pub lines: Vec<LocationInSourceCode>,
@@ -33,7 +30,6 @@ impl ExecutionHistory {
     }
 }
 
-/// VM execution context
 #[derive(Debug)]
 pub struct ExecutionContext<'a> {
     pub source_code: &'a str,

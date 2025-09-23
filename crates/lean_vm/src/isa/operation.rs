@@ -12,7 +12,6 @@ pub enum Operation {
 }
 
 impl Operation {
-    /// Compute the operation on two field elements
     pub fn compute(&self, a: F, b: F) -> F {
         match self {
             Self::Add => a + b,
@@ -20,7 +19,6 @@ impl Operation {
         }
     }
 
-    /// Compute the inverse operation for solving equations
     pub fn inverse_compute(&self, a: F, b: F) -> Option<F> {
         match self {
             Self::Add => Some(a - b),

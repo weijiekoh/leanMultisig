@@ -1,5 +1,3 @@
-//! VM execution hints
-
 use crate::core::{DIMENSION, F, LOG_VECTOR_LEN, LocationInSourceCode, VECTOR_LEN};
 use crate::diagnostics::RunnerError;
 use crate::execution::{ExecutionHistory, Memory};
@@ -8,7 +6,8 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use std::fmt::{Display, Formatter};
 use utils::{ToUsize, pretty_integer};
 
-/// VM hints provide execution guidance and debugging information
+/// VM hints provide execution guidance and debugging information, but does not appear
+/// in the verified bytecode.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Hint {
     /// Compute the inverse of a field element

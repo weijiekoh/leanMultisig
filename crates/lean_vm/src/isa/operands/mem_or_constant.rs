@@ -1,12 +1,10 @@
-//! Memory or constant operand type
-
 use crate::core::F;
 use crate::diagnostics::RunnerError;
 use crate::execution::Memory;
 use p3_field::PrimeCharacteristicRing;
 use std::fmt::{Display, Formatter};
 
-/// Memory or constant operand - represents a value that can be either a constant or memory location
+/// Represents a value that can be either a constant or memory location
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MemOrConstant {
     /// Direct constant value
@@ -19,12 +17,10 @@ pub enum MemOrConstant {
 }
 
 impl MemOrConstant {
-    /// Create a constant operand with value zero
     pub const fn zero() -> Self {
         Self::Constant(F::ZERO)
     }
 
-    /// Create a constant operand with value one
     pub const fn one() -> Self {
         Self::Constant(F::ONE)
     }

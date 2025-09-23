@@ -6,7 +6,7 @@ use crate::execution::Memory;
 use p3_field::PrimeCharacteristicRing;
 use std::fmt::{Display, Formatter};
 
-/// Memory or frame pointer operand - represents a value from memory or the frame pointer itself
+/// Represents a value from memory or the frame pointer itself
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MemOrFp {
     /// Memory address relative to frame pointer: m[fp + offset]

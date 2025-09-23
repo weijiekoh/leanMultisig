@@ -1,5 +1,3 @@
-//! VM error types and execution results
-
 use crate::core::F;
 use crate::execution::Memory;
 use crate::witness::{
@@ -7,7 +5,6 @@ use crate::witness::{
 };
 use thiserror::Error;
 
-/// Errors that can occur during VM execution
 #[derive(Debug, Clone, Error)]
 pub enum RunnerError {
     #[error("Out of memory")]
@@ -35,10 +32,8 @@ pub enum RunnerError {
     MultilinearEvalPointNotPadded,
 }
 
-/// Result type for VM operations
 pub type VMResult<T> = Result<T, RunnerError>;
 
-/// Execution result containing outputs and execution data
 #[derive(Debug)]
 pub struct ExecutionResult {
     pub no_vec_runtime_memory: usize,
@@ -50,13 +45,4 @@ pub struct ExecutionResult {
     pub poseidons_24: Vec<WitnessPoseidon24>,
     pub dot_products: Vec<WitnessDotProduct>,
     pub multilinear_evals: Vec<WitnessMultilinearEval>,
-}
-
-impl ExecutionResult {
-    /// Check if execution was successful
-    ///
-    /// TODO: placeholder for now.
-    pub fn is_success(&self) -> bool {
-        true
-    }
 }

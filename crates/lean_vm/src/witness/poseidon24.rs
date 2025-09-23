@@ -5,13 +5,10 @@ use p3_field::PrimeCharacteristicRing;
 use p3_symmetric::Permutation;
 use utils::get_poseidon24;
 
-/// Witness data for Poseidon2 cryptographic hash operations with 24-element input
-///
-/// This witness captures all the information needed to verify a Poseidon2 hash computation
-/// with larger 24-element input, storing only the last 8 elements of output for efficiency.
+/// Witness data for Poseidon2 over 24 field elements
 #[derive(Debug, Clone)]
 pub struct WitnessPoseidon24 {
-    /// Execution cycle when this hash occurred (None for precomputed values)
+    /// Execution cycle when this hash occurred (None when padding)
     pub cycle: Option<usize>,
     /// Memory address of first input vector (vectorized pointer, size 2)
     pub addr_input_a: usize,
@@ -21,7 +18,7 @@ pub struct WitnessPoseidon24 {
     pub addr_output: usize,
     /// Complete 24-element input to the hash function
     pub input: [F; 24],
-    /// Last 8 elements of the hash output (optimization for storage)
+    /// Last 8 elements of the hash output
     pub output: [F; 8],
 }
 

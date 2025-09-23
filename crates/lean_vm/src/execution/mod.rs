@@ -7,3 +7,6 @@ pub mod runner;
 pub use context::*;
 pub use memory::*;
 pub use runner::*;
+
+#[cfg(test)]
+mod tests;

@@ -1,5 +1,3 @@
-//! VM constants and configuration
-
 /// Vector dimension for field operations
 pub const DIMENSION: usize = 5;
 

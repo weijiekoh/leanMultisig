@@ -1,4 +1,3 @@
-//! Diagnostics, error handling, and debugging utilities
 #![allow(unused_imports)]
 
 pub mod error;
