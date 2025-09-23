@@ -25,4 +25,4 @@ pub const POSEIDON_24_NULL_HASH_PTR: usize = 5;
 pub const PUBLIC_INPUT_START: usize = 6 * 8;
 
 /// Maximum memory size for VM runner
-pub const MAX_RUNNER_MEMORY_SIZE: usize = 1 << 20;
+pub const MAX_RUNNER_MEMORY_SIZE: usize = 1 << 24;
