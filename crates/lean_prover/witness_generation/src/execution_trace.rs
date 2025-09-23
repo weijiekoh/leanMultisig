@@ -12,123 +12,6 @@ use rayon::prelude::*;
 use utils::{ToUsize, get_poseidon16, get_poseidon24};
 
 #[derive(Debug)]
-pub struct WitnessDotProduct {
-    pub cycle: usize,
-    pub addr_0: usize,   // normal pointer
-    pub addr_1: usize,   // normal pointer
-    pub addr_res: usize, // normal pointer
-    pub len: usize,
-    pub slice_0: Vec<EF>,
-    pub slice_1: Vec<EF>,
-    pub res: EF,
-}
-impl WitnessDotProduct {
-    pub fn addresses_and_len_field_repr(&self) -> [F; 4] {
-        [
-            F::from_usize(self.addr_0),
-            F::from_usize(self.addr_1),
-            F::from_usize(self.addr_res),
-            F::from_usize(self.len),
-        ]
-    }
-}
-
-#[derive(Debug)]
-pub struct RowMultilinearEval {
-    pub addr_coeffs: usize,
-    pub addr_point: usize,
-    pub addr_res: usize,
-    pub point: Vec<EF>,
-    pub res: EF,
-}
-
-impl RowMultilinearEval {
-    pub fn n_vars(&self) -> usize {
-        self.point.len()
-    }
-
-    pub fn addresses_and_n_vars_field_repr(&self) -> [F; 4] {
-        [
-            F::from_usize(self.addr_coeffs),
-            F::from_usize(self.addr_point),
-            F::from_usize(self.addr_res),
-            F::from_usize(self.n_vars()),
-        ]
-    }
-}
-
-#[derive(Debug, derive_more::Deref)]
-pub struct WitnessMultilinearEval {
-    pub cycle: usize,
-    #[deref]
-    pub inner: RowMultilinearEval,
-}
-
-#[derive(Debug)]
-pub struct WitnessPoseidon16 {
-    pub cycle: Option<usize>,
-    pub addr_input_a: usize, // vectorized pointer (of size 1)
-    pub addr_input_b: usize, // vectorized pointer (of size 1)
-    pub addr_output: usize,  // vectorized pointer (of size 2)
-    pub input: [F; 16],
-    pub output: [F; 16],
-}
-
-impl WitnessPoseidon16 {
-    pub fn poseidon_of_zero() -> Self {
-        Self {
-            cycle: None,
-            addr_input_a: ZERO_VEC_PTR,
-            addr_input_b: ZERO_VEC_PTR,
-            addr_output: POSEIDON_16_NULL_HASH_PTR,
-            input: [F::ZERO; 16],
-            output: get_poseidon16().permute([F::ZERO; 16]),
-        }
-    }
-
-    pub fn addresses_field_repr(&self) -> [F; 3] {
-        [
-            F::from_usize(self.addr_input_a),
-            F::from_usize(self.addr_input_b),
-            F::from_usize(self.addr_output),
-        ]
-    }
-}
-
-#[derive(Debug)]
-pub struct WitnessPoseidon24 {
-    pub cycle: Option<usize>,
-    pub addr_input_a: usize, // vectorized pointer (of size 2)
-    pub addr_input_b: usize, // vectorized pointer (of size 1)
-    pub addr_output: usize,  // vectorized pointer (of size 1)
-    pub input: [F; 24],
-    pub output: [F; 8], // last 8 elements of the output
-}
-
-impl WitnessPoseidon24 {
-    pub fn poseidon_of_zero() -> Self {
-        Self {
-            cycle: None,
-            addr_input_a: ZERO_VEC_PTR,
-            addr_input_b: ZERO_VEC_PTR,
-            addr_output: POSEIDON_24_NULL_HASH_PTR,
-            input: [F::ZERO; 24],
-            output: get_poseidon24().permute([F::ZERO; 24])[16..24]
-                .try_into()
-                .unwrap(),
-        }
-    }
-
-    pub fn addresses_field_repr(&self) -> [F; 3] {
-        [
-            F::from_usize(self.addr_input_a),
-            F::from_usize(self.addr_input_b),
-            F::from_usize(self.addr_output),
-        ]
-    }
-}
-
-#[derive(Debug)]
 pub struct ExecutionTrace {
     pub full_trace: Vec<Vec<F>>,
     pub n_poseidons_16: usize,
@@ -136,7 +19,7 @@ pub struct ExecutionTrace {
     pub poseidons_16: Vec<WitnessPoseidon16>, // padded with empty poseidons
     pub poseidons_24: Vec<WitnessPoseidon24>, // padded with empty poseidons
     pub dot_products: Vec<WitnessDotProduct>,
-    pub vm_multilinear_evals: Vec<WitnessMultilinearEval>,
+    pub multilinear_evals: Vec<WitnessMultilinearEval>,
     pub public_memory_size: usize,
     pub non_zero_memory_size: usize,
     pub memory: Vec<F>, // of length a multiple of public_memory_size
@@ -144,7 +27,7 @@ pub struct ExecutionTrace {
 
 pub fn get_execution_trace(
     bytecode: &Bytecode,
-    execution_result: &ExecutionResult,
+    execution_result: ExecutionResult,
 ) -> ExecutionTrace {
     assert_eq!(execution_result.pcs.len(), execution_result.fps.len());
     let n_cycles = execution_result.pcs.len();
@@ -153,10 +36,6 @@ pub fn get_execution_trace(
     let mut trace = (0..N_INSTRUCTION_COLUMNS + N_EXEC_COLUMNS)
         .map(|_| F::zero_vec(1 << log_n_cycles_rounded_up))
         .collect::<Vec<Vec<F>>>();
-    let mut poseidons_16 = Vec::new();
-    let mut poseidons_24 = Vec::new();
-    let mut dot_products = Vec::new();
-    let mut vm_multilinear_evals = Vec::new();
 
     for (cycle, (&pc, &fp)) in execution_result
         .pcs
@@ -223,59 +102,21 @@ pub fn get_execution_trace(
         .collect::<Vec<F>>();
     memory_padded.resize(memory.0.len().next_power_of_two(), F::ZERO);
 
-    // Build witnesses from VM-collected events
-    for e in &execution_result.vm_poseidon16_events {
-        poseidons_16.push(WitnessPoseidon16 {
-            cycle: Some(e.cycle),
-            addr_input_a: e.addr_input_a,
-            addr_input_b: e.addr_input_b,
-            addr_output: e.addr_output,
-            input: e.input,
-            output: e.output,
-        });
-    }
-    for e in &execution_result.vm_poseidon24_events {
-        poseidons_24.push(WitnessPoseidon24 {
-            cycle: Some(e.cycle),
-            addr_input_a: e.addr_input_a,
-            addr_input_b: e.addr_input_b,
-            addr_output: e.addr_output,
-            input: e.input,
-            output: e.output,
-        });
-    }
-    for e in &execution_result.vm_dot_product_events {
-        dot_products.push(WitnessDotProduct {
-            cycle: e.cycle,
-            addr_0: e.addr_0,
-            addr_1: e.addr_1,
-            addr_res: e.addr_res,
-            len: e.len,
-            slice_0: e.slice_0.clone(),
-            slice_1: e.slice_1.clone(),
-            res: e.res,
-        });
-    }
-    for e in &execution_result.vm_multilinear_eval_events {
-        vm_multilinear_evals.push(WitnessMultilinearEval {
-            cycle: e.cycle,
-            inner: RowMultilinearEval {
-                addr_coeffs: e.addr_coeffs,
-                addr_point: e.addr_point,
-                addr_res: e.addr_res,
-                point: e.point.clone(),
-                res: e.res,
-            },
-        });
-    }
-
-    let n_poseidons_16 = poseidons_16.len();
-    let n_poseidons_24 = poseidons_24.len();
+    let n_poseidons_16 = execution_result.poseidons_16.len();
+    let n_poseidons_24 = execution_result.poseidons_24.len();
 
     let empty_poseidon16_output = get_poseidon16().permute([F::ZERO; 16]);
     let empty_poseidon24_output = get_poseidon24().permute([F::ZERO; 24])[16..24]
         .try_into()
         .unwrap();
+
+    let ExecutionResult {
+        mut poseidons_16,
+        mut poseidons_24,
+        dot_products,
+        multilinear_evals,
+        ..
+    } = execution_result;
 
     poseidons_16.extend(
         (0..n_poseidons_16.next_power_of_two() - n_poseidons_16).map(|_| WitnessPoseidon16 {
@@ -305,7 +146,7 @@ pub fn get_execution_trace(
         poseidons_16,
         poseidons_24,
         dot_products,
-        vm_multilinear_evals,
+        multilinear_evals,
         public_memory_size: execution_result.public_memory_size,
         non_zero_memory_size: memory.0.len(),
         memory: memory_padded,
