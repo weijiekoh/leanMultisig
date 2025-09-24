@@ -2,7 +2,7 @@
 
 use super::Operation;
 use super::operands::{MemOrConstant, MemOrFp, MemOrFpOrConstant};
-use crate::core::{DIMENSION, EF, F, VECTOR_LEN};
+use crate::core::{DIMENSION, EF, F, Label, VECTOR_LEN};
 use crate::diagnostics::RunnerError;
 use crate::execution::Memory;
 use crate::witness::{
@@ -46,6 +46,8 @@ pub enum Instruction {
     Jump {
         /// Jump condition (jump if non-zero)
         condition: MemOrConstant,
+        /// Jump destination label (for debugging purposes)
+        label: Label,
         /// Jump destination address
         dest: MemOrConstant,
         /// New frame pointer value after jump
@@ -187,6 +189,7 @@ impl Instruction {
             }
             Self::Jump {
                 condition,
+                label: _,
                 dest,
                 updated_fp,
             } => {
@@ -433,12 +436,13 @@ impl Display for Instruction {
             }
             Self::Jump {
                 condition,
+                label,
                 dest,
                 updated_fp,
             } => {
                 write!(
                     f,
-                    "if {condition} != 0 jump to {dest} with next(fp) = {updated_fp}"
+                    "if {condition} != 0 jump to {label} = {dest} with next(fp) = {updated_fp}"
                 )
             }
             Self::Poseidon2_16 { arg_a, arg_b, res } => {

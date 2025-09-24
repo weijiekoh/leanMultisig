@@ -1,4 +1,4 @@
-use crate::core::{DIMENSION, F, LOG_VECTOR_LEN, LocationInSourceCode, VECTOR_LEN};
+use crate::core::{DIMENSION, F, LOG_VECTOR_LEN, Label, SourceLineNumber, VECTOR_LEN};
 use crate::diagnostics::RunnerError;
 use crate::execution::{ExecutionHistory, Memory};
 use crate::isa::operands::MemOrConstant;
@@ -50,8 +50,10 @@ pub enum Hint {
     /// Report source code location for debugging
     LocationReport {
         /// Source code location
-        location: LocationInSourceCode,
+        location: SourceLineNumber,
     },
+    /// Jump destination label (for debugging purposes)
+    Label { label: Label },
 }
 
 /// Execution state for hint processing
@@ -169,6 +171,7 @@ impl Hint {
                 *ctx.cpu_cycles_before_new_line = 0;
                 Ok(false)
             }
+            Self::Label { label: _ } => Ok(false),
         }
     }
 }
@@ -220,7 +223,14 @@ impl Display for Hint {
             Self::Inverse { arg, res_offset } => {
                 write!(f, "m[fp + {res_offset}] = inverse({arg})")
             }
-            Self::LocationReport { .. } => Ok(()),
+            Self::LocationReport {
+                location: line_number,
+            } => {
+                write!(f, "source line number: {line_number}")
+            }
+            Self::Label { label } => {
+                write!(f, "label: {label}")
+            }
         }
     }
 }
