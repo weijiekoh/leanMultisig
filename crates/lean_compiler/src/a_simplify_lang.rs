@@ -1656,8 +1656,11 @@ fn handle_const_arguments(program: &mut Program) {
 
     // Process newly created const functions recursively until no more changes
     let mut changed = true;
+    let mut const_depth = 0;
     while changed {
         changed = false;
+        const_depth += 1;
+        assert!(const_depth < 100, "Too many levels of constant arguments");
         let mut additional_functions = BTreeMap::new();
 
         // Collect all function names to process
