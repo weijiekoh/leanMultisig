@@ -2,7 +2,7 @@
 
 ## Perf
 
-- WHIR univariate skip
+- WHIR univariate skip?
 - Opti recursion bytecode
 - inverse folding ordering in WHIR to enable Packing during sumcheck (more generally, TODO packing everywhere)
 - one can "move out" the variable of the eq(.) polynomials out of the sumcheck computation in WHIR (as done in the PIOP)
@@ -10,9 +10,7 @@
 - use RowMAjorMatrix instead of Vec<Vec> for witness, and avoid any transpositions as suggested by Thomas
 - Use Univariate Skip to commit to tables with k.2^n rows (k small)
 - avoid field embedding in the initial sumcheck of logup*, when table / values are in base field
-- opti logup* GKR: 
-    - when the indexes are not a power of 2 (which is the case in the execution table)
-    - due to padding, the last (potentially up to 50%) part of the pushward is full of 0 -> We can also opti commitment here!
+- opti logup* GKR when the indexes are not a power of 2 (which is the case in the execution table)
 - incremental merkle paths in whir-p3
 - Experiment to increase degree, and reduce commitments, in Poseidon arithmetization
 - Avoid embedding overhead on the flag, len, and index columns in the AIR table for dot products

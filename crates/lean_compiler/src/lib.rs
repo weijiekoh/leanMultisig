@@ -1,5 +1,3 @@
-#![feature(map_try_insert)]
-
 use std::collections::BTreeMap;
 
 use lean_vm::*;

@@ -75,7 +75,7 @@ pub struct HintExecutionContext<'a> {
 
 impl Hint {
     /// Execute this hint within the given execution context
-    pub fn execute_hint(&self, ctx: &mut HintExecutionContext<'_>) -> Result<bool, RunnerError> {
+    pub fn execute_hint(&self, ctx: &mut HintExecutionContext<'_>) -> Result<(), RunnerError> {
         match self {
             Self::RequestMemory {
                 offset,
@@ -101,7 +101,6 @@ impl Hint {
                     ctx.memory.set(ctx.fp + *offset, F::from_usize(*ctx.ap))?;
                     *ctx.ap += size;
                 }
-                Ok(false) // does not increase PC
             }
             Self::DecomposeBits {
                 res_offset,
@@ -116,19 +115,16 @@ impl Hint {
                         memory_index += 1;
                     }
                 }
-                Ok(false)
             }
             Self::CounterHint { res_offset } => {
                 ctx.memory
                     .set(ctx.fp + *res_offset, F::from_usize(*ctx.counter_hint))?;
                 *ctx.counter_hint += 1;
-                Ok(false)
             }
             Self::Inverse { arg, res_offset } => {
                 let value = arg.read_value(ctx.memory, ctx.fp)?;
                 let result = value.try_inverse().unwrap_or(F::ZERO);
                 ctx.memory.set(ctx.fp + *res_offset, result)?;
-                Ok(false)
             }
             Self::Print { line_info, content } => {
                 let values = content
@@ -156,12 +152,10 @@ impl Hint {
                     *ctx.last_checkpoint_cpu_cycles = ctx.cpu_cycles;
                     *ctx.checkpoint_ap = *ctx.ap;
                     *ctx.checkpoint_ap_vec = *ctx.ap_vec;
-                    return Ok(true); // continue (skip the rest of this iteration)
                 }
 
                 let line_info = line_info.replace(';', "");
                 *ctx.std_out += &format!("\"{}\" -> {}\n", line_info, values.join(", "));
-                Ok(false)
             }
             Self::LocationReport { location } => {
                 ctx.instruction_history.lines.push(*location);
@@ -169,10 +163,10 @@ impl Hint {
                     .cycles
                     .push(*ctx.cpu_cycles_before_new_line);
                 *ctx.cpu_cycles_before_new_line = 0;
-                Ok(false)
             }
-            Self::Label { label: _ } => Ok(false),
+            Self::Label { .. } => {}
         }
+        Ok(())
     }
 }
 

@@ -205,10 +205,7 @@ fn execute_bytecode_helper(
                 checkpoint_ap: &mut checkpoint_ap,
                 checkpoint_ap_vec: &mut checkpoint_ap_vec,
             };
-            let should_continue = hint.execute_hint(&mut hint_ctx)?;
-            if should_continue {
-                continue;
-            }
+            hint.execute_hint(&mut hint_ctx)?;
         }
 
         let instruction = &bytecode.instructions[pc];
