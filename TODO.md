@@ -79,6 +79,15 @@ But we reduce proof size a lot using instead (TODO):
 - KoalaBear extension of degree 6: in order to use the (proven) Johnson bound in WHIR
 - current "packed PCS" is not optimal in the end: can lead to [16][4][2][2] (instead of [16][8])
 
+
+# Random ideas
+
+- About range checks, that can currently be done in 3 cycles (see 2.5.3 of the zkVM pdf), in the instruction encoding of DEREF, if we replaced (1 - AUX) by a dedicated column,
+  we could allow DEREFS that 'does not do anything with the resulting value', which is exactly what we want for range check: we only want to ensure that m[m[fp + x]] (resp m[(t-1) - m[fp + x]])
+  is a valid memory access (i.e. the index is < M the memory size), but currently the DEREF instruction forces us to 'store' the result, in m[fp + i] (resp m[fp + k]).
+  TLDR: adding a new encoding field for DEREF would save 2 memory cells / range check. If this can also increase perf in alternative scenario (other instructions for isntance),
+  potentially we should consider it.
+
 ## Known leanISA compiler bugs:
 
 ### Non exhaustive conditions in inlined functions
@@ -102,3 +111,4 @@ fn doesnt_work(x) inline -> 1 {
     return 1; // will be compiled to `res = 1`; -> invalid (res = 0 and = 1 at the same time)
 }
 ```
+
