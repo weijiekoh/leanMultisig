@@ -44,6 +44,11 @@ fn test_valid_range_check() {
     }
 
     do_test_valid_range_check(64, 65);
+
+    do_test_valid_range_check(0, 16777216);
+    do_test_valid_range_check(64, 16777216);
+    do_test_valid_range_check(16777215, 16777216);
+
 }
 
 // Should OOM since v >= M
@@ -86,6 +91,12 @@ fn test_invalid_range_check_5() {
     for v in 1..100 {
         do_test_invalid_range_check(v, 0);
     }
+}
+
+#[test]
+fn test_invalid_range_check_6() {
+  do_test_invalid_range_check(16777215, 0);
+  do_test_invalid_range_check(16777216, 16777216); 
 }
 
 //#[test]
@@ -145,34 +156,23 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
     // Range check step 1: 
     // Ensure that m[fp + i] == m[m[fp + x] + 0] aka m[val]
     // Fails if val >= M because of OOM
-    if v == 64 || v == 65 {
-        // Store 0 in m[m[fp + x] + 0]
-        instructions.push(
-            Instruction::Deref {
-                shift_0: x,
-                shift_1: 0,
-                res: MemOrFpOrConstant::Constant(F::ZERO),
-            }
-        );
+    let step_1_res = if v == 64 || v == 65 {
+        MemOrFpOrConstant::Constant(F::ZERO)
     } else if v < 64 {
-        instructions.push(
-            // m[m[fp + x] + 0] <- m[fp + i]
-            Instruction::Deref {
-                shift_0: x,
-                shift_1: 0,
-                res: MemOrFpOrConstant::MemoryAfterFp { offset: i },
-            }
-        );
+        MemOrFpOrConstant::MemoryAfterFp { offset: i }
     } else if v >= 16777216 {
-        instructions.push(
-            // m[m[fp + x] + 0] <- m[fp + v_p]
-            Instruction::Deref {
-                shift_0: x,
-                shift_1: 0,
-                res: MemOrFpOrConstant::MemoryAfterFp { offset: v_p },
-            }
-        );
-    }
+        MemOrFpOrConstant::MemoryAfterFp { offset: v_p }
+    } else {
+        MemOrFpOrConstant::MemoryAfterFp { offset: v_p }
+    };
+
+    instructions.push(
+        Instruction::Deref {
+            shift_0: x,
+            shift_1: 0,
+            res: step_1_res,
+        }
+    );
 
     // Range check step 2:
     // 2. Using ADD, ensure (via constraint-solving):
