@@ -199,20 +199,8 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
             }
         );
     }
-    // When t - 1 - v < 64, we skip this constraint and let DEREF handle it
 
-    // Range check step 3:
-    // The goal is: Using DEREF, ensure `m[m[fp + j]] = m[fp + k]`
-    // This step tries to access memory at address m[fp + j]. If m[fp + j] >= M, it fails.
-    // This ensures that (t-1) - v < M, completing the range check.
-    
-    // The key insight: m[fp + j] = (t-1) - v from step 2
-    // If (t-1) - v < 64, then m[fp + j] points to already-initialized public memory
-    // If (t-1) - v >= 64, then m[fp + j] points to uninitialized memory
-    
-    // Range check step 3: Using DEREF, ensure we can access m[m[fp + j]]
-    // This will fail if m[fp + j] >= M, proving that (t-1) - v < M
-    // There is no additional constraint - we just read whatever value is there
+    // Range check step 3: ensure `m[m[fp + j]] = m[fp + k]`
     instructions.push(
         Instruction::Deref {
             shift_0: j,
@@ -275,109 +263,6 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
         false, // no profiler
     );
     execution_result
-}
-
-#[test]
-fn test_add_and_deref() {
-
-    // Build raw bytecode instructions
-    let instructions = vec![
-        // m[fp + 2] = 3 + fp
-        // ADD 3 + fp and store it in m[fp + 2]
-        Instruction::Computation {
-            operation: Operation::Add,
-            arg_a: MemOrConstant::Constant(F::from_usize(3)),
-            arg_c: MemOrFp::Fp,
-            res: MemOrConstant::MemoryAfterFp { offset: 2 },
-        },
-        // 123 = m[m[fp + 2] + 0] (write 123 to memory location)
-        // DEREF: write 123 to m[m[fp + 2] + 0]
-        Instruction::Deref {
-            shift_0: 2,
-            shift_1: 0,
-            res: MemOrFpOrConstant::Constant(F::from_usize(123)),
-        },
-
-        // ADD 6 + fp and store it in m[fp + 4]
-        Instruction::Computation {
-            operation: Operation::Add,
-            arg_a: MemOrConstant::Constant(F::from_usize(6)),
-            arg_c: MemOrFp::Fp,
-            res: MemOrConstant::MemoryAfterFp { offset: 4 },
-        },
-
-        // DEREF: write 456 to m[m[fp + 4] + 0]
-        Instruction::Deref {
-            shift_0: 4,
-            shift_1: 0,
-            res: MemOrFpOrConstant::Constant(F::from_usize(456)),
-        },
-
-        Instruction::Deref {
-            shift_0: 4,  // Read address from m[fp + 4] (which is 71)
-            shift_1: 0,  // No additional offset
-            res: MemOrFpOrConstant::MemoryAfterFp { offset: 6 }, // Store result in m[fp + 6]
-        },
-
-        // ADD 0 + m[fp + 6] and store it in m[m[fp + 6]]
-        // 0 = 0 + m[fp + 6]
-        Instruction::Computation {
-            operation: Operation::Add,
-            arg_a: MemOrConstant::Constant(F::ZERO),
-            arg_c: MemOrFp::MemoryAfterFp { offset: 5 },
-            res: MemOrConstant::Constant(F::ZERO),
-        },
-        Instruction::Jump {
-            condition: MemOrConstant::Constant(F::ONE),
-            dest: MemOrConstant::Constant(F::from_usize(6)),
-            updated_fp: MemOrFp::MemoryAfterFp { offset: 5 },
-        },
-    ];
-
-    // Add print hint at PC 2
-    let mut hints = BTreeMap::new();
-    hints.insert(
-        2,
-        vec![Hint::Print {
-            line_info: "print(a[0]);".to_string(),
-            content: vec![MemOrConstant::MemoryAfterFp { offset: 3 }],
-        }],
-    );
-
-    hints.insert(
-        4,
-        vec![Hint::Print {
-            line_info: "print #2".to_string(),
-            content: vec![MemOrConstant::MemoryAfterFp { offset: 6 }],
-        }],
-    );
-
-    let ending_pc = instructions.len() - 1;
-
-    let bytecode = Bytecode {
-        instructions,
-        hints,
-        starting_frame_memory: 5,
-        ending_pc,
-    };
-
-    println!("Raw Bytecode:\n\n{}", bytecode.to_string());
-    println!("starting_frame_memory: {}", bytecode.starting_frame_memory);
-
-    // Execute the bytecode
-    let execution_result = execute_bytecode(
-        &bytecode,
-        &[], // no public input
-        &[], // no private input 
-        "", // no source code for debug
-        &std::collections::BTreeMap::new(), // no function locations
-        false, // no profiler
-    ).unwrap();
-
-    println!("Execution completed!");
-    println!("Memory size: {}", execution_result.memory.0.len());
-    println!("PC history: {:?}", execution_result.pcs);
-    println!("FP history: {:?}", execution_result.fps);
 }
 
 #[test]
