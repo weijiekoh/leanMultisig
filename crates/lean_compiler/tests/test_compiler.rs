@@ -1,7 +1,384 @@
 use lean_compiler::*;
 use lean_vm::*;
+use lean_vm::RunnerError;
 use p3_symmetric::Permutation;
 use utils::{get_poseidon16, get_poseidon24};
+use p3_field::PrimeCharacteristicRing;
+use std::collections::BTreeMap;
+
+// Passes if the range check works when v < t
+fn do_test_valid_range_check(v: usize, t: usize) {
+    let result = range_check(v, t);
+    if result.is_err() {
+        println!("Error: {}", result.unwrap_err());
+        assert!(false, "Range check failed");
+    } else {
+        assert!(result.is_ok());
+    }
+}
+
+// Passes if the range check fails with OOM when v >= t
+fn do_test_invalid_range_check(v: usize, t: usize) {
+    let result = range_check(v, t); // should OOM
+    if result.is_ok() {
+        println!("Execution complete but the range check failed to OOM");
+        assert!(false, "range check failed to catch OOM");
+    }
+    println!("result: {}", result.as_ref().unwrap_err());
+    assert!(matches!(&result, Err(RunnerError::OutOfMemory)));
+}
+
+#[test]
+fn test_valid_range_check() {
+    // Check t = 70, v = 0..70
+    let t = 70;
+    for v in 0..t {
+        do_test_valid_range_check(v, t);
+    }
+
+    // Check 0..[63, 64, 65]
+    for t in vec![63, 64, 65] {
+        for v in 0..t {
+            do_test_valid_range_check(v, t);
+        }
+    }
+
+    do_test_valid_range_check(64, 65);
+}
+
+// Should OOM since v >= M
+#[test]
+fn test_invalid_range_check_1() {
+    let v = 16777216;
+    for t in 0..70 {
+        do_test_invalid_range_check(v, t);
+    }
+}
+
+// Should OOM since t - 1 - v >= M
+#[test]
+fn test_invalid_range_check_2() {
+    let v = 100;
+    let t = 16777216 + 1 + v;
+    do_test_invalid_range_check(v, t);
+}
+
+// Should OOM since v >= t
+#[test]
+fn test_invalid_range_check_3() {
+    let t = 200;
+    for v in 200..300 {
+        do_test_invalid_range_check(v, t);
+    }
+}
+
+// Should OOM since v == t
+#[test]
+fn test_invalid_range_check_4() {
+    for i in 1..100 {
+        do_test_invalid_range_check(i, i);
+    }
+}
+
+// Should OOM since v > 0
+#[test]
+fn test_invalid_range_check_5() {
+    for v in 1..100 {
+        do_test_invalid_range_check(v, 0);
+    }
+}
+
+//#[test]
+//fn test_invalid_range_check_6() {
+    //// TODO: fix this: when v is the prime order
+    //do_test_invalid_range_check(2130706433, 0);
+//}
+
+fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
+    let starting_frame_memory = 5;
+    println!("v: {}; t: {}", v, t);
+    let val = F::from_usize(v);
+
+    // In the final version, these values will have to be set after a first execution pass
+    let x = 1000;
+    let i = 1003;
+    let j = 1004;
+    let k = 1005;
+    let v_p = 1006;
+    let t_p = 1007;
+
+    let mut instructions = vec![];
+    let hints = BTreeMap::new();
+
+    // Store v in m[fp + x] by setting a pointer m[fp + vp] = fp + x and using deref to store 
+    // v in m[m[fp + v_p] + 0]
+    instructions.push(
+        // computation: m[fp + v_p] = fp + x
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::from_usize(x)),
+            arg_c: MemOrFp::Fp,
+            res: MemOrConstant::MemoryAfterFp { offset: v_p },
+        }
+    );
+
+    instructions.push(
+        // deref: val = m[m[fp + v_p] + 0] = m[fp + x]
+        Instruction::Deref {
+            shift_0: v_p,
+            shift_1: 0,
+            res: MemOrFpOrConstant::Constant(val),
+        }
+    );
+
+    // Store t - 1 in m[fp + t_p] using constraint solving
+    instructions.push(
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::ONE),        // 1
+            arg_c: MemOrFp::MemoryAfterFp { offset: t_p }, // m[fp + t_p] is unknown, so it will solve
+                                                           // to t - 1
+            res: MemOrConstant::Constant(F::from_usize(t)),
+        }
+    );
+
+    // Range check step 1: 
+    // Ensure that m[fp + i] == m[m[fp + x] + 0] aka m[val]
+    // Fails if val >= M because of OOM
+    if v == 64 || v == 65 {
+        // Store 0 in m[m[fp + x] + 0]
+        instructions.push(
+            Instruction::Deref {
+                shift_0: x,
+                shift_1: 0,
+                res: MemOrFpOrConstant::Constant(F::ZERO),
+            }
+        );
+    } else if v < 64 {
+        instructions.push(
+            // m[m[fp + x] + 0] <- m[fp + i]
+            Instruction::Deref {
+                shift_0: x,
+                shift_1: 0,
+                res: MemOrFpOrConstant::MemoryAfterFp { offset: i },
+            }
+        );
+    } else if v >= 16777216 {
+        instructions.push(
+            // m[m[fp + x] + 0] <- m[fp + v_p]
+            Instruction::Deref {
+                shift_0: x,
+                shift_1: 0,
+                res: MemOrFpOrConstant::MemoryAfterFp { offset: v_p },
+            }
+        );
+    }
+
+    // Range check step 2:
+    // 2. Using ADD, ensure (via constraint-solving):
+    // m[fp + j] + m[m[fp + x]] = (t - 1)
+    // m[fp + j] = (t - 1) - m[m[fp + x]]
+    instructions.push(
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::MemoryAfterFp { offset: j },  // Unknown: m[fp + j] will be 
+                                                                // solved to (t-1) - m[val]
+            arg_c: MemOrFp::MemoryAfterFp { offset: x },        // Known:   m[fp + x] = m[val]
+            res: MemOrConstant::MemoryAfterFp { offset: t_p }, // Known:   t - 1
+        }
+    );
+
+    // If m[m[fp + j]] = m[t - 1 - v] is already initialised, set m[fp + k] = m[fp + j]
+    if (t > v && t - 1 - v >= 64) || (t <= v) {
+        instructions.push(
+            Instruction::Computation {
+                operation: Operation::Add,
+                arg_a: MemOrConstant::MemoryAfterFp { offset: k },  // Unknown: m[fp + k]
+                arg_c: MemOrFp::MemoryAfterFp { offset: j },        // Known:   m[fp + j]
+                res: MemOrConstant::Constant(F::from_usize(0)),     // Known:   0
+            }
+        );
+    }
+    // When t - 1 - v < 64, we skip this constraint and let DEREF handle it
+
+    // Range check step 3:
+    // The goal is: Using DEREF, ensure `m[m[fp + j]] = m[fp + k]`
+    // This step tries to access memory at address m[fp + j]. If m[fp + j] >= M, it fails.
+    // This ensures that (t-1) - v < M, completing the range check.
+    
+    // The key insight: m[fp + j] = (t-1) - v from step 2
+    // If (t-1) - v < 64, then m[fp + j] points to already-initialized public memory
+    // If (t-1) - v >= 64, then m[fp + j] points to uninitialized memory
+    
+    // Range check step 3: Using DEREF, ensure we can access m[m[fp + j]]
+    // This will fail if m[fp + j] >= M, proving that (t-1) - v < M
+    // There is no additional constraint - we just read whatever value is there
+    instructions.push(
+        Instruction::Deref {
+            shift_0: j,
+            shift_1: 0,
+            res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
+        }
+    );
+    
+    //hints.insert(
+        //instructions.len(),
+        //vec![
+            //Hint::Print {
+                //line_info: "m[fp + i]".to_string(),
+                //content: vec![MemOrConstant::MemoryAfterFp { offset: i }],
+            //},
+            //Hint::Print {
+                //line_info: "m[fp + j]".to_string(),
+                //content: vec![MemOrConstant::MemoryAfterFp { offset: j }],
+            //},
+            //Hint::Print {
+                //line_info: "m[fp + k]".to_string(),
+                //content: vec![MemOrConstant::MemoryAfterFp { offset: k }],
+            //},
+        //],
+    //);
+
+    instructions.push(
+        Instruction::Jump {
+            condition: MemOrConstant::Constant(F::ONE),
+            dest: MemOrConstant::Constant(F::from_usize(instructions.len() + 1)),
+            updated_fp: MemOrFp::Fp,
+        }
+    );
+    instructions.push(
+        Instruction::Jump {
+            condition: MemOrConstant::Constant(F::ONE),
+            dest: MemOrConstant::Constant(F::from_usize(0)),
+            updated_fp: MemOrFp::Fp,
+        }
+    );
+
+    let ending_pc = instructions.len() - 1;
+    let bytecode = Bytecode {
+        instructions,
+        hints,
+        starting_frame_memory,
+        ending_pc,
+    };
+
+    println!("Raw Bytecode:\n{}", bytecode.to_string());
+    println!("starting_frame_memory: {}", bytecode.starting_frame_memory);
+
+    // Execute the bytecode
+    let execution_result = execute_bytecode(
+        &bytecode,
+        &[], // public input
+        &[], // private input 
+        "", // no source code for debug
+        &std::collections::BTreeMap::new(), // no function locations
+        false, // no profiler
+    );
+    execution_result
+}
+
+#[test]
+fn test_add_and_deref() {
+
+    // Build raw bytecode instructions
+    let instructions = vec![
+        // m[fp + 2] = 3 + fp
+        // ADD 3 + fp and store it in m[fp + 2]
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::from_usize(3)),
+            arg_c: MemOrFp::Fp,
+            res: MemOrConstant::MemoryAfterFp { offset: 2 },
+        },
+        // 123 = m[m[fp + 2] + 0] (write 123 to memory location)
+        // DEREF: write 123 to m[m[fp + 2] + 0]
+        Instruction::Deref {
+            shift_0: 2,
+            shift_1: 0,
+            res: MemOrFpOrConstant::Constant(F::from_usize(123)),
+        },
+
+        // ADD 6 + fp and store it in m[fp + 4]
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::from_usize(6)),
+            arg_c: MemOrFp::Fp,
+            res: MemOrConstant::MemoryAfterFp { offset: 4 },
+        },
+
+        // DEREF: write 456 to m[m[fp + 4] + 0]
+        Instruction::Deref {
+            shift_0: 4,
+            shift_1: 0,
+            res: MemOrFpOrConstant::Constant(F::from_usize(456)),
+        },
+
+        Instruction::Deref {
+            shift_0: 4,  // Read address from m[fp + 4] (which is 71)
+            shift_1: 0,  // No additional offset
+            res: MemOrFpOrConstant::MemoryAfterFp { offset: 6 }, // Store result in m[fp + 6]
+        },
+
+        // ADD 0 + m[fp + 6] and store it in m[m[fp + 6]]
+        // 0 = 0 + m[fp + 6]
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::ZERO),
+            arg_c: MemOrFp::MemoryAfterFp { offset: 5 },
+            res: MemOrConstant::Constant(F::ZERO),
+        },
+        Instruction::Jump {
+            condition: MemOrConstant::Constant(F::ONE),
+            dest: MemOrConstant::Constant(F::from_usize(6)),
+            updated_fp: MemOrFp::MemoryAfterFp { offset: 5 },
+        },
+    ];
+
+    // Add print hint at PC 2
+    let mut hints = BTreeMap::new();
+    hints.insert(
+        2,
+        vec![Hint::Print {
+            line_info: "print(a[0]);".to_string(),
+            content: vec![MemOrConstant::MemoryAfterFp { offset: 3 }],
+        }],
+    );
+
+    hints.insert(
+        4,
+        vec![Hint::Print {
+            line_info: "print #2".to_string(),
+            content: vec![MemOrConstant::MemoryAfterFp { offset: 6 }],
+        }],
+    );
+
+    let ending_pc = instructions.len() - 1;
+
+    let bytecode = Bytecode {
+        instructions,
+        hints,
+        starting_frame_memory: 5,
+        ending_pc,
+    };
+
+    println!("Raw Bytecode:\n\n{}", bytecode.to_string());
+    println!("starting_frame_memory: {}", bytecode.starting_frame_memory);
+
+    // Execute the bytecode
+    let execution_result = execute_bytecode(
+        &bytecode,
+        &[], // no public input
+        &[], // no private input 
+        "", // no source code for debug
+        &std::collections::BTreeMap::new(), // no function locations
+        false, // no profiler
+    ).unwrap();
+
+    println!("Execution completed!");
+    println!("Memory size: {}", execution_result.memory.0.len());
+    println!("PC history: {:?}", execution_result.pcs);
+    println!("FP history: {:?}", execution_result.fps);
+}
 
 #[test]
 #[should_panic]

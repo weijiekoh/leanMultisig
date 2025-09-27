@@ -94,7 +94,7 @@ pub fn execute_bytecode(
     source_code: &str,                            // debug purpose
     function_locations: &BTreeMap<usize, String>, // debug purpose
     profiler: bool,
-) -> ExecutionResult {
+) -> Result<ExecutionResult, RunnerError> {
     let mut std_out = String::new();
     let mut instruction_history = ExecutionHistory::default();
     let first_exec = match execute_bytecode_helper(
@@ -123,7 +123,8 @@ pub fn execute_bytecode(
                 println!("╚══════════════════════════════════════════════════════════════╝\n");
                 print!("{std_out}");
             }
-            panic!("Error during bytecode execution: {err}");
+
+            return Err(err);
         }
     };
     instruction_history = ExecutionHistory::default();
@@ -138,7 +139,6 @@ pub fn execute_bytecode(
         profiler,
         function_locations,
     )
-    .unwrap()
 }
 
 #[derive(Debug)]
@@ -203,13 +203,16 @@ fn execute_bytecode_helper(
 
     // set public memory
     let mut memory = Memory::new(build_public_memory(public_input));
-
     let public_memory_size = (PUBLIC_INPUT_START + public_input.len()).next_power_of_two();
     let mut fp = public_memory_size;
 
     for (i, value) in private_input.iter().enumerate() {
         memory.set(fp + i, *value)?;
     }
+    //for (i, m) in memory.0.iter().enumerate() {
+        //println!("m[{}]: {:?}", i, m);
+    //}
+
     fp += private_input.len();
     fp = fp.next_multiple_of(DIMENSION);
 
@@ -243,6 +246,7 @@ fn execute_bytecode_helper(
     let mut cpu_cycles_before_new_line = 0;
 
     while pc != bytecode.ending_pc {
+        //println!("pc: {}; fp: {}", pc, fp);
         if pc >= bytecode.instructions.len() {
             return Err(RunnerError::PCOutOfBounds);
         }

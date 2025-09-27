@@ -200,14 +200,14 @@ impl Display for Instruction {
                 arg_c,
                 res,
             } => {
-                write!(f, "{res} = {arg_a} {operation} {arg_c}")
+                write!(f, "computation: {res} = {arg_a} {operation} {arg_c}")
             }
             Self::Deref {
                 shift_0,
                 shift_1,
                 res,
             } => {
-                write!(f, "{res} = m[m[fp + {shift_0}] + {shift_1}]")
+                write!(f, "deref: {res} = m[m[fp + {shift_0}] + {shift_1}]")
             }
             Self::DotProductExtensionExtension {
                 arg0,
