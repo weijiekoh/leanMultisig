@@ -1,12 +1,12 @@
 use std::borrow::Borrow;
 
+use multilinear_toolkit::prelude::*;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
 use p3_matrix::Matrix;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use utils::{build_prover_state, build_verifier_state};
-use whir_p3::poly::evals::EvaluationsList;
 
 use crate::table::AirTable;
 

@@ -4,7 +4,7 @@ use p3_air::AirBuilder;
 use p3_field::ExtensionField;
 use p3_matrix::dense::RowMajorMatrixView;
 
-use crate::PF;
+use multilinear_toolkit::prelude::*;
 
 /*
 Debug purpose

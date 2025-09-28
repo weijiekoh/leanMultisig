@@ -1,5 +1,5 @@
+use multilinear_toolkit::prelude::*;
 use p3_field::Field;
-use whir_p3::poly::evals::{eval_eq, scale_poly};
 
 pub fn matrix_up_folded<F: Field>(outer_challenges: &[F]) -> Vec<F> {
     let n = outer_challenges.len();

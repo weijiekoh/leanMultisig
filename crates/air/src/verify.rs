@@ -1,16 +1,7 @@
+use multilinear_toolkit::prelude::*;
 use p3_air::BaseAir;
 use p3_field::{ExtensionField, cyclic_subgroup_known_order, dot_product};
 use p3_util::log2_ceil_usize;
-use sumcheck::SumcheckComputation;
-use utils::univariate_selectors;
-use utils::{FSVerifier, PF};
-use whir_p3::fiat_shamir::FSChallenger;
-use whir_p3::poly::evals::eval_eq;
-use whir_p3::poly::multilinear::Evaluation;
-use whir_p3::{
-    fiat_shamir::errors::ProofError,
-    poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
-};
 
 use crate::utils::{matrix_down_lde, matrix_up_lde};
 use crate::{NormalAir, PackedAir};
@@ -28,7 +19,7 @@ fn verify_air<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>>(
     let n_zerocheck_challenges = log_n_rows + 1 - univariate_skips;
     let global_zerocheck_challenges = verifier_state.sample_vec(n_zerocheck_challenges);
 
-    let (sc_sum, outer_statement) = sumcheck::verify_with_univariate_skip::<EF>(
+    let (sc_sum, outer_statement) = sumcheck_verify_with_univariate_skip::<EF>(
         verifier_state,
         <A as BaseAir<PF<EF>>>::degree(&table.air) + 1,
         log_n_rows,
@@ -196,7 +187,7 @@ fn verify_structured_columns<EF: ExtensionField<PF<EF>>>(
 
     let epsilons = MultilinearPoint(verifier_state.sample_vec(univariate_skips));
 
-    let (inner_sum, inner_sumcheck_stement) = sumcheck::verify(verifier_state, log_n_rows, 2)?;
+    let (inner_sum, inner_sumcheck_stement) = sumcheck_verify(verifier_state, log_n_rows, 2)?;
 
     if inner_sum != sub_evals.evaluate(&epsilons) {
         return Err(ProofError::InvalidProof);

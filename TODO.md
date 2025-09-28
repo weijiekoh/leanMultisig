@@ -24,6 +24,8 @@
  a list of n (n not a power of 2) columns, each ending with m repeated values (in this manner we can reduce proof size when they are a lot of columns (poseidons ...))
 - in the runner of leanISA program, if we call 2 times the same function with the same arguments, we can reuse the same memory frame
 - the interpreter of leanISA (+ witness generation) can be partially parallelized when there are some independent loops
+- (1 - x).r1 + x.r2 = x.(r2 - r1) + r1 TODO this opti is not everywhere currently + TODO generalize this with the univaraite skip
+- opti compute_eval_eq when scalar = ONE
 
 About "the packed pcs" (similar to SP1 Jagged PCS, slightly less efficient, but simpler (no sumchecks)):
 - The best strategy is probably to pack as much as possible (the cost increasing the density = additional inner evaluations), if we can fit below a power of 2 - epsilon  (epsilon = 20% for instance, tbd), if the sum of the non zero data is just above a power of 2, no packed technique, even the best, can help us, so we should spread aniway (to reduce the pressure of inner evaluations)
@@ -78,6 +80,9 @@ But we reduce proof size a lot using instead (TODO):
 - KoalaBear extension of degree 5: the current implem (in a fork of Plonky3) has not been been optimized
 - KoalaBear extension of degree 6: in order to use the (proven) Johnson bound in WHIR
 - current "packed PCS" is not optimal in the end: can lead to [16][4][2][2] (instead of [16][8])
+- avoid harcoding the proof in a file for recursion test
+- make test_packed_pcs pass again
+- fix WHIR if max_num_variables_to_send_coeffs is too small
 
 
 # Random ideas

@@ -22,8 +22,8 @@ def create_duration_graph(data, target, target_label, title, y_legend, file):
     min_date = min(dates)
     max_date = max(dates)
     date_range = max_date - min_date
-    if date_range < timedelta(days=30):
-        max_date = min_date + timedelta(days=30)
+    if date_range < timedelta(days=40):
+        max_date = min_date + timedelta(days=40)
     ax.set_xlim(min_date - timedelta(days=1), max_date + timedelta(days=1))
 
     ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=1))
@@ -52,6 +52,7 @@ if __name__ == "__main__":
         ('2025-08-30', 95000),
         ('2025-09-09', 108000),
         ('2025-09-14', 108000),
+        ('2025-09-28', 125000),
     ], target=300_000, target_label="Target (300.000 Poseidon2 / s)", title="Raw Poseidon2", y_legend="Poseidons proven / s", file="raw_poseidons")
 
     create_duration_graph(data=[
@@ -60,6 +61,7 @@ if __name__ == "__main__":
         ('2025-09-09', 1.32),
         ('2025-09-10', 0.970),
         ('2025-09-14', 0.825),
+        ('2025-09-28', 0.725),
     ], target=0.125, target_label="Target (0.125 s)", title="Recursive WHIR opening", y_legend="Proving time (s)", file="recursive_whir_opening")
 
     create_duration_graph(data=[
@@ -68,7 +70,8 @@ if __name__ == "__main__":
         ('2025-09-03', 9.4),
         ('2025-09-09', 8.02),
         ('2025-09-10', 6.53),
-        ('2025-09-14', 4.65)
+        ('2025-09-14', 4.65),
+        ('2025-09-28', 3.63),
     ], target=0.5, target_label="Target (0.5 s)", title="500 XMSS aggregated: proving time", y_legend="Proving time (s)", file="xmss_aggregated_time")
 
     create_duration_graph(data=[
@@ -77,5 +80,6 @@ if __name__ == "__main__":
         ('2025-09-03', 9.4 / 0.82),
         ('2025-09-09', 8.02 / 0.72),
         ('2025-09-10', 6.53 / 0.72),
-        ('2025-09-14', 4.65 / 0.72)
+        ('2025-09-14', 4.65 / 0.72),
+        ('2025-09-28', 3.63 / 0.63),
     ], target=2.0, target_label="Target (2x)", title="500 XMSS aggregated: zkVM overhead vs raw Poseidons", y_legend="", file="xmss_aggregated_overhead")

@@ -1,6 +1,5 @@
+use multilinear_toolkit::prelude::*;
 use p3_field::Field;
-use rayon::prelude::*;
-use whir_p3::poly::multilinear::MultilinearPoint;
 
 pub(crate) fn matrix_up_lde<F: Field>(point: &[F]) -> F {
     /*

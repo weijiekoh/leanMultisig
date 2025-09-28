@@ -1,114 +1,10 @@
 use std::borrow::Borrow;
 
 use crate::from_end;
-use p3_field::{BasedVectorSpace, PackedValue};
 use p3_field::{ExtensionField, Field, dot_product};
 use p3_util::log2_strict_usize;
-use rayon::prelude::*;
-use whir_p3::poly::evals::EvaluationsList;
-use whir_p3::poly::multilinear::MultilinearPoint;
 
-use crate::{EFPacking, PF};
-
-pub fn fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>, D>(
-    m: &[D],
-    scalars: &[F],
-) -> Vec<EF> {
-    // TODO ...
-    assert!(scalars.len().is_power_of_two() && scalars.len() <= m.len());
-    let new_size = m.len() / scalars.len();
-
-    let dim = <EF as BasedVectorSpace<F>>::DIMENSION;
-
-    let m_transmuted: &[F] =
-        unsafe { std::slice::from_raw_parts(m.as_ptr().cast::<F>(), m.len() * dim) };
-    let res_transmuted = {
-        let new_size = m.len() * dim / scalars.len();
-
-        if new_size < F::Packing::WIDTH {
-            (0..new_size)
-                .into_par_iter()
-                .map(|i| {
-                    scalars
-                        .iter()
-                        .enumerate()
-                        .map(|(j, s)| *s * m_transmuted[i + j * new_size])
-                        .sum()
-                })
-                .collect()
-        } else {
-            let inners = (0..scalars.len())
-                .map(|i| &m_transmuted[i * new_size..(i + 1) * new_size])
-                .collect::<Vec<_>>();
-            let inners_packed = inners
-                .iter()
-                .map(|&inner| F::Packing::pack_slice(inner))
-                .collect::<Vec<_>>();
-
-            let packed_res = (0..new_size / F::Packing::WIDTH)
-                .into_par_iter()
-                .map(|i| {
-                    scalars
-                        .iter()
-                        .enumerate()
-                        .map(|(j, s)| inners_packed[j][i] * *s)
-                        .sum::<F::Packing>()
-                })
-                .collect::<Vec<_>>();
-
-            let mut unpacked: Vec<F> = unsafe { std::mem::transmute(packed_res) };
-            unsafe {
-                unpacked.set_len(new_size);
-            }
-
-            unpacked
-        }
-    };
-    let res: Vec<EF> = unsafe {
-        let mut res: Vec<EF> = std::mem::transmute(res_transmuted);
-        res.set_len(new_size);
-        res
-    };
-
-    res
-}
-
-pub fn fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
-    m: &[F],
-    scalars: &[EF],
-) -> Vec<EF> {
-    assert!(scalars.len().is_power_of_two() && scalars.len() <= m.len());
-    let new_size = m.len() / scalars.len();
-    (0..new_size)
-        .into_par_iter()
-        .map(|i| {
-            scalars
-                .iter()
-                .enumerate()
-                .map(|(j, s)| *s * m[i + j * new_size])
-                .sum()
-        })
-        .collect()
-}
-
-pub fn fold_extension_packed<EF: ExtensionField<PF<EF>>>(
-    m: &[EFPacking<EF>],
-    scalars: &[EF],
-) -> Vec<EFPacking<EF>> {
-    assert!(scalars.len().is_power_of_two() && scalars.len() <= m.len());
-    let new_size = m.len() / scalars.len();
-
-    (0..new_size)
-        .into_par_iter()
-        .map(|i| {
-            scalars
-                .iter()
-                .enumerate()
-                .map(|(j, s)| m[i + j * new_size] * *s)
-                .sum()
-        })
-        .collect()
-}
+use multilinear_toolkit::prelude::*;
 
 pub fn multilinears_linear_combination<
     F: Field,
@@ -119,52 +15,15 @@ pub fn multilinears_linear_combination<
     scalars: &[EF],
 ) -> Vec<EF> {
     assert_eq!(pols.len(), scalars.len());
-    let n_vars = pols[0].borrow().num_variables();
-    assert!(pols.iter().all(|p| p.borrow().num_variables() == n_vars));
+    let n_vars = log2_strict_usize(pols[0].borrow().len());
+    assert!(
+        pols.iter()
+            .all(|p| log2_strict_usize(p.borrow().len()) == n_vars)
+    );
     (0..1 << n_vars)
         .into_par_iter()
         .map(|i| dot_product(scalars.iter().copied(), pols.iter().map(|p| p.borrow()[i])))
         .collect::<Vec<_>>()
-}
-
-pub fn batch_fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
-    polys: &[&[F]],
-    scalars: &[EF],
-) -> Vec<Vec<EF>> {
-    polys
-        .par_iter()
-        .map(|poly| fold_multilinear_in_large_field(poly, scalars))
-        .collect()
-}
-
-pub fn batch_fold_multilinear_in_large_field_packed<EF: ExtensionField<PF<EF>>>(
-    polys: &[&[EFPacking<EF>]],
-    scalars: &[EF],
-) -> Vec<Vec<EFPacking<EF>>> {
-    polys
-        .iter()
-        .map(|poly| fold_extension_packed(poly, scalars))
-        .collect()
-}
-
-pub fn batch_fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>>(
-    polys: &[&[EF]],
-    scalars: &[F],
-) -> Vec<Vec<EF>> {
-    polys
-        .par_iter()
-        .map(|poly| fold_multilinear_in_small_field(poly, scalars))
-        .collect()
-}
-
-pub fn batch_fold_multilinear_in_small_field_packed<EF: ExtensionField<PF<EF>>>(
-    polys: &[&[EFPacking<EF>]],
-    scalars: &[PF<EF>],
-) -> Vec<Vec<EF>> {
-    polys
-        .par_iter()
-        .map(|poly| fold_multilinear_in_small_field(poly, scalars))
-        .collect()
 }
 
 pub fn multilinear_eval_constants_at_right<F: Field>(limit: usize, point: &[F]) -> F {
@@ -254,6 +113,17 @@ pub fn evaluate_as_smaller_multilinear_pol<F: Field, EF: ExtensionField<F>>(
     let pol_n_vars = log2_strict_usize(pol.len());
     assert!(point.len() <= pol_n_vars);
     (&pol[..1 << point.len()]).evaluate(&MultilinearPoint(point.to_vec()))
+}
+
+#[must_use]
+pub fn fold_multilinear_chunks<F: Field, EF: ExtensionField<F>>(
+    poly: &[F],
+    folding_randomness: &MultilinearPoint<EF>,
+) -> Vec<EF> {
+    let folding_factor = folding_randomness.num_variables();
+    poly.par_chunks_exact(1 << folding_factor)
+        .map(|ev| ev.evaluate(folding_randomness))
+        .collect()
 }
 
 #[cfg(test)]

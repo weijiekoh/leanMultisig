@@ -1,15 +1,13 @@
 use std::any::TypeId;
 
+use multilinear_toolkit::prelude::*;
 use p3_air::BaseAir;
 use p3_field::{ExtensionField, Field, cyclic_subgroup_known_order};
 use p3_util::{log2_ceil_usize, log2_strict_usize};
-use sumcheck::{MleGroup, MleGroupOwned, MleGroupRef, ProductComputation};
 use tracing::{info_span, instrument};
-use utils::{FSProver, multilinears_linear_combination};
-use utils::{PF, add_multilinears_inplace};
-use whir_p3::fiat_shamir::FSChallenger;
-use whir_p3::poly::evals::{eval_eq, fold_multilinear, scale_poly};
-use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
+use utils::{
+    FSProver, add_multilinears_inplace, fold_multilinear_chunks, multilinears_linear_combination,
+};
 
 use crate::{NormalAir, PackedAir};
 use crate::{
@@ -30,7 +28,7 @@ fn prove_air<
     'a,
     WF: ExtensionField<PF<EF>>, // witness field
     EF: ExtensionField<PF<EF>> + ExtensionField<WF>,
-    A: NormalAir<EF>,
+    A: NormalAir<EF> + 'static,
     AP: PackedAir<EF>,
 >(
     prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
@@ -78,7 +76,7 @@ fn prove_air<
     let columns_for_zero_check_packed = columns_for_zero_check.by_ref().pack();
 
     let (outer_sumcheck_challenge, inner_sums, _) = info_span!("zerocheck").in_scope(|| {
-        sumcheck::prove::<_, _, _, _>(
+        sumcheck_prove::<_, _, _, _>(
             univariate_skips,
             columns_for_zero_check_packed,
             &table.air,
@@ -111,7 +109,9 @@ fn prove_air<
     }
 }
 
-impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF>, AP: PackedAir<EF>> AirTable<EF, A, AP> {
+impl<EF: ExtensionField<PF<EF>>, A: NormalAir<EF> + 'static, AP: PackedAir<EF>>
+    AirTable<EF, A, AP>
+{
     #[instrument(name = "air: prove in base", skip_all)]
     pub fn prove_base(
         &self,
@@ -153,7 +153,7 @@ fn open_unstructured_columns<
     );
 
     // TODO opti
-    let sub_evals = fold_multilinear(
+    let sub_evals = fold_multilinear_chunks(
         &batched_column,
         &MultilinearPoint(outer_sumcheck_challenge[1..log_n_rows - univariate_skips + 1].to_vec()),
     );
@@ -201,7 +201,7 @@ fn open_structured_columns<EF: ExtensionField<PF<EF>> + ExtensionField<IF>, IF: 
         &scale_poly(&column_down(&batched_column), alpha),
     );
     // TODO do not recompute this (we can deduce it from already computed values)
-    let sub_evals = fold_multilinear(
+    let sub_evals = fold_multilinear_chunks(
         &batched_column_mixed,
         &MultilinearPoint(outer_sumcheck_challenge[1..log_n_rows - univariate_skips + 1].to_vec()),
     );
@@ -222,7 +222,7 @@ fn open_structured_columns<EF: ExtensionField<PF<EF>> + ExtensionField<IF>, IF: 
     add_multilinears_inplace(&mut mat_up, &scale_poly(&matrix_down_folded(&point), alpha));
     let inner_mle = MleGroupOwned::Extension(vec![mat_up, batched_column]);
 
-    let (inner_challenges, _, _) = sumcheck::prove::<EF, _, _, _>(
+    let (inner_challenges, _, _) = sumcheck_prove::<EF, _, _, _>(
         1,
         inner_mle,
         &ProductComputation,

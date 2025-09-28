@@ -5,18 +5,13 @@ https://eprint.iacr.org/2025/946.pdf
 
 */
 
+use multilinear_toolkit::prelude::*;
 use p3_field::{ExtensionField, Field, PrimeField64};
-use rayon::prelude::*;
 use utils::ToUsize;
 
 use p3_field::PrimeCharacteristicRing;
-use sumcheck::{MleGroupRef, ProductComputation};
 use tracing::{info_span, instrument};
-use utils::{EFPacking, FSProver, FSVerifier, PF, pack_extension, packing_width};
-use whir_p3::fiat_shamir::FSChallenger;
-use whir_p3::poly::multilinear::{Evaluation, MultilinearPoint};
-use whir_p3::utils::parallel_clone;
-use whir_p3::{fiat_shamir::errors::ProofError, utils::uninitialized_vec};
+use utils::{FSProver, FSVerifier};
 
 use crate::quotient_gkr::{prove_gkr_quotient, verify_gkr_quotient};
 
@@ -58,7 +53,7 @@ where
 
     let (sc_point, inner_evals, prod) =
         info_span!("logup_star sumcheck", table_length, indexes_length).in_scope(|| {
-            sumcheck::prove::<EF, _, _, _>(
+            sumcheck_prove::<EF, _, _, _>(
                 1,
                 MleGroupRef::ExtensionPacked(vec![&table_embedded_packed, &pushforward_packed]),
                 &ProductComputation,
@@ -154,7 +149,7 @@ where
     PF<EF>: PrimeField64,
 {
     let (sum, postponed) =
-        sumcheck::verify(verifier_state, log_table_len, 2).map_err(|_| ProofError::InvalidProof)?;
+        sumcheck_verify(verifier_state, log_table_len, 2).map_err(|_| ProofError::InvalidProof)?;
 
     if sum
         != claims
@@ -252,7 +247,6 @@ mod tests {
     use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use utils::{build_challenger, init_tracing};
-    use whir_p3::poly::evals::{EvaluationsList, eval_eq};
 
     type F = KoalaBear;
     type EF = QuinticExtensionFieldKB;
