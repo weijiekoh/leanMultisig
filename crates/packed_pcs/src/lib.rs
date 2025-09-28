@@ -670,7 +670,7 @@ fn compute_multilinear_value_from_chunks<F: Field, EF: ExtensionField<F>>(
 //             witness.inner_witness,
 //             &witness.packed_polynomial.by_ref(),
 //         );
-        
+
 //         let mut verifier_state = build_verifier_state(&prover_state);
 
 //         let parsed_commitment = packed_pcs_parse_commitment(
