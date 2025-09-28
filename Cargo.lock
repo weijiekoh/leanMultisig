@@ -23,7 +23,6 @@ dependencies = [
  "p3-util",
  "rand",
  "rayon",
- "sumcheck",
  "tracing",
  "utils",
  "whir-p3",
@@ -426,7 +425,6 @@ dependencies = [
  "pest_derive",
  "rand",
  "rayon",
- "sumcheck",
  "tracing",
  "utils",
  "whir-p3",
@@ -455,7 +453,6 @@ dependencies = [
  "pest_derive",
  "rand",
  "rayon",
- "sumcheck",
  "tracing",
  "utils",
  "vm_air",
@@ -486,7 +483,6 @@ dependencies = [
  "pest_derive",
  "rand",
  "rayon",
- "sumcheck",
  "thiserror",
  "tracing",
  "utils",
@@ -516,7 +512,6 @@ dependencies = [
  "p3-util",
  "rand",
  "rayon",
- "sumcheck",
  "tracing",
  "utils",
  "whir-p3",
@@ -1006,7 +1001,6 @@ dependencies = [
  "packed_pcs",
  "rand",
  "rayon",
- "sumcheck",
  "tracing",
  "utils",
  "whir-p3",
@@ -1137,21 +1131,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "sumcheck"
-version = "0.1.0"
-dependencies = [
- "p3-air",
- "p3-field",
- "p3-koala-bear",
- "p3-matrix",
- "p3-util",
- "rand",
- "rayon",
- "utils",
- "whir-p3",
-]
 
 [[package]]
 name = "syn"
@@ -1377,7 +1356,6 @@ dependencies = [
  "pest_derive",
  "rand",
  "rayon",
- "sumcheck",
  "tracing",
  "utils",
  "whir-p3",
@@ -1701,7 +1679,6 @@ dependencies = [
  "pest_derive",
  "rand",
  "rayon",
- "sumcheck",
  "tracing",
  "utils",
  "whir-p3",

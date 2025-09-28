@@ -41,7 +41,6 @@ cast_sign_loss = "allow"
 [workspace.dependencies]
 # Local
 air = { path = "crates/air" }
-sumcheck = { path = "crates/sumcheck" }
 utils = { path = "crates/utils" }
 lean_vm = { path = "crates/lean_vm" }
 xmss = { path = "crates/xmss" }

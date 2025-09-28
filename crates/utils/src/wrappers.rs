@@ -37,64 +37,6 @@ pub type WhirWitness<F, EF> = Witness<F, EF, MY_DIGEST_ELEMS>;
 pub type WhirParsedCommitment<F, EF> = ParsedCommitment<F, EF, MY_DIGEST_ELEMS>;
 pub const MY_DIGEST_ELEMS: usize = 8;
 
-pub trait MerkleHasher<EF: Field>:
-    CryptographicHasher<PFPacking<EF>, [PFPacking<EF>; MY_DIGEST_ELEMS]>
-    + CryptographicHasher<PF<EF>, [PF<EF>; MY_DIGEST_ELEMS]>
-    + Sync
-{
-}
-
-pub trait MerkleCompress<EF: Field>:
-    PseudoCompressionFunction<[PFPacking<EF>; MY_DIGEST_ELEMS], 2>
-    + PseudoCompressionFunction<[PF<EF>; MY_DIGEST_ELEMS], 2>
-    + Sync
-{
-}
-
-impl<
-    EF: Field,
-    MH: CryptographicHasher<PFPacking<EF>, [PFPacking<EF>; MY_DIGEST_ELEMS]>
-        + CryptographicHasher<PF<EF>, [PF<EF>; MY_DIGEST_ELEMS]>
-        + Sync,
-> MerkleHasher<EF> for MH
-{
-}
-
-impl<
-    EF: Field,
-    MC: PseudoCompressionFunction<[PFPacking<EF>; MY_DIGEST_ELEMS], 2>
-        + PseudoCompressionFunction<[PF<EF>; MY_DIGEST_ELEMS], 2>
-        + Sync,
-> MerkleCompress<EF> for MC
-{
-}
-
-pub fn pack_extension<EF: ExtensionField<PF<EF>>>(slice: &[EF]) -> Vec<EFPacking<EF>> {
-    slice
-        .par_chunks_exact(packing_width::<EF>())
-        .map(EFPacking::<EF>::from_ext_slice)
-        .collect::<Vec<_>>()
-}
-
-pub fn unpack_extension<EF: ExtensionField<PF<EF>>>(vec: &[EFPacking<EF>]) -> Vec<EF> {
-    vec.iter()
-        .flat_map(|x| {
-            let packed_coeffs = x.as_basis_coefficients_slice();
-            (0..packing_width::<EF>())
-                .map(|i| EF::from_basis_coefficients_fn(|j| packed_coeffs[j].as_slice()[i]))
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
-
-pub const fn packing_log_width<EF: Field>() -> usize {
-    packing_width::<EF>().ilog2() as usize
-}
-
-pub const fn packing_width<EF: Field>() -> usize {
-    PFPacking::<EF>::WIDTH
-}
-
 pub fn build_challenger() -> MyChallenger {
     MyChallenger::new(get_poseidon16().clone())
 }

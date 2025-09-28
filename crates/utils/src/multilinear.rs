@@ -73,42 +73,8 @@ pub fn fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>, D>(
     res
 }
 
-pub fn fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
-    m: &[F],
-    scalars: &[EF],
-) -> Vec<EF> {
-    assert!(scalars.len().is_power_of_two() && scalars.len() <= m.len());
-    let new_size = m.len() / scalars.len();
-    (0..new_size)
-        .into_par_iter()
-        .map(|i| {
-            scalars
-                .iter()
-                .enumerate()
-                .map(|(j, s)| *s * m[i + j * new_size])
-                .sum()
-        })
-        .collect()
-}
 
-pub fn fold_extension_packed<EF: ExtensionField<PF<EF>>>(
-    m: &[EFPacking<EF>],
-    scalars: &[EF],
-) -> Vec<EFPacking<EF>> {
-    assert!(scalars.len().is_power_of_two() && scalars.len() <= m.len());
-    let new_size = m.len() / scalars.len();
 
-    (0..new_size)
-        .into_par_iter()
-        .map(|i| {
-            scalars
-                .iter()
-                .enumerate()
-                .map(|(j, s)| m[i + j * new_size] * *s)
-                .sum()
-        })
-        .collect()
-}
 
 pub fn multilinears_linear_combination<
     F: Field,
@@ -127,25 +93,6 @@ pub fn multilinears_linear_combination<
         .collect::<Vec<_>>()
 }
 
-pub fn batch_fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
-    polys: &[&[F]],
-    scalars: &[EF],
-) -> Vec<Vec<EF>> {
-    polys
-        .par_iter()
-        .map(|poly| fold_multilinear_in_large_field(poly, scalars))
-        .collect()
-}
-
-pub fn batch_fold_multilinear_in_large_field_packed<EF: ExtensionField<PF<EF>>>(
-    polys: &[&[EFPacking<EF>]],
-    scalars: &[EF],
-) -> Vec<Vec<EFPacking<EF>>> {
-    polys
-        .iter()
-        .map(|poly| fold_extension_packed(poly, scalars))
-        .collect()
-}
 
 pub fn batch_fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>>(
     polys: &[&[EF]],
