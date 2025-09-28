@@ -1,6 +1,6 @@
 #![cfg_attr(not(test), allow(unused_crate_dependencies))]
 
-use whir_p3::whir::config::{FoldingFactor, SecurityAssumption};
+use whir_p3::{FoldingFactor, SecurityAssumption};
 use whirlaway::examples::prove_poseidon2::{Poseidon2Config, prove_poseidon2};
 
 fn main() {
@@ -14,7 +14,7 @@ fn main() {
         pow_bits: 16,
         security_level: 128,
         rs_domain_initial_reduction_factor: 5,
-        max_num_variables_to_send_coeffs: 3,
+        max_num_variables_to_send_coeffs: 7,
         display_logs: true,
     };
     let benchmark = prove_poseidon2(&config);

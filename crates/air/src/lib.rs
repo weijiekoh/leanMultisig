@@ -1,9 +1,7 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 
-use ::utils::{
-    ConstraintChecker, ConstraintFolder, ConstraintFolderPackedBase,
-    ConstraintFolderPackedExtension, PF,
-};
+use ::utils::ConstraintChecker;
+use multilinear_toolkit::prelude::*;
 use p3_air::Air;
 use p3_field::ExtensionField;
 use p3_uni_stark::SymbolicAirBuilder;

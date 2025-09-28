@@ -30,3 +30,4 @@ lookup.workspace = true
 lean_vm.workspace = true
 lean_compiler.workspace = true
 witness_generation.workspace = true
+multilinear-toolkit.workspace = true

@@ -4,29 +4,25 @@ use ::air::table::AirTable;
 use lean_vm::*;
 use lookup::verify_gkr_product;
 use lookup::verify_logup_star;
+use multilinear_toolkit::prelude::*;
 use p3_air::BaseAir;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::dot_product;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
 use packed_pcs::*;
-use sumcheck::SumcheckComputation;
 use utils::dot_product_with_base;
-use utils::{PF, build_challenger, padd_with_zero_to_next_power_of_two};
 use utils::{ToUsize, build_poseidon_16_air, build_poseidon_24_air};
+use utils::{build_challenger, padd_with_zero_to_next_power_of_two};
 use vm_air::*;
-use whir_p3::fiat_shamir::{errors::ProofError, verifier::VerifierState};
-use whir_p3::poly::evals::EvaluationsList;
-use whir_p3::poly::evals::eval_eq;
-use whir_p3::poly::multilinear::Evaluation;
-use whir_p3::poly::multilinear::MultilinearPoint;
-use whir_p3::whir::config::WhirConfig;
-use whir_p3::whir::config::second_batched_whir_config_builder;
+use whir_p3::WhirConfig;
+use whir_p3::WhirConfigBuilder;
+use whir_p3::second_batched_whir_config_builder;
 
 pub fn verify_execution(
     bytecode: &Bytecode,
     public_input: &[F],
     proof_data: Vec<PF<EF>>,
-    whir_config_builder: MyWhirConfigBuilder,
+    whir_config_builder: WhirConfigBuilder,
 ) -> Result<(), ProofError> {
     let mut verifier_state = VerifierState::new(proof_data, build_challenger());
 
@@ -255,7 +251,7 @@ pub fn verify_execution(
 
     // Grand product statements
     let (grand_product_final_dot_product_eval, grand_product_dot_product_sumcheck_claim) =
-        sumcheck::verify(&mut verifier_state, table_dot_products_log_n_rows, 3)?;
+        sumcheck_verify(&mut verifier_state, table_dot_products_log_n_rows, 3)?;
     if grand_product_final_dot_product_eval != grand_product_dot_product_statement.value {
         return Err(ProofError::InvalidProof);
     }
@@ -299,7 +295,7 @@ pub fn verify_execution(
     );
 
     let (grand_product_final_exec_eval, grand_product_exec_sumcheck_claim) =
-        sumcheck::verify(&mut verifier_state, log_n_cycles, 4)?;
+        sumcheck_verify(&mut verifier_state, log_n_cycles, 4)?;
     if grand_product_final_exec_eval != grand_product_exec_statement.value {
         return Err(ProofError::InvalidProof);
     }
@@ -469,7 +465,7 @@ pub fn verify_execution(
     ];
 
     let parsed_commitment_extension = packed_pcs_parse_commitment(
-        &second_batched_whir_config_builder::<EF, EF, _, _, _>(
+        &second_batched_whir_config_builder(
             whir_config_builder.clone(),
             parsed_commitment_base.num_variables,
             num_packed_vars_for_dims::<EF>(&extension_dims, LOG_SMALLEST_DECOMPOSITION_CHUNK),

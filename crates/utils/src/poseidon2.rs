@@ -1,6 +1,13 @@
 use std::sync::OnceLock;
 
+use multilinear_toolkit::prelude::*;
 use p3_koala_bear::GenericPoseidon2LinearLayersKoalaBear;
+use p3_koala_bear::KOALABEAR_RC16_EXTERNAL_FINAL;
+use p3_koala_bear::KOALABEAR_RC16_EXTERNAL_INITIAL;
+use p3_koala_bear::KOALABEAR_RC16_INTERNAL;
+use p3_koala_bear::KOALABEAR_RC24_EXTERNAL_FINAL;
+use p3_koala_bear::KOALABEAR_RC24_EXTERNAL_INITIAL;
+use p3_koala_bear::KOALABEAR_RC24_INTERNAL;
 use p3_koala_bear::KoalaBear;
 use p3_koala_bear::Poseidon2KoalaBear;
 use p3_matrix::dense::RowMajorMatrix;
@@ -8,10 +15,6 @@ use p3_poseidon2::ExternalLayerConstants;
 use p3_poseidon2_air::Poseidon2Air;
 use p3_poseidon2_air::RoundConstants;
 use p3_poseidon2_air::generate_trace_rows;
-use rand::SeedableRng;
-use rand::rngs::StdRng;
-
-use crate::PFPacking;
 
 pub type Poseidon16 = Poseidon2KoalaBear<16>;
 pub type Poseidon24 = Poseidon2KoalaBear<24>;
@@ -97,12 +100,20 @@ pub fn build_poseidon_24_air_packed() -> Poseidon24Air<PFPacking<KoalaBear>> {
 
 fn build_poseidon16_constants()
 -> RoundConstants<KoalaBear, 16, HALF_FULL_ROUNDS_16, PARTIAL_ROUNDS_16> {
-    RoundConstants::from_rng(&mut StdRng::seed_from_u64(0))
+    RoundConstants {
+        beginning_full_round_constants: KOALABEAR_RC16_EXTERNAL_INITIAL,
+        partial_round_constants: KOALABEAR_RC16_INTERNAL,
+        ending_full_round_constants: KOALABEAR_RC16_EXTERNAL_FINAL,
+    }
 }
 
 fn build_poseidon24_constants()
 -> RoundConstants<KoalaBear, 24, HALF_FULL_ROUNDS_24, PARTIAL_ROUNDS_24> {
-    RoundConstants::from_rng(&mut StdRng::seed_from_u64(0))
+    RoundConstants {
+        beginning_full_round_constants: KOALABEAR_RC24_EXTERNAL_INITIAL,
+        partial_round_constants: KOALABEAR_RC24_INTERNAL,
+        ending_full_round_constants: KOALABEAR_RC24_EXTERNAL_FINAL,
+    }
 }
 
 fn build_poseidon16_constants_packed()

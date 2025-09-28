@@ -4,31 +4,26 @@ use ::air::table::AirTable;
 use lean_vm::*;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
+use multilinear_toolkit::prelude::*;
 use p3_air::BaseAir;
 use p3_field::ExtensionField;
 use p3_field::Field;
 use p3_field::PrimeCharacteristicRing;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
 use packed_pcs::*;
-use rayon::prelude::*;
 use std::collections::BTreeMap;
-use sumcheck::MleGroupRef;
 use tracing::info_span;
 use utils::ToUsize;
 use utils::dot_product_with_base;
 use utils::field_slice_as_base;
-use utils::pack_extension;
 use utils::{
-    PF, build_poseidon_16_air, build_poseidon_24_air, build_prover_state,
+    build_poseidon_16_air, build_poseidon_24_air, build_prover_state,
     padd_with_zero_to_next_power_of_two,
 };
 use vm_air::*;
-use whir_p3::dft::EvalsDft;
-use whir_p3::poly::evals::{eval_eq, fold_multilinear};
-use whir_p3::poly::multilinear::Evaluation;
-use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
-use whir_p3::utils::{compute_eval_eq, compute_sparse_eval_eq};
-use whir_p3::whir::config::{WhirConfig, second_batched_whir_config_builder};
+use whir_p3::{
+    WhirConfig, WhirConfigBuilder, precompute_dft_twiddles, second_batched_whir_config_builder,
+};
 
 pub fn prove_execution(
     bytecode: &Bytecode,
@@ -36,7 +31,7 @@ pub fn prove_execution(
     function_locations: &BTreeMap<usize, String>, // debug purpose
     public_input: &[F],
     private_input: &[F],
-    whir_config_builder: MyWhirConfigBuilder,
+    whir_config_builder: WhirConfigBuilder,
     vm_profiler: bool,
 ) -> (Vec<PF<EF>>, usize) {
     let ExecutionTrace {
@@ -74,7 +69,7 @@ pub fn prove_execution(
     let log_n_p16 = log2_ceil_usize(n_poseidons_16);
     let log_n_p24 = log2_ceil_usize(n_poseidons_24);
 
-    let dft = EvalsDft::default();
+    precompute_dft_twiddles::<F>(1 << 24);
 
     let mut exec_columns = full_trace[..N_INSTRUCTION_COLUMNS_IN_AIR]
         .iter()
@@ -206,7 +201,6 @@ pub fn prove_execution(
         &whir_config_builder,
         &base_pols,
         &base_dims,
-        &dft,
         &mut prover_state,
         LOG_SMALLEST_DECOMPOSITION_CHUNK,
     );
@@ -412,7 +406,7 @@ pub fn prove_execution(
         grand_product_dot_product_sumcheck_inner_evals,
         _,
     ) = info_span!("Grand product sumcheck for Dot Product").in_scope(|| {
-        sumcheck::prove(
+        sumcheck_prove(
             1,
             MleGroupRef::Extension(
                 dot_product_columns[..5]
@@ -466,7 +460,7 @@ pub fn prove_execution(
 
     let (grand_product_exec_sumcheck_point, grand_product_exec_sumcheck_inner_evals, _) =
         info_span!("Grand product sumcheck for Execution").in_scope(|| {
-            sumcheck::prove(
+            sumcheck_prove(
                 1, // TODO univariate skip
                 MleGroupRef::Base(
                     // TODO not all columns re required
@@ -532,11 +526,11 @@ pub fn prove_execution(
 
     let all_poseidon_indexes = full_poseidon_indexes_poly(&poseidons_16, &poseidons_24);
 
-    let poseidon_folded_memory = fold_multilinear(&memory, &memory_folding_challenges);
+    let poseidon_folded_memory = fold_multilinear_chunks(&memory, &memory_folding_challenges);
 
     let mut poseidon_poly_eq_point = EF::zero_vec(all_poseidon_indexes.len());
     for (i, statement) in poseidon_lookup_statements.iter().enumerate() {
-        compute_sparse_eval_eq::<PF<EF>, EF>(
+        compute_sparse_eval_eq::<EF>(
             &statement.point,
             &mut poseidon_poly_eq_point,
             poseidon_logup_star_alpha.exp_u64(i as u64),
@@ -788,14 +782,13 @@ pub fn prove_execution(
     ];
 
     let packed_pcs_witness_extension = packed_pcs_commit(
-        &second_batched_whir_config_builder::<EF, EF, _, _, _>(
+        &second_batched_whir_config_builder(
             whir_config_builder.clone(),
-            log2_strict_usize(packed_pcs_witness_base.packed_polynomial.len()),
+            packed_pcs_witness_base.packed_polynomial.by_ref().n_vars(),
             num_packed_vars_for_dims::<EF>(&extension_dims, LOG_SMALLEST_DECOMPOSITION_CHUNK),
         ),
         &extension_pols,
         &extension_dims,
-        &dft,
         &mut prover_state,
         LOG_SMALLEST_DECOMPOSITION_CHUNK,
     );
@@ -855,7 +848,7 @@ pub fn prove_execution(
             log_n_p24,
             &poseidon_logup_star_statements.on_indexes.point,
         );
-        let poseidon_index_evals = fold_multilinear(
+        let poseidon_index_evals = fold_multilinear_chunks(
             &all_poseidon_indexes,
             &MultilinearPoint(poseidon_logup_star_statements.on_indexes.point[3..].to_vec()),
         );
@@ -1071,17 +1064,16 @@ pub fn prove_execution(
 
     WhirConfig::new(
         whir_config_builder,
-        log2_strict_usize(packed_pcs_witness_base.packed_polynomial.len()),
+        packed_pcs_witness_base.packed_polynomial.by_ref().n_vars(),
     )
     .batch_prove(
-        &dft,
         &mut prover_state,
         global_statements_base,
         packed_pcs_witness_base.inner_witness,
-        &packed_pcs_witness_base.packed_polynomial,
+        &packed_pcs_witness_base.packed_polynomial.by_ref(),
         global_statements_extension,
         packed_pcs_witness_extension.inner_witness,
-        &packed_pcs_witness_extension.packed_polynomial,
+        &packed_pcs_witness_extension.packed_polynomial.by_ref(),
     );
 
     (

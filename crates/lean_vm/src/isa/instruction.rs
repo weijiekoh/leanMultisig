@@ -9,13 +9,12 @@ use crate::witness::{
     RowMultilinearEval, WitnessDotProduct, WitnessMultilinearEval, WitnessPoseidon16,
     WitnessPoseidon24,
 };
+use multilinear_toolkit::prelude::*;
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, dot_product};
 use p3_symmetric::Permutation;
 use p3_util::log2_ceil_usize;
 use std::fmt::{Display, Formatter};
 use utils::{ToUsize, get_poseidon16, get_poseidon24};
-use whir_p3::poly::evals::EvaluationsList;
-use whir_p3::poly::multilinear::MultilinearPoint;
 
 /// Complete set of VM instruction types with comprehensive operation support
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

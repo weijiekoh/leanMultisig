@@ -1,7 +1,7 @@
 use p3_field::{BasedVectorSpace, ExtensionField, Field, dot_product};
 use rayon::prelude::*;
 
-use crate::PF;
+use multilinear_toolkit::prelude::*;
 
 pub fn transmute_slice<Before, After>(slice: &[Before]) -> &[After] {
     let new_len = std::mem::size_of_val(slice) / std::mem::size_of::<After>();

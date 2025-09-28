@@ -1,20 +1,8 @@
+use multilinear_toolkit::prelude::*;
 use p3_field::{Algebra, BasedVectorSpace};
 use p3_field::{ExtensionField, PrimeCharacteristicRing};
 use p3_util::log2_ceil_usize;
 use packed_pcs::ColDims;
-use rayon::prelude::*;
-use sumcheck::{SumcheckComputation, SumcheckComputationPacked};
-use utils::{EFPacking, PF, padd_with_zero_to_next_power_of_two};
-use whir_p3::fiat_shamir::errors::ProofError;
-use whir_p3::poly::evals::EvaluationsList;
-use whir_p3::{
-    fiat_shamir::ChallengeSampler,
-    poly::{
-        evals::fold_multilinear,
-        multilinear::{Evaluation, MultilinearPoint},
-    },
-    utils::flatten_scalars_to_base,
-};
 
 use crate::*;
 use lean_vm::*;
@@ -76,7 +64,7 @@ pub fn fold_bytecode(bytecode: &Bytecode, folding_challenges: &MultilinearPoint<
             .flat_map(|i| padd_with_zero_to_next_power_of_two(&field_representation(i)))
             .collect::<Vec<_>>(),
     );
-    fold_multilinear(&encoded_bytecode, folding_challenges)
+    fold_multilinear_chunks(&encoded_bytecode, folding_challenges)
 }
 
 pub fn intitial_and_final_pc_conditions(
@@ -270,7 +258,7 @@ impl SumcheckComputationPacked<EF> for DotProductFootprint {
     fn eval_packed_extension(&self, point: &[EFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
         self.air_eval(point, |p, c| p * c)
     }
-    fn eval_packed_base(&self, point: &[utils::PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
+    fn eval_packed_base(&self, point: &[PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
         self.air_eval(point, |p, c| EFPacking::<EF>::from(p) * c)
     }
 }

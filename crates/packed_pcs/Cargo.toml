@@ -12,8 +12,8 @@ tracing.workspace = true
 utils.workspace = true
 whir-p3.workspace = true
 rayon.workspace = true
-serde.workspace = true
 p3-util.workspace = true
+multilinear-toolkit.workspace = true
 
 [dev-dependencies]
 p3-koala-bear.workspace = true

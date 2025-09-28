@@ -7,23 +7,13 @@ with custom GKR
 
 */
 
+use multilinear_toolkit::prelude::*;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::{ExtensionField, PrimeField64};
-use rayon::prelude::*;
-use sumcheck::MleGroupRef;
-use sumcheck::ProductComputation;
 use tracing::instrument;
 use utils::left_ref;
-use utils::packing_log_width;
-use utils::packing_width;
 use utils::right_ref;
-use utils::unpack_extension;
-use utils::{EFPacking, FSProver, FSVerifier, PF};
-use whir_p3::fiat_shamir::FSChallenger;
-use whir_p3::fiat_shamir::errors::ProofError;
-use whir_p3::poly::evals::EvaluationsList;
-use whir_p3::poly::multilinear::Evaluation;
-use whir_p3::poly::multilinear::MultilinearPoint;
+use utils::{FSProver, FSVerifier};
 
 /*
 Custom GKR to compute a product.
@@ -129,7 +119,7 @@ where
     EF: ExtensionField<PF<EF>>,
     PF<EF>: PrimeField64,
 {
-    let (sc_point, inner_evals, _) = sumcheck::prove::<EF, _, _, _>(
+    let (sc_point, inner_evals, _) = sumcheck_prove::<EF, _, _, _>(
         1,
         up_layer,
         &ProductComputation,
@@ -188,7 +178,7 @@ where
     EF: ExtensionField<PF<EF>>,
     PF<EF>: PrimeField64,
 {
-    let (sc_eval, postponed) = sumcheck::verify(verifier_state, current_layer_log_len, 3)
+    let (sc_eval, postponed) = sumcheck_verify(verifier_state, current_layer_log_len, 3)
         .map_err(|_| ProofError::InvalidProof)?;
 
     if sc_eval != claim.value {
@@ -227,7 +217,7 @@ mod tests {
     use super::*;
     use p3_koala_bear::QuinticExtensionFieldKB;
     use rand::{Rng, SeedableRng, rngs::StdRng};
-    use utils::{assert_eq_many, build_prover_state, build_verifier_state, pack_extension};
+    use utils::{assert_eq_many, build_prover_state, build_verifier_state};
 
     type EF = QuinticExtensionFieldKB;
 

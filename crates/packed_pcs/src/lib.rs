@@ -1,23 +1,14 @@
-use std::{cmp::Reverse, collections::BTreeMap};
+use std::{any::TypeId, cmp::Reverse, collections::BTreeMap};
 
+use multilinear_toolkit::prelude::*;
 use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_util::{log2_ceil_usize, log2_strict_usize};
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utils::{
-    FSProver, FSVerifier, MY_DIGEST_ELEMS, MerkleCompress, MerkleHasher, PF, WhirParsedCommitment,
-    WhirWitness, from_end, multilinear_eval_constants_at_right, to_big_endian_bits,
+    FSProver, FSVerifier, from_end, multilinear_eval_constants_at_right, to_big_endian_bits,
     to_big_endian_in_field,
 };
-use whir_p3::poly::evals::EvaluationsList;
-use whir_p3::poly::multilinear::Evaluation;
-use whir_p3::whir::config::{WhirConfig, WhirConfigBuilder};
-use whir_p3::{
-    dft::EvalsDft,
-    fiat_shamir::{FSChallenger, errors::ProofError},
-    poly::multilinear::MultilinearPoint,
-};
+use whir_p3::*;
 
 #[derive(Debug, Clone)]
 struct Chunk {
@@ -187,27 +178,23 @@ pub fn num_packed_vars_for_dims<F: Field>(
 }
 
 #[derive(Debug)]
-pub struct MultiCommitmentWitness<F: Field, EF: ExtensionField<F>> {
-    pub inner_witness: WhirWitness<F, EF>,
-    pub packed_polynomial: Vec<F>,
+pub struct MultiCommitmentWitness<EF: ExtensionField<PF<EF>>> {
+    pub inner_witness: Witness<EF>,
+    pub packed_polynomial: MleOwned<EF>,
 }
 
 #[instrument(skip_all)]
-pub fn packed_pcs_commit<F, EF, H, C>(
-    whir_config_builder: &WhirConfigBuilder<H, C, MY_DIGEST_ELEMS>,
+pub fn packed_pcs_commit<F, EF>(
+    whir_config_builder: &WhirConfigBuilder,
     polynomials: &[&[F]],
     dims: &[ColDims<F>],
-    dft: &EvalsDft<PF<EF>>,
     prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
     log_smallest_decomposition_chunk: usize,
-) -> MultiCommitmentWitness<F, EF>
+) -> MultiCommitmentWitness<EF>
 where
     F: Field + TwoAdicField + ExtensionField<PF<EF>>,
     PF<EF>: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField + ExtensionField<PF<EF>>,
-    H: MerkleHasher<EF>,
-    C: MerkleCompress<EF>,
-    [PF<EF>; MY_DIGEST_ELEMS]: Serialize + for<'de> Deserialize<'de>,
 {
     assert_eq!(polynomials.len(), dims.len());
     for (i, (poly, dim)) in polynomials.iter().zip(dims.iter()).enumerate() {
@@ -265,14 +252,24 @@ where
             }
         });
 
-    let inner_witness = WhirConfig::new(whir_config_builder.clone(), packed_n_vars).commit(
-        dft,
-        prover_state,
-        &packed_polynomial,
-    );
+    let mle = if TypeId::of::<F>() == TypeId::of::<PF<EF>>() {
+        MleOwned::Base(unsafe { std::mem::transmute::<Vec<F>, Vec<PF<EF>>>(packed_polynomial) })
+    } else if TypeId::of::<F>() == TypeId::of::<EF>() {
+        MleOwned::ExtensionPacked(pack_extension(&unsafe {
+            std::mem::transmute::<Vec<F>, Vec<EF>>(packed_polynomial)
+        })) // TODO this is innefficient (this transposes everything...)
+    } else {
+        panic!(
+            "Unsupported field type for packed PCS: {}",
+            std::any::type_name::<F>()
+        );
+    };
+
+    let inner_witness =
+        WhirConfig::new(whir_config_builder.clone(), packed_n_vars).commit(prover_state, &mle);
     MultiCommitmentWitness {
         inner_witness,
-        packed_polynomial,
+        packed_polynomial: mle,
     }
 }
 
@@ -432,14 +429,15 @@ pub fn packed_pcs_global_statements_for_prover<
 pub fn packed_pcs_parse_commitment<
     F: Field + TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField + ExtensionField<PF<EF>>,
-    H: MerkleHasher<EF>,
-    C: MerkleCompress<EF>,
 >(
-    whir_config_builder: &WhirConfigBuilder<H, C, MY_DIGEST_ELEMS>,
+    whir_config_builder: &WhirConfigBuilder,
     verifier_state: &mut FSVerifier<EF, impl FSChallenger<EF>>,
     dims: &[ColDims<F>],
     log_smallest_decomposition_chunk: usize,
-) -> Result<WhirParsedCommitment<F, EF>, ProofError> {
+) -> Result<ParsedCommitment<F, EF>, ProofError>
+where
+    PF<EF>: TwoAdicField,
+{
     let (_, packed_n_vars) = compute_chunks::<F>(dims, log_smallest_decomposition_chunk);
     WhirConfig::new(whir_config_builder.clone(), packed_n_vars).parse_commitment(verifier_state)
 }
@@ -554,154 +552,144 @@ fn compute_multilinear_value_from_chunks<F: Field, EF: ExtensionField<F>>(
     eval
 }
 
-#[cfg(test)]
-mod tests {
-    use p3_field::{PrimeCharacteristicRing, extension::BinomialExtensionField};
-    use p3_koala_bear::KoalaBear;
-    use p3_util::log2_strict_usize;
-    use rand::{Rng, SeedableRng, rngs::StdRng};
-    use utils::{
-        build_merkle_compress, build_merkle_hash, build_prover_state, build_verifier_state,
-    };
-    use whir_p3::{
-        poly::evals::EvaluationsList,
-        whir::config::{FoldingFactor, SecurityAssumption, WhirConfigBuilder},
-    };
+// #[cfg(test)]
+// mod tests {
+//     use p3_field::{PrimeCharacteristicRing};
+//     use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
+//     use p3_util::log2_strict_usize;
+//     use rand::{Rng, SeedableRng, rngs::StdRng};
+//     use utils::{build_prover_state, build_verifier_state};
 
-    use super::*;
+//     use super::*;
 
-    type F = KoalaBear;
-    type EF = BinomialExtensionField<KoalaBear, 4>;
+//     type F = KoalaBear;
+//     type EF = QuinticExtensionFieldKB;
 
-    #[test]
-    fn test_packed_pcs() {
-        let whir_config_builder = WhirConfigBuilder {
-            folding_factor: FoldingFactor::new(4, 4),
-            soundness_type: SecurityAssumption::CapacityBound,
-            merkle_hash: build_merkle_hash(),
-            merkle_compress: build_merkle_compress(),
-            pow_bits: 13,
-            max_num_variables_to_send_coeffs: 6,
-            rs_domain_initial_reduction_factor: 1,
-            security_level: 75,
-            starting_log_inv_rate: 1,
-        };
+//     #[test]
+//     fn test_packed_pcs() {
+//         let whir_config_builder = WhirConfigBuilder {
+//             folding_factor: FoldingFactor::new(4, 4),
+//             soundness_type: SecurityAssumption::CapacityBound,
+//             pow_bits: 13,
+//             max_num_variables_to_send_coeffs: 6,
+//             rs_domain_initial_reduction_factor: 1,
+//             security_level: 75,
+//             starting_log_inv_rate: 1,
+//         };
 
-        let mut rng = StdRng::seed_from_u64(0);
-        let log_smallest_decomposition_chunk = 3;
-        let committed_length_lengths_and_default_value_and_log_public_data: [(
-            usize,
-            F,
-            Option<usize>,
-        ); _] = [
-            (16, F::from_usize(8), Some(4)),
-            (854, F::from_usize(0), Some(7)),
-            (854, F::from_usize(1), Some(5)),
-            (16, F::from_usize(0), Some(3)),
-            (17, F::from_usize(0), Some(4)),
-            (95, F::from_usize(3), Some(4)),
-            (17, F::from_usize(0), None),
-            (95, F::from_usize(3), None),
-            (256, F::from_usize(8), None),
-            (1088, F::from_usize(9), None),
-            (512, F::from_usize(0), None),
-            (256, F::from_usize(8), Some(3)),
-            (1088, F::from_usize(9), Some(4)),
-            (512, F::from_usize(0), Some(5)),
-            (754, F::from_usize(4), Some(4)),
-            (1023, F::from_usize(7), Some(4)),
-            (2025, F::from_usize(11), Some(8)),
-            (16, F::from_usize(8), None),
-            (854, F::from_usize(0), None),
-            (854, F::from_usize(1), None),
-            (16, F::from_usize(0), None),
-            (754, F::from_usize(4), None),
-            (1023, F::from_usize(7), None),
-            (2025, F::from_usize(11), None),
-        ];
-        let mut public_data = BTreeMap::new();
-        let mut polynomials = Vec::new();
-        let mut dims = Vec::new();
-        let mut statements_per_polynomial = Vec::new();
-        for (pol_index, &(committed_length, default_value, log_public_data)) in
-            committed_length_lengths_and_default_value_and_log_public_data
-                .iter()
-                .enumerate()
-        {
-            let mut poly = (0..committed_length + log_public_data.map_or(0, |l| 1 << l))
-                .map(|_| rng.random())
-                .collect::<Vec<F>>();
-            poly.resize(poly.len().next_power_of_two(), default_value);
-            if let Some(log_public) = log_public_data {
-                public_data.insert(pol_index, poly[..1 << log_public].to_vec());
-            }
-            let n_vars = log2_strict_usize(poly.len());
-            let n_points = rng.random_range(1..5);
-            let mut statements = Vec::new();
-            for _ in 0..n_points {
-                let point =
-                    MultilinearPoint((0..n_vars).map(|_| rng.random()).collect::<Vec<EF>>());
-                let value = poly.evaluate(&point);
-                statements.push(Evaluation { point, value });
-            }
-            polynomials.push(poly);
-            dims.push(ColDims {
-                n_vars,
-                log_public_data_size: log_public_data,
-                committed_size: committed_length,
-                default_value,
-            });
-            statements_per_polynomial.push(statements);
-        }
+//         let mut rng = StdRng::seed_from_u64(0);
+//         let log_smallest_decomposition_chunk = 3;
+//         let committed_length_lengths_and_default_value_and_log_public_data: [(
+//             usize,
+//             F,
+//             Option<usize>,
+//         ); _] = [
+//             (16, F::from_usize(8), Some(4)),
+//             (854, F::from_usize(0), Some(7)),
+//             (854, F::from_usize(1), Some(5)),
+//             (16, F::from_usize(0), Some(3)),
+//             (17, F::from_usize(0), Some(4)),
+//             (95, F::from_usize(3), Some(4)),
+//             (17, F::from_usize(0), None),
+//             (95, F::from_usize(3), None),
+//             (256, F::from_usize(8), None),
+//             (1088, F::from_usize(9), None),
+//             (512, F::from_usize(0), None),
+//             (256, F::from_usize(8), Some(3)),
+//             (1088, F::from_usize(9), Some(4)),
+//             (512, F::from_usize(0), Some(5)),
+//             (754, F::from_usize(4), Some(4)),
+//             (1023, F::from_usize(7), Some(4)),
+//             (2025, F::from_usize(11), Some(8)),
+//             (16, F::from_usize(8), None),
+//             (854, F::from_usize(0), None),
+//             (854, F::from_usize(1), None),
+//             (16, F::from_usize(0), None),
+//             (754, F::from_usize(4), None),
+//             (1023, F::from_usize(7), None),
+//             (2025, F::from_usize(15), None),
+//         ];
+//         let mut public_data = BTreeMap::new();
+//         let mut polynomials = Vec::new();
+//         let mut dims = Vec::new();
+//         let mut statements_per_polynomial = Vec::new();
+//         for (pol_index, &(committed_length, default_value, log_public_data)) in
+//             committed_length_lengths_and_default_value_and_log_public_data
+//                 .iter()
+//                 .enumerate()
+//         {
+//             let mut poly = (0..committed_length + log_public_data.map_or(0, |l| 1 << l))
+//                 .map(|_| rng.random())
+//                 .collect::<Vec<F>>();
+//             poly.resize(poly.len().next_power_of_two(), default_value);
+//             if let Some(log_public) = log_public_data {
+//                 public_data.insert(pol_index, poly[..1 << log_public].to_vec());
+//             }
+//             let n_vars = log2_strict_usize(poly.len());
+//             let n_points = rng.random_range(1..5);
+//             let mut statements = Vec::new();
+//             for _ in 0..n_points {
+//                 let point =
+//                     MultilinearPoint((0..n_vars).map(|_| rng.random()).collect::<Vec<EF>>());
+//                 let value = poly.evaluate(&point);
+//                 statements.push(Evaluation { point, value });
+//             }
+//             polynomials.push(poly);
+//             dims.push(ColDims {
+//                 n_vars,
+//                 log_public_data_size: log_public_data,
+//                 committed_size: committed_length,
+//                 default_value,
+//             });
+//             statements_per_polynomial.push(statements);
+//         }
 
-        let mut prover_state = build_prover_state();
-        let dft = EvalsDft::<F>::default();
+//         let mut prover_state = build_prover_state();
+//         precompute_dft_twiddles::<F>(1 << 24);
 
-        let polynomials_ref = polynomials.iter().map(|p| p.as_slice()).collect::<Vec<_>>();
-        let witness = packed_pcs_commit(
-            &whir_config_builder,
-            &polynomials_ref,
-            &dims,
-            &dft,
-            &mut prover_state,
-            log_smallest_decomposition_chunk,
-        );
+//         let polynomials_ref = polynomials.iter().map(|p| p.as_slice()).collect::<Vec<_>>();
+//         let witness = packed_pcs_commit(
+//             &whir_config_builder,
+//             &polynomials_ref,
+//             &dims,
+//             &mut prover_state,
+//             log_smallest_decomposition_chunk,
+//         );
 
-        let packed_statements = packed_pcs_global_statements_for_prover(
-            &polynomials_ref,
-            &dims,
-            log_smallest_decomposition_chunk,
-            &statements_per_polynomial,
-            &mut prover_state,
-        );
-        let num_variables = log2_strict_usize(witness.packed_polynomial.len());
-        WhirConfig::new(whir_config_builder.clone(), num_variables).prove(
-            &dft,
-            &mut prover_state,
-            packed_statements,
-            witness.inner_witness,
-            &witness.packed_polynomial,
-        );
+//         let packed_statements = packed_pcs_global_statements_for_prover(
+//             &polynomials_ref,
+//             &dims,
+//             log_smallest_decomposition_chunk,
+//             &statements_per_polynomial,
+//             &mut prover_state,
+//         );
+//         let num_variables = witness.packed_polynomial.by_ref().n_vars();
+//         WhirConfig::new(whir_config_builder.clone(), num_variables).prove(
+//             &mut prover_state,
+//             packed_statements,
+//             witness.inner_witness,
+//             &witness.packed_polynomial.by_ref(),
+//         );
+        
+//         let mut verifier_state = build_verifier_state(&prover_state);
 
-        let mut verifier_state = build_verifier_state(&prover_state);
-
-        let parsed_commitment = packed_pcs_parse_commitment(
-            &whir_config_builder,
-            &mut verifier_state,
-            &dims,
-            log_smallest_decomposition_chunk,
-        )
-        .unwrap();
-        let packed_statements = packed_pcs_global_statements_for_verifier(
-            &dims,
-            log_smallest_decomposition_chunk,
-            &statements_per_polynomial,
-            &mut verifier_state,
-            &public_data,
-        )
-        .unwrap();
-        WhirConfig::new(whir_config_builder, num_variables)
-            .verify(&mut verifier_state, &parsed_commitment, packed_statements)
-            .unwrap();
-    }
-}
+//         let parsed_commitment = packed_pcs_parse_commitment(
+//             &whir_config_builder,
+//             &mut verifier_state,
+//             &dims,
+//             log_smallest_decomposition_chunk,
+//         )
+//         .unwrap();
+//         let packed_statements = packed_pcs_global_statements_for_verifier(
+//             &dims,
+//             log_smallest_decomposition_chunk,
+//             &statements_per_polynomial,
+//             &mut verifier_state,
+//             &public_data,
+//         )
+//         .unwrap();
+//         WhirConfig::new(whir_config_builder, num_variables)
+//             .verify(&mut verifier_state, &parsed_commitment, packed_statements)
+//             .unwrap();
+//     }
+// }

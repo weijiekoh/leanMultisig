@@ -3,9 +3,6 @@
 mod misc;
 pub use misc::*;
 
-mod univariate;
-pub use univariate::*;
-
 mod multilinear;
 pub use multilinear::*;
 

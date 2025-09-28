@@ -3,10 +3,11 @@ use std::{any::TypeId, marker::PhantomData, mem::transmute};
 use p3_air::BaseAir;
 use p3_field::{ExtensionField, Field};
 
+use multilinear_toolkit::prelude::*;
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_uni_stark::get_symbolic_constraints;
 use tracing::instrument;
-use utils::{ConstraintChecker, PF};
+use utils::ConstraintChecker;
 
 use crate::{NormalAir, PackedAir};
 

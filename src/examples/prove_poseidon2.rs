@@ -1,9 +1,9 @@
 use air::table::AirTable;
+use multilinear_toolkit::prelude::*;
 use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
 use p3_symmetric::Permutation;
-use p3_util::{log2_ceil_usize, log2_strict_usize};
 use packed_pcs::{
     ColDims, packed_pcs_commit, packed_pcs_global_statements_for_prover,
     packed_pcs_global_statements_for_verifier, packed_pcs_parse_commitment,
@@ -13,20 +13,17 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::{Duration, Instant};
 use utils::{
-    FSProver, MY_DIGEST_ELEMS, MyChallenger, MyMerkleCompress, MyMerkleHash, MyWhirConfigBuilder,
-    PF, PFPacking, Poseidon16Air, Poseidon24Air, build_merkle_compress, build_merkle_hash,
-    build_poseidon_16_air, build_poseidon_16_air_packed, build_poseidon_24_air,
-    build_poseidon_24_air_packed, build_prover_state, build_verifier_state,
-    generate_trace_poseidon_16, generate_trace_poseidon_24, get_poseidon16, get_poseidon24,
-    init_tracing,
+    MyChallenger, Poseidon16Air, Poseidon24Air, build_poseidon_16_air,
+    build_poseidon_16_air_packed, build_poseidon_24_air, build_poseidon_24_air_packed,
+    build_prover_state, build_verifier_state, generate_trace_poseidon_16,
+    generate_trace_poseidon_24, get_poseidon16, get_poseidon24, init_tracing,
 };
-use whir_p3::dft::EvalsDft;
-use whir_p3::poly::multilinear::Evaluation;
-use whir_p3::whir::config::{FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder};
+use whir_p3::{
+    FoldingFactor, SecurityAssumption, WhirConfig, WhirConfigBuilder, precompute_dft_twiddles,
+};
 
 type F = KoalaBear;
 type EF = QuinticExtensionFieldKB;
-type MyWhirConfig = WhirConfig<PF<EF>, EF, MyMerkleHash, MyMerkleCompress, MY_DIGEST_ELEMS>;
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2Benchmark {
@@ -84,8 +81,8 @@ struct PoseidonSetup {
 
 struct ProverArtifacts {
     prover_time: Duration,
-    whir_config_builder: MyWhirConfigBuilder,
-    whir_config: MyWhirConfig,
+    whir_config_builder: WhirConfigBuilder,
+    whir_config: WhirConfig<EF>,
     dims: Vec<ColDims<F>>,
 }
 
@@ -162,8 +159,6 @@ fn run_prover_phase(
     let whir_config_builder = WhirConfigBuilder {
         folding_factor: config.folding_factor,
         soundness_type: config.soundness_type,
-        merkle_hash: build_merkle_hash(),
-        merkle_compress: build_merkle_compress(),
         pow_bits: config.pow_bits,
         max_num_variables_to_send_coeffs: config.max_num_variables_to_send_coeffs,
         rs_domain_initial_reduction_factor: config.rs_domain_initial_reduction_factor,
@@ -171,12 +166,7 @@ fn run_prover_phase(
         starting_log_inv_rate: config.log_inv_rate,
     };
 
-    let dft = EvalsDft::new(
-        1 << (log2_ceil_usize(setup.n_columns_24)
-            + config.log_n_poseidons_16.max(config.log_n_poseidons_24)
-            + config.log_inv_rate
-            - whir_config_builder.folding_factor.at_round(0)),
-    );
+    precompute_dft_twiddles::<F>(1 << 24);
 
     let dims = [
         vec![ColDims::full(config.log_n_poseidons_16); setup.n_columns_16],
@@ -195,7 +185,6 @@ fn run_prover_phase(
         &whir_config_builder,
         &commited_slices,
         &dims,
-        &dft,
         prover_state,
         log_smallest_decomposition_chunk,
     );
@@ -226,14 +215,13 @@ fn run_prover_phase(
     );
     let whir_config = WhirConfig::new(
         whir_config_builder.clone(),
-        log2_strict_usize(commitment_witness.packed_polynomial.len()),
+        commitment_witness.packed_polynomial.by_ref().n_vars(),
     );
     whir_config.prove(
-        &dft,
         prover_state,
         global_statements_to_prove,
         commitment_witness.inner_witness,
-        &commitment_witness.packed_polynomial,
+        &commitment_witness.packed_polynomial.by_ref(),
     );
 
     ProverArtifacts {
@@ -346,7 +334,6 @@ pub fn prove_poseidon2(config: &Poseidon2Config) -> Poseidon2Benchmark {
 
 #[cfg(test)]
 mod tests {
-    use whir_p3::whir::config::{FoldingFactor, SecurityAssumption};
 
     use super::*;
 
@@ -362,7 +349,7 @@ mod tests {
             pow_bits: 13,
             security_level: 128,
             rs_domain_initial_reduction_factor: 1,
-            max_num_variables_to_send_coeffs: 5,
+            max_num_variables_to_send_coeffs: 7,
             display_logs: false,
         };
         let benchmark = prove_poseidon2(&config);

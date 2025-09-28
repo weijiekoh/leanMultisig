@@ -6,26 +6,12 @@ https://eprint.iacr.org/2025/946.pdf
 with custom GKR
 
 */
+use multilinear_toolkit::prelude::*;
 use p3_field::PackedFieldExtension;
 use p3_field::PrimeCharacteristicRing;
 use p3_field::{ExtensionField, PrimeField64, dot_product};
-use rayon::prelude::*;
-use sumcheck::Mle;
-use sumcheck::MleGroupRef;
-use sumcheck::{SumcheckComputation, SumcheckComputationPacked};
 use tracing::instrument;
-use utils::pack_extension;
-use utils::packing_log_width;
-use utils::packing_width;
-use utils::unpack_extension;
-use utils::{EFPacking, FSProver, FSVerifier, PF, PFPacking};
-use whir_p3::fiat_shamir::FSChallenger;
-use whir_p3::fiat_shamir::errors::ProofError;
-use whir_p3::poly::dense::DensePolynomial;
-use whir_p3::poly::evals::EvaluationsList;
-use whir_p3::poly::evals::eval_eq;
-use whir_p3::poly::multilinear::Evaluation;
-use whir_p3::poly::multilinear::MultilinearPoint;
+use utils::{FSProver, FSVerifier};
 
 /*
 Custom GKR to compute sum of fractions.
@@ -171,7 +157,7 @@ where
             vec![u0_folded[0], u1_folded[0], u2_folded[0], u3_folded[0]],
         )
     } else {
-        let (mut sc_point, inner_evals, _) = sumcheck::prove::<EF, _, _, _>(
+        let (mut sc_point, inner_evals, _) = sumcheck_prove::<EF, _, _, _>(
             1,
             MleGroupRef::Extension(vec![u0_folded, u1_folded, u2_folded, u3_folded]),
             &GKRQuotientComputation { u4_const, u5_const },
@@ -293,7 +279,7 @@ where
 
     eq_poly_packed.resize(eq_poly_packed.len() / 2, Default::default());
 
-    let (mut sc_point, quarter_evals, _) = sumcheck::prove::<EF, _, _, _>(
+    let (mut sc_point, quarter_evals, _) = sumcheck_prove::<EF, _, _, _>(
         1,
         MleGroupRef::ExtensionPacked(vec![
             u0_folded_packed,
@@ -306,7 +292,7 @@ where
         &[],
         Some((
             claim.point.0[1..].to_vec(),
-            Some(Mle::ExtensionPacked(eq_poly_packed)),
+            Some(MleOwned::ExtensionPacked(eq_poly_packed)),
         )),
         false,
         prover_state,
@@ -375,7 +361,7 @@ where
     EF: ExtensionField<PF<EF>>,
     PF<EF>: PrimeField64,
 {
-    let (sc_eval, postponed) = sumcheck::verify_with_custom_degree_at_first_round(
+    let (sc_eval, postponed) = sumcheck_verify_with_custom_degree_at_first_round(
         verifier_state,
         current_layer_log_len,
         2,
