@@ -180,7 +180,7 @@ fn run_recursion_benchmark() -> RecursionBenchStats {
     // #[rustfmt::skip] // debug
     // std::fs::write("public_input.txt", build_public_memory(&public_input).chunks_exact(8).enumerate().map(|(i, chunk)| { format!("{} - {}: {}\n", i, i * 8, chunk.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")) }).collect::<String>(),).unwrap();
 
-    // utils::init_tracing();
+    utils::init_tracing();
     let (bytecode, function_locations) = compile_program(&program_str);
     let time = Instant::now();
     let (proof_data, proof_size) = prove_execution(

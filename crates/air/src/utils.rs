@@ -1,5 +1,6 @@
 use multilinear_toolkit::prelude::*;
 use p3_field::Field;
+use tracing::instrument;
 
 pub(crate) fn matrix_up_lde<F: Field>(point: &[F]) -> F {
     /*
@@ -129,11 +130,17 @@ fn next_mle<F: Field>(point: &[F]) -> F {
         .sum()
 }
 
+#[instrument(skip_all, fields(len = columns.len(), col_len = columns[0].len()))]
 pub(crate) fn columns_up_and_down<F: Field>(columns: &[&[F]]) -> Vec<Vec<F>> {
-    columns
-        .par_iter()
-        .map(|c| column_up(c))
-        .chain(columns.par_iter().map(|c| column_down(c)))
+    (0..columns.len() * 2)
+        .into_par_iter()
+        .map(|i| {
+            if i < columns.len() {
+                column_up(columns[i])
+            } else {
+                column_down(columns[i - columns.len()])
+            }
+        })
         .collect()
 }
 

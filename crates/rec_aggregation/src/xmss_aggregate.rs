@@ -308,7 +308,7 @@ pub fn bench_xmss(n: usize, log_lifetime: usize) -> Duration {
 
 #[test]
 fn test_xmss_aggregate() {
-    //utils::init_tracing();
+    utils::init_tracing();
     use p3_field::Field;
     let n_public_keys: usize = std::env::var("NUM_XMSS_AGGREGATED")
         .unwrap_or("100".to_string())
