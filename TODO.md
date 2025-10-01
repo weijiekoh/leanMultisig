@@ -84,7 +84,6 @@ But we reduce proof size a lot using instead (TODO):
 - current "packed PCS" is not optimal in the end: can lead to [16][4][2][2] (instead of [16][8])
 - avoid harcoding the proof in a file for recursion test
 - make test_packed_pcs pass again
-- fix WHIR if max_num_variables_to_send_coeffs is too small
 
 
 # Random ideas
