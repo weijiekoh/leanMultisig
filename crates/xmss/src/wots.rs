@@ -1,3 +1,4 @@
+use p3_field::PrimeCharacteristicRing;
 use p3_util::log2_strict_usize;
 use rand::{Rng, RngCore};
 use utils::{ToUsize, to_little_endian_bits};
@@ -41,7 +42,11 @@ impl WotsSecretKey {
         let (randomness, encoding) = find_randomness_for_wots_encoding(message_hash, rng);
         WotsSignature {
             chain_tips: std::array::from_fn(|i| {
-                iterate_hash(&self.pre_images[i], encoding[i] as usize, i % 2 == 1)
+                iterate_hash(
+                    &self.pre_images[i],
+                    encoding[i] as usize,
+                    i % 2 == 1 || (encoding[i] as usize) < W - 1,
+                )
             }),
             randomness,
         }
@@ -77,11 +82,11 @@ impl WotsPublicKey {
 }
 
 fn iterate_hash(a: &Digest, n: usize, keep_left: bool) -> Digest {
-    (0..n).fold(*a, |acc, _| {
-        if keep_left {
+    (0..n).fold(*a, |acc, i| {
+        if keep_left || i + 1 < n {
             poseidon16_compress(&acc, &Default::default())
         } else {
-            poseidon16_compress_right(&Default::default(), &acc)
+            poseidon16_compress_right(&acc, &Default::default())
         }
     })
 }
@@ -100,6 +105,9 @@ pub fn find_randomness_for_wots_encoding(
 
 pub fn wots_encode(message: &Digest, randomness: &Digest) -> Option<[u8; V]> {
     let compressed = poseidon16_compress(message, randomness);
+    if compressed.iter().any(|&kb| kb == -F::ONE) {
+        return None;
+    }
     let encoding: Vec<_> = compressed
         .iter()
         .flat_map(|kb| to_little_endian_bits(kb.to_usize(), 24))

@@ -66,6 +66,14 @@ pub enum IntermediateInstruction {
         res_offset: usize, // m[fp + res_offset..fp + res_offset + 31 * len(to_decompose)] will contain the decomposed bits
         to_decompose: Vec<IntermediateValue>,
     },
+    /// each field element x is decomposed to: (a0, a1, a2, ..., a11, b) where:
+    /// x = a0 + a1.4 + a2.4^2 + a3.4^3 + ... + a11.4^11 + b.2^24
+    /// and ai < 4, b < 2^7 - 1
+    /// The decomposition is unique, and always exists (except for x = -1)
+    DecomposeCustom {
+        res_offset: usize, // m[fp + res_offset..fp + res_offset + 13 * len(to_decompose)] will store the decomposed values
+        to_decompose: Vec<IntermediateValue>,
+    },
     CounterHint {
         res_offset: usize,
     },
@@ -201,6 +209,19 @@ impl Display for IntermediateInstruction {
                 to_decompose,
             } => {
                 write!(f, "m[fp + {res_offset}..] = decompose_bits(")?;
+                for (i, expr) in to_decompose.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{expr}")?;
+                }
+                write!(f, ")")
+            }
+            Self::DecomposeCustom {
+                res_offset,
+                to_decompose,
+            } => {
+                write!(f, "m[fp + {res_offset}..] = decompose_custom(")?;
                 for (i, expr) in to_decompose.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

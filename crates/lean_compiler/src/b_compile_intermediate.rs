@@ -551,6 +551,28 @@ fn compile_lines(
                     label,
                 );
             }
+            SimpleLine::DecomposeCustom {
+                var,
+                to_decompose,
+                label,
+            } => {
+                instructions.push(IntermediateInstruction::DecomposeCustom {
+                    res_offset: compiler.stack_size,
+                    to_decompose: to_decompose
+                        .iter()
+                        .map(|expr| IntermediateValue::from_simple_expr(expr, compiler))
+                        .collect(),
+                });
+
+                handle_const_malloc(
+                    declared_vars,
+                    &mut instructions,
+                    compiler,
+                    var,
+                    F::bits() * to_decompose.len(),
+                    label,
+                );
+            }
             SimpleLine::CounterHint { var } => {
                 declared_vars.insert(var.clone());
                 instructions.push(IntermediateInstruction::CounterHint {
@@ -744,6 +766,7 @@ fn find_internal_vars(lines: &[SimpleLine]) -> BTreeSet<Var> {
             SimpleLine::HintMAlloc { var, .. }
             | SimpleLine::ConstMalloc { var, .. }
             | SimpleLine::DecomposeBits { var, .. }
+            | SimpleLine::DecomposeCustom { var, .. }
             | SimpleLine::CounterHint { var } => {
                 internal_vars.insert(var.clone());
             }

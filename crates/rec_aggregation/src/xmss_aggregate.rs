@@ -9,6 +9,7 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 use xmss::{PhonyXmssSecretKey, V, XmssSignature};
 
+#[derive(Default, Debug)]
 struct XmssBenchStats {
     proving_time: Duration,
     proof_size: usize,
@@ -62,46 +63,42 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
         compressed = malloc_vec(2);
         poseidon16(message_hash, randomness, compressed);
         compressed_ptr = compressed * 8;
-        bits = decompose_bits(compressed_ptr[0], compressed_ptr[1], compressed_ptr[2], compressed_ptr[3], compressed_ptr[4], compressed_ptr[5]);
-        flipped_bits = malloc(186);
-        for i in 0..186 unroll {
-            flipped_bits[i] = 1 - bits[i];
+        decomposed = decompose_custom(compressed_ptr[0], compressed_ptr[1], compressed_ptr[2], compressed_ptr[3], compressed_ptr[4], compressed_ptr[5]);
+        
+        // check that the decomposition is correct
+        for i in 0..6 unroll {
+            for j in 0..12 unroll {
+                // TODO Implem range check (https://github.com/leanEthereum/leanMultisig/issues/52)
+                // For now we use dummy instructions to replicate exactly the cost
+
+                // assert decomposed[i * 13 + j] < 4;
+                dummy_0 = 88888888;
+                assert dummy_0 == 88888888;
+                assert dummy_0 == 88888888;
+                assert dummy_0 == 88888888;
+            }
+
+            // assert decomposed[i * 13 + 12] < 2^7 - 1;
+            dummy_1 = 88888888;
+            dummy_2 = 88888888;
+            dummy_3 = 88888888;
+            assert dummy_1 == 88888888;
+            assert dummy_2 == 88888888;
+            assert dummy_3 == 88888888;
+
+            partial_sums = malloc(12);
+            partial_sums[0] = decomposed[i * 13];
+            for j in 1..12 unroll {
+                partial_sums[j] = partial_sums[j - 1] + (decomposed[i * 13 + j]) * 4**j;
+            }
+            assert partial_sums[11] + (decomposed[i * 13 + 12]) * 4**12 == compressed_ptr[i];
         }
-        zero = 0;
-        for i in 0..186 unroll {
-            zero = flipped_bits[i] * bits[i]; // TODO remove the use of auxiliary var (currently it generates 2 instructions instead of 1)
-        }
+        
         encoding = malloc(12 * 6);
         for i in 0..6 unroll {
             for j in 0..12 unroll {
-                encoding[i * 12 + j] = bits[i * 31 + j * 2] + 2 * bits[i * 31 + j * 2 + 1];
+                encoding[i * 12 + j] = decomposed[i * 13 + j];
             }
-        }
-
-        // we need to check that the (hinted) bit decomposition corresponds to the field elements derived from poseidon
-
-        for i in 0..6 unroll {
-            powers_scaled_w = malloc(12);
-            for j in 0..12 unroll {
-                powers_scaled_w[j] = encoding[i*12 + j] * W**j;
-            }
-            powers_scaled_sum_w = malloc(11);
-            powers_scaled_sum_w[0] = powers_scaled_w[0] + powers_scaled_w[1];
-            for j in 1..11 unroll {
-                powers_scaled_sum_w[j] = powers_scaled_sum_w[j - 1] + powers_scaled_w[j + 1];
-            }
-
-            powers_scaled_2 = malloc(7);
-            for j in 0..7 unroll {
-                powers_scaled_2[j] = bits[31 * i + 24 + j] * 2**(24 + j);
-            }
-            powers_scaled_sum_2 = malloc(6);
-            powers_scaled_sum_2[0] = powers_scaled_2[0] + powers_scaled_2[1];
-            for j in 1..6 unroll {
-                powers_scaled_sum_2[j] = powers_scaled_sum_2[j - 1] + powers_scaled_2[j + 1];
-            }
-
-            assert powers_scaled_sum_w[10] + powers_scaled_sum_2[5] == compressed_ptr[i];
         }
 
         // we need to check the target sum
@@ -112,7 +109,6 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
         }
         assert sums[V - 1] == TARGET_SUM;
 
-
         public_key = malloc_vec(V * 2);
 
         chain_tips_ptr = 8 * chain_tips;
@@ -121,22 +117,33 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
         for i in 0..V / 2 unroll {
             match encoding[2 * i] {
                 0 => {
-                    chain_hash_1 = malloc_vec(2);
-                    chain_hash_2 = malloc_vec(2);
-                    poseidon16(pointer_to_zero_vector, chain_tips + 2 * i, chain_hash_1);
-                    poseidon16(pointer_to_zero_vector, chain_hash_1 + 1, chain_hash_2);
-                    poseidon16(pointer_to_zero_vector, chain_hash_2 + 1, public_key + 4 * i);
+                    var_1 = chain_tips + 2 * i;
+                    var_2 = public_key + 4 * i;
+                    var_3 = malloc_vec(2);
+                    var_4 = malloc_vec(2);
+                    poseidon16(var_1, pointer_to_zero_vector, var_3);
+                    poseidon16(var_3, pointer_to_zero_vector, var_4);
+                    poseidon16(var_4, pointer_to_zero_vector, var_2);
                 }
                 1 => {
-                    chain_hash_2 = malloc_vec(2);
-                    poseidon16(pointer_to_zero_vector, chain_tips +  2 * i, chain_hash_2);
-                    poseidon16(pointer_to_zero_vector, chain_hash_2 + 1, public_key + 4 * i);
+                    var_3 = malloc_vec(2);
+                    var_1 = chain_tips + 2 * i;
+                    var_2 = public_key + 4 * i;
+                    poseidon16(var_1, pointer_to_zero_vector, var_3);
+                    poseidon16(var_3, pointer_to_zero_vector, var_2);
                 }
                 2 => {
-                    poseidon16(pointer_to_zero_vector, chain_tips + 2 * i, public_key + 4 * i);
+                    var_1 = chain_tips + 2 * i;
+                    var_2 = public_key + 4 * i;
+                    poseidon16(var_1, pointer_to_zero_vector, var_2);
                 }
                 3 => {
-                    assert_eq_vec_deref(chain_tips_ptr + ((2 * i) * 8), public_key_ptr + ((4 * i + 1) * 8));
+                    var_1 = chain_tips_ptr + ((2 * i) * 8);
+                    var_2 = public_key_ptr + ((4 * i + 1) * 8);
+                    var_3 = var_1 + 3;
+                    var_4 = var_2 + 3;
+                    dot_product(var_1, pointer_to_one_vector * 8, var_2, 1);
+                    dot_product(var_3, pointer_to_one_vector * 8, var_4, 1);
                 }
             }
         }
@@ -144,30 +151,39 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
         for i in 0..V / 2 unroll {
             match encoding[2 * i + 1] {
                 0 => {
-                    chain_hash_1 = malloc_vec(2);
-                    chain_hash_2 = malloc_vec(2);
-                    poseidon16(chain_tips + 2 * i + 1, pointer_to_zero_vector, chain_hash_1);
-                    poseidon16(chain_hash_1, pointer_to_zero_vector, chain_hash_2);
-                    poseidon16(chain_hash_2, pointer_to_zero_vector, public_key + 4 * i + 2);
+                    var_1 = chain_tips + (2 * i + 1);
+                    var_2 = public_key + (4 * i + 2);
+                    var_3 = malloc_vec(2);
+                    var_4 = malloc_vec(2);
+                    poseidon16(var_1, pointer_to_zero_vector, var_3);
+                    poseidon16(var_3, pointer_to_zero_vector, var_4);
+                    poseidon16(var_4, pointer_to_zero_vector, var_2);
                 }
                 1 => {
-                    chain_hash_2 = malloc_vec(2);
-                    poseidon16(chain_tips +  2 * i + 1, pointer_to_zero_vector, chain_hash_2);
-                    poseidon16(chain_hash_2, pointer_to_zero_vector, public_key + (4 * i) + 2);
+                    var_1 = chain_tips + (2 * i + 1);
+                    var_2 = public_key + (4 * i + 2);
+                    var_3 = malloc_vec(2);
+                    poseidon16(var_1, pointer_to_zero_vector, var_3);
+                    poseidon16(var_3, pointer_to_zero_vector, var_2);
                 }
                 2 => {
-                    poseidon16(chain_tips + 2 * i + 1, pointer_to_zero_vector, public_key + 4 * i + 2);
+                    var_1 = chain_tips + (2 * i + 1);
+                    var_2 = public_key + (4 * i + 2);
+                    poseidon16(var_1, pointer_to_zero_vector, var_2);
                 }
                 3 => {
-                    assert_eq_vec_deref(chain_tips_ptr + ((2 * i + 1) * 8), public_key_ptr + ((4 * i + 2) * 8));
+                    var_1 = chain_tips_ptr + ((2 * i + 1) * 8);
+                    var_2 = public_key_ptr + ((4 * i + 2) * 8);
+                    var_3 = var_1 + 3;
+                    var_4 = var_2 + 3;
+                    dot_product(var_1, pointer_to_one_vector * 8, var_2, 1);
+                    dot_product(var_3, pointer_to_one_vector * 8, var_4, 1);
                 }
             }
         }
 
-
         public_key_hashed = malloc_vec(V / 2);
         poseidon24(public_key + 1, pointer_to_zero_vector, public_key_hashed);
-
 
         for i in 1..V / 2 unroll {
             poseidon24(public_key + (4 * i + 1), public_key_hashed + (i - 1), public_key_hashed + i);
@@ -199,13 +215,6 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
         ptr_y = y * 8;
         dot_product(ptr_x, pointer_to_one_vector * 8, ptr_y, 1);
         dot_product(ptr_x + 3, pointer_to_one_vector * 8, ptr_y + 3, 1);
-        return;
-    }
-
-    fn assert_eq_vec_deref(x, y) inline {
-        // x and y are normal pointer of len 8 each
-        dot_product(x, pointer_to_one_vector * 8, y, 1);
-        dot_product(x + 3, pointer_to_one_vector * 8, y + 3, 1);
         return;
     }
    "#.to_string();

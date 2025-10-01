@@ -10,6 +10,7 @@ impl IntermediateInstruction {
             Self::RequestMemory { .. }
             | Self::Print { .. }
             | Self::DecomposeBits { .. }
+            | Self::DecomposeCustom { .. }
             | Self::CounterHint { .. }
             | Self::Inverse { .. }
             | Self::LocationReport { .. } => true,
@@ -305,6 +306,19 @@ fn compile_block(
                 to_decompose,
             } => {
                 let hint = Hint::DecomposeBits {
+                    res_offset,
+                    to_decompose: to_decompose
+                        .iter()
+                        .map(|expr| try_as_mem_or_constant(expr).unwrap())
+                        .collect(),
+                };
+                hints.entry(pc).or_default().push(hint);
+            }
+            IntermediateInstruction::DecomposeCustom {
+                res_offset,
+                to_decompose,
+            } => {
+                let hint = Hint::DecomposeCustom {
                     res_offset,
                     to_decompose: to_decompose
                         .iter()

@@ -35,6 +35,17 @@ pub enum Hint {
         /// Values to decompose into bits
         to_decompose: Vec<MemOrConstant>,
     },
+    /// Decompose values into their custom representations:
+    /// each field element x is decomposed to: (a0, a1, a2, ..., a11, b) where:
+    /// x = a0 + a1.4 + a2.4^2 + a3.4^3 + ... + a11.4^11 + b.2^24
+    /// and ai < 4, b < 2^7 - 1
+    /// The decomposition is unique, and always exists (except for x = -1)
+    DecomposeCustom {
+        /// Memory offset for results: m[fp + res_offset..fp + res_offset + 13 * len(to_decompose)]
+        res_offset: usize,
+        /// Values to decompose into custom representation
+        to_decompose: Vec<MemOrConstant>,
+    },
     /// Provide a counter value
     CounterHint {
         /// Memory offset where counter result will be stored: m[fp + res_offset]
@@ -116,6 +127,22 @@ impl Hint {
                     }
                 }
             }
+            Self::DecomposeCustom {
+                res_offset,
+                to_decompose,
+            } => {
+                let mut memory_index = ctx.fp + *res_offset;
+                for value_source in to_decompose {
+                    let value = value_source.read_value(ctx.memory, ctx.fp)?.to_usize();
+                    for i in 0..12 {
+                        let value = F::from_usize((value >> (2 * i)) & 0b11);
+                        ctx.memory.set(memory_index, value)?;
+                        memory_index += 1;
+                    }
+                    ctx.memory.set(memory_index, F::from_usize(value >> 24))?;
+                    memory_index += 1;
+                }
+            }
             Self::CounterHint { res_offset } => {
                 ctx.memory
                     .set(ctx.fp + *res_offset, F::from_usize(*ctx.counter_hint))?;
@@ -193,6 +220,19 @@ impl Display for Hint {
                 to_decompose,
             } => {
                 write!(f, "m[fp + {res_offset}] = decompose_bits(")?;
+                for (i, v) in to_decompose.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{v}")?;
+                }
+                write!(f, ")")
+            }
+            Self::DecomposeCustom {
+                res_offset,
+                to_decompose,
+            } => {
+                write!(f, "m[fp + {res_offset}] = decompose_custom(")?;
                 for (i, v) in to_decompose.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

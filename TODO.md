@@ -12,7 +12,8 @@
 - avoid field embedding in the initial sumcheck of logup*, when table / values are in base field
 - opti logup* GKR when the indexes are not a power of 2 (which is the case in the execution table)
 - incremental merkle paths in whir-p3
-- Experiment to increase degree, and reduce commitments, in Poseidon arithmetization
+- Experiment to increase degree, and reduce commitments, in Poseidon arithmetization. 
+  Result: degree 9 is better than 3. TODO: degree 5, or 6 ? Also, the current degre 9 implem may not be perfectly optimal?
 - Avoid embedding overhead on the flag, len, and index columns in the AIR table for dot products
 - Batched logup*: when computing the eq() factor we can opti if the points contain boolean factor
 - Lev's trick to skip some low-level modular reduction
@@ -26,6 +27,7 @@
 - the interpreter of leanISA (+ witness generation) can be partially parallelized when there are some independent loops
 - (1 - x).r1 + x.r2 = x.(r2 - r1) + r1 TODO this opti is not everywhere currently + TODO generalize this with the univaraite skip
 - opti compute_eval_eq when scalar = ONE
+- Dmitry's range check, bonus: we can spare 2 memory cells if the value being range check is small (using the zeros present by conventio on the public memory)
 
 About "the packed pcs" (similar to SP1 Jagged PCS, slightly less efficient, but simpler (no sumchecks)):
 - The best strategy is probably to pack as much as possible (the cost increasing the density = additional inner evaluations), if we can fit below a power of 2 - epsilon  (epsilon = 20% for instance, tbd), if the sum of the non zero data is just above a power of 2, no packed technique, even the best, can help us, so we should spread aniway (to reduce the pressure of inner evaluations)
