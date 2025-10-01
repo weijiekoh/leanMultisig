@@ -19,9 +19,11 @@ use p3_poseidon2_air::generate_trace_rows;
 pub type Poseidon16 = Poseidon2KoalaBear<16>;
 pub type Poseidon24 = Poseidon2KoalaBear<24>;
 
+pub const QUARTER_FULL_ROUNDS_16: usize = 2;
 pub const HALF_FULL_ROUNDS_16: usize = 4;
 pub const PARTIAL_ROUNDS_16: usize = 20;
 
+pub const QUARTER_FULL_ROUNDS_24: usize = 2;
 pub const HALF_FULL_ROUNDS_24: usize = 4;
 pub const PARTIAL_ROUNDS_24: usize = 23;
 
@@ -36,6 +38,7 @@ pub type Poseidon16Air<F> = Poseidon2Air<
     16,
     SBOX_DEGREE,
     SBOX_REGISTERS,
+    QUARTER_FULL_ROUNDS_16,
     HALF_FULL_ROUNDS_16,
     PARTIAL_ROUNDS_16,
 >;
@@ -46,6 +49,7 @@ pub type Poseidon24Air<F> = Poseidon2Air<
     24,
     SBOX_DEGREE,
     SBOX_REGISTERS,
+    QUARTER_FULL_ROUNDS_24,
     HALF_FULL_ROUNDS_24,
     PARTIAL_ROUNDS_24,
 >;
@@ -151,6 +155,7 @@ pub fn generate_trace_poseidon_16(inputs: Vec<[KoalaBear; 16]>) -> RowMajorMatri
         16,
         SBOX_DEGREE,
         SBOX_REGISTERS,
+        QUARTER_FULL_ROUNDS_16,
         HALF_FULL_ROUNDS_16,
         PARTIAL_ROUNDS_16,
     >(inputs, &build_poseidon16_constants(), 0)
@@ -163,6 +168,7 @@ pub fn generate_trace_poseidon_24(inputs: Vec<[KoalaBear; 24]>) -> RowMajorMatri
         24,
         SBOX_DEGREE,
         SBOX_REGISTERS,
+        QUARTER_FULL_ROUNDS_24,
         HALF_FULL_ROUNDS_24,
         PARTIAL_ROUNDS_24,
     >(inputs, &build_poseidon24_constants(), 0)
