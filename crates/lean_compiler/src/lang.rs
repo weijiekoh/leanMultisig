@@ -351,6 +351,14 @@ pub enum Line {
         var: Var, // a pointer to 31 * len(to_decompose) field elements, containing the bits of "to_decompose"
         to_decompose: Vec<Expression>,
     },
+    /// each field element x is decomposed to: (a0, a1, a2, ..., a11, b) where:
+    /// x = a0 + a1.4 + a2.4^2 + a3.4^3 + ... + a11.4^11 + b.2^24
+    /// and ai < 4, b < 2^7 - 1
+    /// The decomposition is unique, and always exists (except for x = -1)
+    DecomposeCustom {
+        var: Var, // a pointer to 13 * len(to_decompose) field elements
+        to_decompose: Vec<Expression>,
+    },
     CounterHint {
         var: Var,
     },
@@ -532,6 +540,17 @@ impl Line {
             Self::DecomposeBits { var, to_decompose } => {
                 format!(
                     "{} = decompose_bits({})",
+                    var,
+                    to_decompose
+                        .iter()
+                        .map(|expr| expr.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            Self::DecomposeCustom { var, to_decompose } => {
+                format!(
+                    "{} = decompose_custom({})",
                     var,
                     to_decompose
                         .iter()

@@ -1583,6 +1583,7 @@ dependencies = [
 name = "xmss"
 version = "0.1.0"
 dependencies = [
+ "p3-field",
  "p3-koala-bear",
  "p3-symmetric",
  "p3-util",

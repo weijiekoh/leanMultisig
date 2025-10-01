@@ -206,6 +206,15 @@ impl FunctionCallParser {
                     to_decompose: args,
                 })
             }
+            "decompose_custom" => {
+                if args.is_empty() || return_data.len() != 1 {
+                    return Err(SemanticError::new("Invalid decompose_custom call").into());
+                }
+                Ok(Line::DecomposeCustom {
+                    var: return_data[0].clone(),
+                    to_decompose: args,
+                })
+            }
             "counter_hint" => {
                 if !args.is_empty() || return_data.len() != 1 {
                     return Err(SemanticError::new("Invalid counter_hint call").into());

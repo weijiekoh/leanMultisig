@@ -1,3 +1,4 @@
+use p3_field::PrimeCharacteristicRing;
 use p3_util::log2_strict_usize;
 use rand::{Rng, RngCore};
 use utils::{ToUsize, to_little_endian_bits};
@@ -104,6 +105,9 @@ pub fn find_randomness_for_wots_encoding(
 
 pub fn wots_encode(message: &Digest, randomness: &Digest) -> Option<[u8; V]> {
     let compressed = poseidon16_compress(message, randomness);
+    if compressed.iter().any(|&kb| kb == -F::ONE) {
+        return None;
+    }
     let encoding: Vec<_> = compressed
         .iter()
         .flat_map(|kb| to_little_endian_bits(kb.to_usize(), 24))

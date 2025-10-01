@@ -63,46 +63,42 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
         compressed = malloc_vec(2);
         poseidon16(message_hash, randomness, compressed);
         compressed_ptr = compressed * 8;
-        bits = decompose_bits(compressed_ptr[0], compressed_ptr[1], compressed_ptr[2], compressed_ptr[3], compressed_ptr[4], compressed_ptr[5]);
-        flipped_bits = malloc(186);
-        for i in 0..186 unroll {
-            flipped_bits[i] = 1 - bits[i];
+        decomposed = decompose_custom(compressed_ptr[0], compressed_ptr[1], compressed_ptr[2], compressed_ptr[3], compressed_ptr[4], compressed_ptr[5]);
+        
+        // check that the decomposition is correct
+        for i in 0..6 unroll {
+            for j in 0..12 unroll {
+                // TODO Implem range check (https://github.com/leanEthereum/leanMultisig/issues/52)
+                // For now we use dummy instructions to replicate exactly the cost
+
+                // assert decomposed[i * 13 + j] < 4;
+                dummy_0 = 88888888;
+                assert dummy_0 == 88888888;
+                assert dummy_0 == 88888888;
+                assert dummy_0 == 88888888;
+            }
+
+            // assert decomposed[i * 13 + 12] < 2^7 - 1;
+            dummy_1 = 88888888;
+            dummy_2 = 88888888;
+            dummy_3 = 88888888;
+            assert dummy_1 == 88888888;
+            assert dummy_2 == 88888888;
+            assert dummy_3 == 88888888;
+
+            partial_sums = malloc(12);
+            partial_sums[0] = decomposed[i * 13];
+            for j in 1..12 unroll {
+                partial_sums[j] = partial_sums[j - 1] + (decomposed[i * 13 + j]) * 4**j;
+            }
+            assert partial_sums[11] + (decomposed[i * 13 + 12]) * 4**12 == compressed_ptr[i];
         }
-        zero = 0;
-        for i in 0..186 unroll {
-            zero = flipped_bits[i] * bits[i]; // TODO remove the use of auxiliary var (currently it generates 2 instructions instead of 1)
-        }
+        
         encoding = malloc(12 * 6);
         for i in 0..6 unroll {
             for j in 0..12 unroll {
-                encoding[i * 12 + j] = bits[i * 31 + j * 2] + 2 * bits[i * 31 + j * 2 + 1];
+                encoding[i * 12 + j] = decomposed[i * 13 + j];
             }
-        }
-
-        // we need to check that the (hinted) bit decomposition corresponds to the field elements derived from poseidon
-
-        for i in 0..6 unroll {
-            powers_scaled_w = malloc(12);
-            for j in 0..12 unroll {
-                powers_scaled_w[j] = encoding[i*12 + j] * W**j;
-            }
-            powers_scaled_sum_w = malloc(11);
-            powers_scaled_sum_w[0] = powers_scaled_w[0] + powers_scaled_w[1];
-            for j in 1..11 unroll {
-                powers_scaled_sum_w[j] = powers_scaled_sum_w[j - 1] + powers_scaled_w[j + 1];
-            }
-
-            powers_scaled_2 = malloc(7);
-            for j in 0..7 unroll {
-                powers_scaled_2[j] = bits[31 * i + 24 + j] * 2**(24 + j);
-            }
-            powers_scaled_sum_2 = malloc(6);
-            powers_scaled_sum_2[0] = powers_scaled_2[0] + powers_scaled_2[1];
-            for j in 1..6 unroll {
-                powers_scaled_sum_2[j] = powers_scaled_sum_2[j - 1] + powers_scaled_2[j + 1];
-            }
-
-            assert powers_scaled_sum_w[10] + powers_scaled_sum_2[5] == compressed_ptr[i];
         }
 
         // we need to check the target sum
@@ -112,7 +108,6 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
             sums[i] = sums[i - 1] + encoding[i];
         }
         assert sums[V - 1] == TARGET_SUM;
-
 
         public_key = malloc_vec(V * 2);
 
