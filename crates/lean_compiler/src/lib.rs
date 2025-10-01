@@ -2,9 +2,13 @@ use std::collections::BTreeMap;
 
 use lean_vm::*;
 
-use crate::{
-    a_simplify_lang::simplify_program, b_compile_intermediate::compile_to_intermediate_bytecode,
-    c_compile_final::compile_to_low_level_bytecode, parser::parse_program,
+pub use crate::{
+    lang::{Line, Expression, SimpleExpr, ConstExpression},
+    a_simplify_lang::{SimpleLine, simplify_program},
+    b_compile_intermediate::compile_to_intermediate_bytecode,
+    c_compile_final::compile_to_low_level_bytecode,
+    parser::parse_program,
+    intermediate_bytecode::{IntermediateInstruction, IntermediateValue},
 };
 
 mod a_simplify_lang;
@@ -15,6 +19,7 @@ mod lang;
 mod parser;
 mod precompiles;
 pub use precompiles::PRECOMPILES;
+
 
 pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
     let (parsed_program, function_locations) = parse_program(program).unwrap();
@@ -29,9 +34,9 @@ pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
 }
 
 pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F], profiler: bool) {
-    let (bytecode, function_locations) = compile_program(program);
+    let (mut bytecode, function_locations) = compile_program(program);
     let _r = execute_bytecode(
-        &bytecode,
+        &mut bytecode,
         public_input,
         private_input,
         program,

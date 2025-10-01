@@ -14,10 +14,19 @@ use crate::lean_isa::*;
 use crate::profiler::profiling_report;
 use crate::stack_trace::pretty_stack_trace;
 use crate::*;
+use crate::error::RunnerError;
 use p3_field::Field;
 use p3_symmetric::Permutation;
 
 const STACK_TRACE_INSTRUCTIONS: usize = 5000;
+
+#[derive(Debug, Clone)]
+pub struct RangeCheckInstrs {
+    step_1: Instruction,
+    step_2: Instruction,
+    step_3a: Option<Instruction>,
+    step_3b: Instruction,
+}
 
 impl MemOrConstant {
     pub fn read_value(&self, memory: &Memory, fp: usize) -> Result<F, RunnerError> {
@@ -87,8 +96,31 @@ pub(crate) struct ExecutionHistory {
     pub(crate) cycles: Vec<usize>, // for each line, how many cycles it took
 }
 
+fn print_execution_error(
+    err: &RunnerError,
+    std_out: &str,
+    instruction_history: &ExecutionHistory,
+    source_code: &str,
+    function_locations: &BTreeMap<usize, String>,
+) {
+    let lines_history = &instruction_history.lines;
+    let latest_instructions =
+        &lines_history[lines_history.len().saturating_sub(STACK_TRACE_INSTRUCTIONS)..];
+    println!(
+        "\n{}",
+        pretty_stack_trace(source_code, latest_instructions, function_locations)
+    );
+    if !std_out.is_empty() {
+        println!("╔══════════════════════════════════════════════════════════════╗");
+        println!("║                         STD-OUT                              ║");
+        println!("╚══════════════════════════════════════════════════════════════╝\n");
+        print!("{std_out}");
+    }
+    println!("Execution failed with error: {:?}", err);
+}
+
 pub fn execute_bytecode(
-    bytecode: &Bytecode,
+    bytecode: &mut Bytecode,
     public_input: &[F],
     private_input: &[F],
     source_code: &str,                            // debug purpose
@@ -108,27 +140,82 @@ pub fn execute_bytecode(
         false,
         function_locations,
     ) {
-        Ok(first_exec) => first_exec,
+        Ok(first_exec) => {
+            println!("First execution: Ok");
+            first_exec
+        }
         Err(err) => {
-            let lines_history = &instruction_history.lines;
-            let latest_instructions =
-                &lines_history[lines_history.len().saturating_sub(STACK_TRACE_INSTRUCTIONS)..];
-            println!(
-                "\n{}",
-                pretty_stack_trace(source_code, latest_instructions, function_locations)
-            );
-            if !std_out.is_empty() {
-                println!("╔══════════════════════════════════════════════════════════════╗");
-                println!("║                         STD-OUT                              ║");
-                println!("╚══════════════════════════════════════════════════════════════╝\n");
-                print!("{std_out}");
-            }
+            println!("First execution: Err");
+            print_execution_error(&err, &std_out, &instruction_history, source_code, function_locations);
 
             return Err(err);
         }
     };
+
+    println!("ending_pc: {}", bytecode.ending_pc);
+    println!("\nSECOND EXEC: ----------------------------------");
+
+    // If range-checks are present, replace the Instruction::RangeCheck instances with the actual
+    // range check instructions
+    if first_exec.range_check_pcs.is_some() {
+        let range_check_pcs = first_exec.range_check_pcs.unwrap();
+        let range_check_instrs = first_exec.range_check_instrs.unwrap();
+
+        let mut repls = Vec::with_capacity(range_check_pcs.len());
+        for pc in &range_check_pcs {
+            let step_1 = range_check_instrs.get(pc).unwrap().step_1.clone();
+            let step_2 = range_check_instrs.get(pc).unwrap().step_2.clone();
+            let step_3b = range_check_instrs.get(pc).unwrap().step_3b.clone();
+
+            let step_3a = range_check_instrs.get(pc).unwrap().step_3a.clone();
+            if step_3a.is_some() {
+                let step_3a = step_3a.unwrap();
+                let step_3b = range_check_instrs.get(pc).unwrap().step_3b.clone();
+                repls.push(vec![step_1, step_2, step_3a, step_3b]);
+                bytecode.ending_pc += 3;
+            } else {
+                repls.push(vec![step_1, step_2, step_3b]);
+                bytecode.ending_pc += 2;
+                //repls.push(vec![step_1]);
+                //bytecode.ending_pc += 1;
+                //repls.push(vec![step_1, step_2]);
+                //bytecode.ending_pc += 0;
+            }
+        }
+
+        let repl_slices: Vec<&[Instruction]> = repls.iter().map(|v| v.as_slice()).collect();
+        bytecode.instructions = splice_many(
+            &bytecode.instructions,
+            &range_check_pcs,
+            &repl_slices,
+        ).unwrap();
+
+        // Update the final 2 jump instructions
+        let num_instructions = bytecode.instructions.len();
+        let final_jump = bytecode.instructions[num_instructions - 2].clone();
+        let final_jump_2 = bytecode.instructions[num_instructions - 1].clone();
+
+        assert!(matches!(final_jump, Instruction::Jump { .. }));
+        assert!(matches!(final_jump_2, Instruction::Jump { .. }));
+
+        let final_jump = Instruction::Jump {
+            condition: MemOrConstant::one(),
+            dest: MemOrConstant::Constant(F::from_usize(num_instructions - 1)),
+            updated_fp: MemOrFp::Fp,
+        };
+
+        bytecode.instructions[num_instructions - 2] = final_jump.clone();
+        bytecode.instructions[num_instructions - 1] = final_jump.clone();
+
+        println!("Bytecode after adding range checks:");
+        println!("{}", bytecode);
+        println!("ending_pc: {}", bytecode.ending_pc);
+    } else {
+        println!("No range checks found");
+    }
+
     instruction_history = ExecutionHistory::default();
-    execute_bytecode_helper(
+    let second_exec = match execute_bytecode_helper(
         bytecode,
         public_input,
         private_input,
@@ -138,7 +225,19 @@ pub fn execute_bytecode(
         &mut instruction_history,
         profiler,
         function_locations,
-    )
+    ) {
+        Ok(second_exec) => {
+            println!("Second execution: Ok\n----------------------------------\n");
+            Ok(second_exec)
+        }
+        Err(err) => {
+            println!("Second execution: Err");
+            print_execution_error(&err, &std_out, &instruction_history, source_code, function_locations);
+
+            return Err(err);
+        }
+    };
+    second_exec
 }
 
 #[derive(Debug)]
@@ -148,6 +247,8 @@ pub struct ExecutionResult {
     pub memory: Memory,
     pub pcs: Vec<usize>,
     pub fps: Vec<usize>,
+    pub range_check_instrs: Option<BTreeMap<usize, RangeCheckInstrs>>,
+    pub range_check_pcs: Option<Vec<usize>>,
 }
 
 pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
@@ -245,8 +346,11 @@ fn execute_bytecode_helper(
     let mut counter_hint = 0;
     let mut cpu_cycles_before_new_line = 0;
 
+    let mut range_check_pcs: Vec<usize> = Vec::new();
+    let mut range_check_instrs: BTreeMap<usize, RangeCheckInstrs> = BTreeMap::new();
+
     while pc != bytecode.ending_pc {
-        //println!("pc: {}; fp: {}", pc, fp);
+        println!("pc: {}", pc);
         if pc >= bytecode.instructions.len() {
             return Err(RunnerError::PCOutOfBounds);
         }
@@ -402,13 +506,18 @@ fn execute_bytecode_helper(
                 res,
             } => {
                 if res.is_value_unknown(&memory, fp) {
+                    println!("unknown");
                     let memory_address_res = res.memory_address(fp)?;
                     let ptr = memory.get(fp + shift_0)?;
+                    println!("ptr = m[fp + shift_0]: m[{} + {}] = {}", fp, shift_0, ptr);
+                    println!("memory.get(ptr.to_usize() + shift_1)");
                     let value = memory.get(ptr.to_usize() + shift_1)?;
                     memory.set(memory_address_res, value)?;
                 } else {
+                    println!("known");
                     let value = res.read_value(&memory, fp)?;
                     let ptr = memory.get(fp + shift_0)?;
+                    println!("ptr = fp + shift_0: {} + {} = {}", fp, shift_0, ptr);
                     memory.set(ptr.to_usize() + shift_1, value)?;
                 }
 
@@ -430,6 +539,84 @@ fn execute_bytecode_helper(
                 }
 
                 jump_counts += 1;
+            }
+            // The second execution should not contain any range checks
+            // because after the first execution, which figures out which aux values to set,
+            // the runner will replace Instruction::RangeCheck instances with the actual 3-step
+            // range check instructions (deref, add, and deref)
+            Instruction::RangeCheck { value, max } => {
+                let v = value.read_value(&memory, fp)?;
+                let max_val = max.read_value(&memory, fp)?;
+                let v_usize = v.to_usize();
+                let t_usize = max_val.to_usize();
+
+                // The runner should OOM at step 1 or step 3 if value >= max. See section 2.5.3 of
+                // minimal_zkVM.pdf.
+
+                range_check_pcs.push(pc);
+
+                let i = 3;
+
+                // Get x, which is the offset of m[fp + x] where value is stored
+                // m[m[fp + x] + 0]
+                let x = match value {
+                    MemOrFp::MemoryAfterFp { offset } => *offset,
+                    MemOrFp::Fp => 0,
+                };
+
+                // Step 1: if m[val] is undefined, set it to 0 via deref
+                // Otherwise, set m[fp + i] to m[val]
+                let step_1 = if matches!(memory.get(v_usize), Err(RunnerError::UndefinedMemory)) {
+                    Instruction::Deref {
+                        shift_0: x,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::Constant(F::ZERO),
+                    }
+                } else {
+                    Instruction::Deref {
+                        shift_0: x,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::MemoryAfterFp { offset: i },
+                    }
+                };
+
+                let mut j = i + 1;
+                if j == v_usize {
+                    j += 1;
+                }
+                let step_2 = Instruction::Computation {
+                    operation: Operation::Add,
+                    arg_a: MemOrConstant::MemoryAfterFp { offset: j },
+                    arg_c: MemOrFp::MemoryAfterFp { offset: x },
+                    res: MemOrConstant::Constant(F::from_usize(t_usize - 1)),
+                };
+
+                // For step 3, m[fp + k] needs to be defined!
+                let mut k = j + 1;
+
+                let step_3a = Instruction::Deref {
+                    shift_0: x,
+                    shift_1: 0,
+                    res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
+                };
+
+                let step_3b = Instruction::Deref {
+                    shift_0: j,
+                    shift_1: 0,
+                    res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
+                };
+
+                println!("i: {}, j: {}, k: {}", i, j, k);
+                let rca = RangeCheckInstrs {
+                    step_1,
+                    step_2,
+                    step_3a: Some(step_3a),
+                    step_3b,
+                };
+
+                range_check_instrs.insert(pc, rca);
+
+                pc += 1;
             }
             Instruction::Poseidon2_16 { arg_a, arg_b, res } => {
                 poseidon16_calls += 1;
@@ -625,11 +812,91 @@ fn execute_bytecode_helper(
     }
 
     let no_vec_runtime_memory = ap - initial_ap;
-    Ok(ExecutionResult {
-        no_vec_runtime_memory,
-        public_memory_size,
-        memory,
-        pcs,
-        fps,
-    })
+
+    if range_check_pcs.is_empty() {
+        return Ok(ExecutionResult {
+            no_vec_runtime_memory,
+            public_memory_size,
+            memory,
+            pcs,
+            fps,
+            range_check_instrs: None,
+            range_check_pcs: None,
+        });
+    } else {
+        return Ok(ExecutionResult {
+            no_vec_runtime_memory,
+            public_memory_size,
+            memory,
+            pcs,
+            fps,
+            range_check_instrs: Some(range_check_instrs),
+            range_check_pcs: Some(range_check_pcs),
+        });
+    }
+}
+
+//fn replace_range_check_instrs(
+    //bytecode: &mut Bytecode,
+    //range_check_pcs: &Vec<usize>,
+    //range_check_instrs: &BTreeMap<usize, RangeCheckInstrs>,
+//) {
+    //for (pc, instrs) in range_check_instrs.iter() {
+        //for instr in instrs {
+            //bytecode.instructions[*pc] = instr.clone();
+        //}
+    //}
+//}
+//
+/// Replace elements at `indices` with corresponding `repls` (same length).
+/// Indices may be unsorted; duplicates or OOB will error.
+fn splice_many<T: Clone>(
+    base: &[T],
+    indices: &[usize],
+    repls: &[&[T]],
+) -> Result<Vec<T>, &'static str> {
+    if indices.len() != repls.len() {
+        return Err("indices and repls must have the same length");
+    }
+
+    let mut pairs: Vec<(usize, &[T])> = indices.iter().cloned().zip(repls.iter().cloned()).collect();
+    pairs.sort_by_key(|p| p.0);
+
+    for w in pairs.windows(2) {
+        if w[0].0 == w[1].0 { return Err("duplicate index"); }
+    }
+    if pairs.iter().any(|(i, _)| *i >= base.len()) {
+        return Err("index out of bounds");
+    }
+
+    let extra = pairs.iter().map(|(_, r)| r.len()).sum::<usize>() as isize
+        - pairs.len() as isize;
+    let cap = (base.len() as isize + extra).max(0) as usize;
+
+    let mut out = Vec::with_capacity(cap);
+    let mut it = pairs.into_iter().peekable();
+
+    for (i, item) in base.iter().enumerate() {
+        if let Some(&(idx, repl)) = it.peek() {
+            if idx == i {
+                out.extend_from_slice(repl); // insert replacement
+                it.next();                   // consume this pair
+                continue;                    // skip original element at i
+            }
+        }
+        out.push(item.clone());
+    }
+    Ok(out)
+}
+
+#[test]
+fn test_splice_many() {
+    let a = [1, 2, 3, 4, 5];
+    let indices = [1, 3];                   // positions to replace
+    let c1 = [8];
+    let c2 = [9];
+    let repls: &[&[i32]] = &[&c1, &c2];
+
+    let out = splice_many(&a, &indices, repls).unwrap();
+    assert_eq!(out, vec![1, 8, 3, 9, 5]);
 }

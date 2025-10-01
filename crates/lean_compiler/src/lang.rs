@@ -358,6 +358,10 @@ pub enum Line {
     LocationReport {
         location: LocationInSourceCode,
     },
+    RangeCheck {
+        value: Expression,
+        max: ConstExpression,
+    },
 }
 impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -542,6 +546,7 @@ impl Line {
             }
             Self::Break => "break".to_string(),
             Self::Panic => "panic".to_string(),
+            Self::RangeCheck { value, max } => format!("range_check({value}, {max})")
         };
         format!("{spaces}{line_str}")
     }

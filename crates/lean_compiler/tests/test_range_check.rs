@@ -1,7 +1,171 @@
-use lean_vm::RunnerError;
+use std::collections::BTreeMap;
 use lean_vm::*;
 use p3_field::PrimeCharacteristicRing;
-use std::collections::BTreeMap;
+use lean_compiler::{parse_program, compile_program};
+use lean_compiler::{Expression, SimpleExpr, Line, SimpleLine, simplify_program, compile_to_intermediate_bytecode, compile_to_low_level_bytecode, IntermediateInstruction, IntermediateValue};
+use utils::ToUsize;
+
+fn range_check_test_cases() -> Vec<(usize, usize)> {
+    let mut test_cases = vec![];
+    for t in 63..70 {
+        for v in 0..t + 2 {
+            test_cases.push((v, t));
+        }
+        for v in 16777215..16777217 {
+            test_cases.push((v, t));
+        }
+    }
+
+    for v in 90..100 {
+        let t = 16777216 + 1 + v;
+        test_cases.push((v, t));
+    }
+
+    test_cases
+}
+
+fn range_check_program(value: usize, max: usize) -> String {
+    let program = format!(r#"
+    fn main() {{
+        val = {};
+        range_check(val, {});
+        return;
+    }}
+    "#, value, max);
+    program.to_string()
+}
+
+#[test]
+fn test_range_check_compilation_and_execution() {
+    //for (v, t) in range_check_test_cases() {
+    for (v, t) in vec![(0, 68), (63, 63), (15, 63)] {
+    //for (v, t) in vec![(0, 68)] {
+    //for (v, t) in vec![(16777217, 68)] {
+        println!("Range Check Test: v: {}, t: {}", v, t);
+        let program = range_check_program(v, t);
+        let (mut bytecode, function_locations) = compile_program(&program);
+        let result = execute_bytecode(
+            &mut bytecode,
+            &[],
+            &[],
+            &program,
+            &function_locations,
+            false,
+        );
+
+        if v >= t {
+            assert!(
+                matches!(result, Err(RunnerError::OutOfMemory)),
+                "range check failed to catch OOM"
+            );
+        } else {
+            assert!(result.is_ok());
+        }
+        
+    }
+    //for v in 0..100 {
+        ////let v = 1;
+        ////let v = 16777216;
+        //let t = 200;
+        //println!("Range Check Test: v: {}, t: {}", v, t);
+        //let program = range_check_program(v, t);
+        //let (mut bytecode, function_locations) = compile_program(&program);
+        //println!("{}", bytecode.to_string());
+        //let result = execute_bytecode(
+            //&mut bytecode,
+            //&[],
+            //&[],
+            //&program,
+            //&function_locations,
+            //false,
+        //);
+        //assert!(result.is_ok());
+    //}
+}
+
+/// Simple test that the range check keyword is parsed and compiled (steps a and b only).
+#[test]
+fn test_range_check_parsing_and_compilation_a_b() {
+    let value_usize = 1;
+    let max_usize = 2;
+    let program = range_check_program(value_usize, max_usize);
+    let (parsed_program, _function_locations) = parse_program(&program).unwrap();
+
+    // Traverse through the parsed program and check that the range check is present
+    let main_func = parsed_program.functions.get("main").unwrap();
+    let mut found = false;
+    for line in main_func.body.iter() {
+        match line {
+            Line::RangeCheck { value, max } => {
+                match value {
+                    Expression::Value(SimpleExpr::Var(v)) => {
+                        assert_eq!(v, "val", "Range check value should be 'val'");
+                        if let Some(max_val) = max.naive_eval() {
+                            assert_eq!(max_val.to_usize(), max_usize, "Range check max should be 2");
+                        }
+                    }
+                    _ => panic!("Unexpected range check value type: {:?}", value),
+                }
+                
+                found = true;
+            }
+            _ => {}
+        }
+    }
+    assert!(found, "Range check not found in the parsed program");
+
+    found = false;
+    let simple_program = simplify_program(parsed_program);
+    let main_func = simple_program.functions.get("main").unwrap();
+
+    // Traverse through the simplified program and check that the range check is present
+    for line in main_func.instructions.iter() {
+        match line {
+            SimpleLine::RangeCheck { value, max } => {
+                match value {
+                    SimpleExpr::Var(v) => {
+                        assert_eq!(v, "val", "Range check value should be 'val'");
+                        if let Some(max_val) = max.naive_eval() {
+                            assert_eq!(max_val.to_usize(), max_usize, "Range check max should be 2");
+                        }
+                    }
+                    _ => panic!("Unexpected range check value type: {:?}", value),
+                }
+                found = true;
+            }
+            _ => {}
+        }
+
+    }
+    assert!(found, "Range check not found in the simplified program");
+
+    found = false;
+    let intermediate_bytecode = compile_to_intermediate_bytecode(simple_program).unwrap();
+    let main_func = intermediate_bytecode.bytecode.get("@function_main").unwrap();
+    for instruction in main_func.iter() {
+        match instruction {
+            IntermediateInstruction::RangeCheck { value, max } => {
+                assert!(matches!(value, IntermediateValue::MemoryAfterFp { .. }), 
+                       "Range check value should be memory reference in intermediate bytecode");
+                
+                if let Some(max_val) = max.naive_eval() {
+                    assert_eq!(max_val.to_usize(), max_usize, "Range check max should be 2 in intermediate bytecode");
+                } else {
+                    panic!("Range check max should be evaluable constant in intermediate bytecode");
+                }
+                
+                found = true;
+            }
+            _ => {}
+        }
+    }
+    assert!(found, "Range check not found in the intermediate bytecode");
+
+    let compiled = compile_to_low_level_bytecode(intermediate_bytecode).unwrap();
+    println!("Compiled Program:\n{}\n", compiled.to_string());
+
+    assert!(found, "Range check not found in the intermediate bytecode");
+}
 
 // Passes if the range check works when v < t
 fn do_test_valid_range_check(v: usize, t: usize) {
@@ -91,8 +255,18 @@ fn test_invalid_range_check_5() {
 
 #[test]
 fn test_invalid_range_check_6() {
-    do_test_invalid_range_check(16777215, 0);
-    do_test_invalid_range_check(16777216, 16777216);
+    let t = 0;
+    for v in 0..70 {
+        do_test_invalid_range_check(v, t);
+    }
+    do_test_invalid_range_check(16777215, t);
+}
+
+#[test]
+fn test_invalid_range_check_7() {
+    for v in 0..10 {
+        do_test_invalid_range_check(16777216 + v, 16777216);
+    }
 }
 
 //#[test]
@@ -166,8 +340,7 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
         res: step_1_res,
     });
 
-    // Range check step 2:
-    // 2. Using ADD, ensure (via constraint-solving):
+    // Range check step 2: Using ADD, ensure (via constraint-solving):
     // m[fp + j] + m[m[fp + x]] = (t - 1)
     // m[fp + j] = (t - 1) - m[m[fp + x]]
     instructions.push(Instruction::Computation {
@@ -227,7 +400,7 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
     });
 
     let ending_pc = instructions.len() - 1;
-    let bytecode = Bytecode {
+    let mut bytecode = Bytecode {
         instructions,
         hints,
         starting_frame_memory,
@@ -239,7 +412,7 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
 
     // Execute the bytecode
     let execution_result = execute_bytecode(
-        &bytecode,
+        &mut bytecode,
         &[],                                // public input
         &[],                                // private input
         "",                                 // no source code for debug

@@ -58,6 +58,11 @@ pub enum Instruction {
         dest: MemOrConstant,
         updated_fp: MemOrFp,
     },
+    // Range check
+    RangeCheck {
+        value: MemOrFp,
+        max: MemOrConstant, // TODO: support the MemoryAfterFp variant
+    },
     // 4 precompiles:
     Poseidon2_16 {
         arg_a: MemOrConstant, // vectorized pointer, of size 1
@@ -234,6 +239,9 @@ impl Display for Instruction {
                     f,
                     "if {condition} != 0 jump to {dest} with next(fp) = {updated_fp}"
                 )
+            }
+            Self::RangeCheck { value, max } => {
+                write!(f, "range_check({value}, {max})")
             }
             Self::Poseidon2_16 { arg_a, arg_b, res } => {
                 write!(f, "{res} = poseidon2_16({arg_a}, {arg_b})")

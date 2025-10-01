@@ -198,6 +198,7 @@ fn parse_statement(
         Rule::function_call => parse_function_call(inner, constants, trash_var_count),
         Rule::assert_eq_statement => parse_assert_eq(inner, constants),
         Rule::assert_not_eq_statement => parse_assert_not_eq(inner, constants),
+        Rule::range_check_statement => parse_range_check_statement(inner, constants),
         Rule::break_statement => Ok(Line::Break),
         Rule::continue_statement => todo!("Continue statement not implemented yet"),
         _ => Err(ParseError::SemanticError("Unknown statement".to_string())),
@@ -635,6 +636,18 @@ fn parse_assert_not_eq(
     let left = parse_expression(inner.next().unwrap(), constants)?;
     let right = parse_expression(inner.next().unwrap(), constants)?;
     Ok(Line::Assert(Boolean::Different { left, right }))
+}
+
+fn parse_range_check_statement(
+    pair: Pair<'_, Rule>,
+    constants: &BTreeMap<String, usize>,
+) -> Result<Line, ParseError> {
+    let mut inner = pair.into_inner();
+    let value = parse_expression(inner.next().unwrap(), constants)?;
+    let max_expr = parse_expression(inner.next().unwrap(), constants)?;
+    let max = ConstExpression::try_from(max_expr)
+        .map_err(|_| ParseError::SemanticError("Range check max must be a constant expression".to_string()))?;
+    Ok(Line::RangeCheck { value, max })
 }
 
 fn parse_var_or_constant(

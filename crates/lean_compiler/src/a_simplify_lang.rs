@@ -139,6 +139,10 @@ pub enum SimpleLine {
     LocationReport {
         location: LocationInSourceCode,
     },
+    RangeCheck {
+        value: SimpleExpr,
+        max: ConstExpression,
+    },
 }
 
 pub fn simplify_program(mut program: Program) -> SimpleProgram {
@@ -664,6 +668,14 @@ fn simplify_lines(
                     location: *location,
                 });
             }
+            Line::RangeCheck { value, max } => {
+                let simplified_value =
+                    simplify_expr(value, &mut res, counters, array_manager, const_malloc);
+                res.push(SimpleLine::RangeCheck {
+                    value: simplified_value,
+                    max: max.clone(),
+                });
+            }
         }
     }
 
@@ -870,7 +882,10 @@ pub fn find_variable_usage(lines: &[Line]) -> (BTreeSet<Var>, BTreeSet<Var>) {
                 on_new_expr(index, &internal_vars, &mut external_vars);
                 on_new_expr(value, &internal_vars, &mut external_vars);
             }
-            Line::Panic | Line::Break | Line::LocationReport { .. } => {}
+            Line::Panic 
+            | Line::Break 
+            | Line::LocationReport { .. }
+            | Line::RangeCheck { .. } => {}
         }
     }
 
@@ -1033,7 +1048,10 @@ pub fn inline_lines(
                 inline_expr(index, args, inlining_count);
                 inline_expr(value, args, inlining_count);
             }
-            Line::Panic | Line::Break | Line::LocationReport { .. } => {}
+            Line::Panic 
+            | Line::Break 
+            | Line::LocationReport { .. } 
+            | Line::RangeCheck { .. } => {}
         }
     }
     for (i, new_lines) in lines_to_replace.into_iter().rev() {
@@ -1501,7 +1519,10 @@ fn replace_vars_for_unroll(
             Line::CounterHint { var } => {
                 *var = format!("@unrolled_{unroll_index}_{iterator_value}_{var}");
             }
-            Line::Break | Line::Panic | Line::LocationReport { .. } => {}
+            Line::Break 
+            | Line::Panic
+            | Line::LocationReport { .. }
+            | Line::RangeCheck { .. } => {}
         }
     }
 }
@@ -1812,7 +1833,8 @@ fn get_function_called(lines: &[Line], function_called: &mut Vec<String>) {
             | Line::MAlloc { .. }
             | Line::Panic
             | Line::Break
-            | Line::LocationReport { .. } => {}
+            | Line::LocationReport { .. }
+            | Line::RangeCheck { .. } => {}
         }
     }
 }
@@ -1915,7 +1937,10 @@ fn replace_vars_by_const_in_lines(lines: &mut [Line], map: &BTreeMap<Var, F>) {
                 assert!(!map.contains_key(var), "Variable {var} is a constant");
                 replace_vars_by_const_in_expr(size, map);
             }
-            Line::Panic | Line::Break | Line::LocationReport { .. } => {}
+            Line::Panic 
+            | Line::Break 
+            | Line::LocationReport { .. }
+            | Line::RangeCheck { .. } => {}
         }
     }
 }
@@ -2088,6 +2113,9 @@ impl SimpleLine {
             }
             Self::Panic => "panic".to_string(),
             Self::LocationReport { .. } => Default::default(),
+            Self::RangeCheck { value, max } => {
+                format!("range_check({value}, {max})")
+            }
         };
         format!("{spaces}{line_str}")
     }

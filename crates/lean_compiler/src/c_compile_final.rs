@@ -21,7 +21,8 @@ impl IntermediateInstruction {
             | Self::Poseidon2_16 { .. }
             | Self::Poseidon2_24 { .. }
             | Self::DotProduct { .. }
-            | Self::MultilinearEval { .. } => false,
+            | Self::MultilinearEval { .. } 
+            | Self::RangeCheck { .. } => false,
         }
     }
 }
@@ -273,6 +274,13 @@ fn compile_block(
                     point: point.try_into_mem_or_constant(compiler).unwrap(),
                     res: res.try_into_mem_or_fp(compiler).unwrap(),
                     n_vars: eval_const_expression_usize(&n_vars, compiler),
+                });
+            }
+            IntermediateInstruction::RangeCheck { value, max } => {
+                low_level_bytecode.push(Instruction::RangeCheck {
+                    value: value.try_into_mem_or_fp(compiler).unwrap(),
+                    // TODO: support max being an IntermediateValue
+                    max: MemOrConstant::Constant(eval_const_expression(&max, compiler)),
                 });
             }
             IntermediateInstruction::DecomposeBits {
