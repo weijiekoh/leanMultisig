@@ -6,7 +6,7 @@ https://eprint.iacr.org/2025/946.pdf
 */
 
 use multilinear_toolkit::prelude::*;
-use p3_field::{ExtensionField, Field, PrimeField64};
+use p3_field::{ExtensionField, PrimeField64};
 use utils::ToUsize;
 
 use p3_field::PrimeCharacteristicRing;
@@ -23,48 +23,50 @@ pub struct LogupStarStatements<EF> {
 }
 
 #[instrument(skip_all)]
-pub fn prove_logup_star<IF, EF>(
+pub fn prove_logup_star<EF>(
     prover_state: &mut FSProver<EF, impl FSChallenger<EF>>,
-    table: &[IF],
+    table: &MleRef<'_, EF>,
     indexes: &[PF<EF>],
     claimed_value: EF,
     poly_eq_point: &[EF],
     pushforward: &[EF], // already commited
 ) -> LogupStarStatements<EF>
 where
-    IF: Field,
-    EF: ExtensionField<PF<EF>> + ExtensionField<IF>,
+    EF: ExtensionField<PF<EF>>,
     PF<EF>: PrimeField64,
 {
-    let table_length = table.len();
+    let table_length = table.unpacked_len();
     let indexes_length = indexes.len();
 
-    let table_embedded = info_span!("embedding")
-        .in_scope(|| table.par_iter().map(|&x| EF::from(x)).collect::<Vec<_>>());
-
-    let (table_embedded_packed, poly_eq_point_packed, pushforward_packed) = info_span!("packing")
+    let (poly_eq_point_packed, pushforward_packed, mut table_packed) = info_span!("packing")
         .in_scope(|| {
             (
-                pack_extension(&table_embedded),
                 pack_extension(poly_eq_point),
                 pack_extension(pushforward),
+                table.pack(),
             )
         });
 
     let (sc_point, inner_evals, prod) =
         info_span!("logup_star sumcheck", table_length, indexes_length).in_scope(|| {
-            sumcheck_prove::<EF, _, _, _>(
-                1,
-                MleGroupRef::ExtensionPacked(vec![&table_embedded_packed, &pushforward_packed]),
-                &ProductComputation,
-                &ProductComputation,
-                &[],
-                None,
-                false,
+            let mut pushforward_packed_to_fold =
+                Mle::Ref(MleRef::ExtensionPacked(&pushforward_packed));
+            let (sc_point, prod) = run_product_sumcheck(
+                &mut table_packed,
+                &mut pushforward_packed_to_fold,
                 prover_state,
                 claimed_value,
-                None,
-            )
+                table.n_vars(),
+            );
+            let inner_evals = vec![
+                table_packed.as_owned().unwrap().as_extension().unwrap()[0],
+                pushforward_packed_to_fold
+                    .as_owned()
+                    .unwrap()
+                    .as_extension()
+                    .unwrap()[0],
+            ];
+            (sc_point, inner_evals, prod)
         });
 
     let table_eval = inner_evals[0];
@@ -106,7 +108,7 @@ where
             unsafe { uninitialized_vec::<EFPacking<EF>>(table_length * 2 / packing_width::<EF>()) };
         let half_len_packed = layer.len() / 2;
         let challenge_minus_increment = pack_extension(
-            &(0..table.len())
+            &(0..table.unpacked_len())
                 .into_par_iter()
                 .map(|i| random_challenge - PF::<EF>::from_usize(i))
                 .collect::<Vec<_>>(),
@@ -296,7 +298,7 @@ mod tests {
 
         prove_logup_star(
             &mut prover_state,
-            &commited_table,
+            &MleRef::Base(&commited_table),
             &commited_indexes,
             claim.value,
             &poly_eq_point,

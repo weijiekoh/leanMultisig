@@ -795,7 +795,7 @@ pub fn prove_execution(
 
     let base_memory_logup_star_statements = prove_logup_star(
         &mut prover_state,
-        &memory,
+        &MleRef::Base(&memory),
         &base_memory_indexes,
         base_memory_lookup_statement_1.value
             + memory_poly_eq_point_alpha * base_memory_lookup_statement_2.value
@@ -806,7 +806,7 @@ pub fn prove_execution(
 
     let poseidon_logup_star_statements = prove_logup_star(
         &mut prover_state,
-        &poseidon_folded_memory,
+        &MleRef::Extension(&poseidon_folded_memory),
         &all_poseidon_indexes,
         poseidon_lookup_statements
             .iter()
@@ -819,7 +819,7 @@ pub fn prove_execution(
 
     let bytecode_logup_star_statements = prove_logup_star(
         &mut prover_state,
-        &folded_bytecode,
+        &MleRef::Extension(&folded_bytecode),
         &full_trace[COL_INDEX_PC],
         bytecode_lookup_claim_1.value + alpha_bytecode_lookup * bytecode_lookup_claim_2.value,
         &bytecode_poly_eq_point,
