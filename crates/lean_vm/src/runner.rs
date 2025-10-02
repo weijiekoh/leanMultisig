@@ -24,8 +24,7 @@ const STACK_TRACE_INSTRUCTIONS: usize = 5000;
 pub struct RangeCheckInstrs {
     step_1: Instruction,
     step_2: Instruction,
-    step_3a: Option<Instruction>,
-    step_3b: Instruction,
+    step_3: Instruction,
 }
 
 impl MemOrConstant {
@@ -147,53 +146,131 @@ pub fn execute_bytecode(
         Err(err) => {
             println!("First execution: Err");
             print_execution_error(&err, &std_out, &instruction_history, source_code, function_locations);
-
             return Err(err);
         }
     };
 
+    println!("fps: {:?}\n", first_exec.fps);
     println!("ending_pc: {}", bytecode.ending_pc);
+    println!("{}", bytecode);
     println!("\nSECOND EXEC: ----------------------------------");
+    let fp = first_exec.fps[first_exec.fps.len() - 2];
+    assert!(fp != 0, "final_nonzero_fp should not be 0");
+    assert_eq!(first_exec.fps[first_exec.fps.len() - 1], 0, "The final fp should be 0");
 
-    // If range-checks are present, replace the Instruction::RangeCheck instances with the actual
-    // range check instructions
-    if first_exec.range_check_pcs.is_some() {
-        let range_check_pcs = first_exec.range_check_pcs.unwrap();
-        let range_check_instrs = first_exec.range_check_instrs.unwrap();
+    // If range-checks are present, add the actual 3-step range checks to the end of the bytecode.
+    if first_exec.range_check_pcs.len() > 0 {
+        let range_check_pcs = first_exec.range_check_pcs;
+        let memory = first_exec.memory;
 
-        let mut repls = Vec::with_capacity(range_check_pcs.len());
+        let mut rc_new_instrs: Vec<Instruction> = Vec::with_capacity(&range_check_pcs.len() * 3);
         for pc in &range_check_pcs {
-            let step_1 = range_check_instrs.get(pc).unwrap().step_1.clone();
-            let step_2 = range_check_instrs.get(pc).unwrap().step_2.clone();
-            let step_3b = range_check_instrs.get(pc).unwrap().step_3b.clone();
+            let instr = bytecode.instructions[*pc].clone();
+            match instr {
+                Instruction::RangeCheck { value, max } => {
+                    let v_usize = value.read_value(&memory, fp)?.to_usize();
+                    let t_usize = max.read_value(&memory, fp)?.to_usize();
 
-            let step_3a = range_check_instrs.get(pc).unwrap().step_3a.clone();
-            if step_3a.is_some() {
-                let step_3a = step_3a.unwrap();
-                let step_3b = range_check_instrs.get(pc).unwrap().step_3b.clone();
-                repls.push(vec![step_1, step_2, step_3a, step_3b]);
-                bytecode.ending_pc += 3;
-            } else {
-                repls.push(vec![step_1, step_2, step_3b]);
-                bytecode.ending_pc += 2;
-                //repls.push(vec![step_1]);
-                //bytecode.ending_pc += 1;
-                //repls.push(vec![step_1, step_2]);
-                //bytecode.ending_pc += 0;
+                    let x = match value {
+                        MemOrFp::MemoryAfterFp { offset } => offset,
+                        _ => unreachable!(),
+                    };
+
+                    let i = 0;
+
+                    // If m[val] is undefined, deref m[fp + i] = m[val] will fail as m[fp + i] is
+                    // also undefined. So we need to use z since m[fp + z] is 0.
+                    // z may also come in handy for step 3.
+                    let mut z = 0;
+                    loop { 
+                        let m_fp_z = memory.get(fp + z);
+                        if m_fp_z.is_err() {
+                            z += 1;
+                            continue;
+                        }
+                        if m_fp_z.unwrap() == F::ZERO { break; }
+                        z += 1;
+                    }
+
+                    // Step 1: use deref with m[m[fp + x]] to force an OOM if val >= M
+                    // Find z such that m[fp + z] = 0
+                    let step_1_offset = if matches!(memory.get(v_usize), Err(RunnerError::UndefinedMemory)) {
+                        z
+                    } else {
+                        i // Otherwise, use i
+                    };
+
+                    let step_1 = Instruction::Deref {
+                        shift_0: x,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::MemoryAfterFp { offset: step_1_offset },
+                    };
+
+                    // Step 2: (t - 1) = m[fp + j] + m[m[fp + x]]
+                    // Find j such that m[fp + j] is undefined
+                    let mut j = step_1_offset + 1;
+                    loop {
+                        let m_fp_j = memory.get(fp + j);
+                        if m_fp_j.is_err() && matches!(m_fp_j, Err(RunnerError::UndefinedMemory)) {
+                            break
+                        }
+                        j += 1;
+                    }
+
+                    let step_2 = Instruction::Computation {
+                        operation: Operation::Add,
+                        arg_a: MemOrConstant::MemoryAfterFp { offset: j },        // Unknown
+                        arg_c: MemOrFp::MemoryAfterFp { offset: x },              // Known
+                        res: MemOrConstant::Constant(F::from_usize(t_usize - 1)), // Known
+                    };
+
+                    // Step 3
+                    // deref: m[m[fp + j]] = m[fp + k]
+                    // if m[m[fp + j]] is uninitialized, then m[fp + k] must be 0, so we need to
+                    // find a memory cell that contains 0.
+                    // can use z for k.
+                    let m_fp_j = memory.get(
+                        (F::from_usize(t_usize) - F::ONE - F::from_usize(v_usize)).to_usize(),
+                    );
+
+                    let k = if m_fp_j.is_err() && matches!(m_fp_j, Err(RunnerError::UndefinedMemory)) {
+                        z
+                    } else {
+                        // Otherwise, find an uninitialized memory cell
+                        let mut k = j + 1;
+                        loop {
+                            let m_fp_k = memory.get(fp + k);
+                            if k != x && m_fp_k.is_err() && matches!(m_fp_k, Err(RunnerError::UndefinedMemory)) {
+                                break
+                            }
+                            k += 1;
+                        }
+                        k
+                    };
+                    println!("i = {}, j = {}, k = {}", i, j, k);
+                    let step_3 = Instruction::Deref {
+                        shift_0: j,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
+                    };
+
+                    rc_new_instrs.push(step_1);
+                    rc_new_instrs.push(step_2);
+                    rc_new_instrs.push(step_3);
+                }
+                _ => continue
             }
         }
 
-        let repl_slices: Vec<&[Instruction]> = repls.iter().map(|v| v.as_slice()).collect();
-        bytecode.instructions = splice_many(
-            &bytecode.instructions,
-            &range_check_pcs,
-            &repl_slices,
-        ).unwrap();
+        for new_instr in rc_new_instrs {
+            bytecode.instructions.insert(bytecode.instructions.len() - 2, new_instr);
+            bytecode.ending_pc += 1;
+        }
 
         // Update the final 2 jump instructions
         let num_instructions = bytecode.instructions.len();
-        let final_jump = bytecode.instructions[num_instructions - 2].clone();
-        let final_jump_2 = bytecode.instructions[num_instructions - 1].clone();
+        let final_jump = bytecode.instructions[bytecode.ending_pc - 1].clone();
+        let final_jump_2 = bytecode.instructions[bytecode.ending_pc - 0].clone();
 
         assert!(matches!(final_jump, Instruction::Jump { .. }));
         assert!(matches!(final_jump_2, Instruction::Jump { .. }));
@@ -247,8 +324,7 @@ pub struct ExecutionResult {
     pub memory: Memory,
     pub pcs: Vec<usize>,
     pub fps: Vec<usize>,
-    pub range_check_instrs: Option<BTreeMap<usize, RangeCheckInstrs>>,
-    pub range_check_pcs: Option<Vec<usize>>,
+    pub range_check_pcs: Vec<usize>,
 }
 
 pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
@@ -286,6 +362,20 @@ pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
         .copy_from_slice(&get_poseidon24().permute([F::ZERO; 24])[16..]);
     public_memory
 }
+
+#[allow(clippy::too_many_arguments)] // TODO
+fn execute_bytecode_from(
+    bytecode: &Bytecode,
+    memory: &mut Memory,
+    no_vec_runtime_memory: usize,
+    final_execution: bool,
+    std_out: &mut String,
+    instruction_history: &mut ExecutionHistory,
+    profiler: bool,
+    function_locations: &BTreeMap<usize, String>,
+) {
+}
+
 
 #[allow(clippy::too_many_arguments)] // TODO
 fn execute_bytecode_helper(
@@ -347,7 +437,6 @@ fn execute_bytecode_helper(
     let mut cpu_cycles_before_new_line = 0;
 
     let mut range_check_pcs: Vec<usize> = Vec::new();
-    let mut range_check_instrs: BTreeMap<usize, RangeCheckInstrs> = BTreeMap::new();
 
     while pc != bytecode.ending_pc {
         println!("pc: {}", pc);
@@ -544,78 +633,10 @@ fn execute_bytecode_helper(
             // because after the first execution, which figures out which aux values to set,
             // the runner will replace Instruction::RangeCheck instances with the actual 3-step
             // range check instructions (deref, add, and deref)
-            Instruction::RangeCheck { value, max } => {
-                let v = value.read_value(&memory, fp)?;
-                let max_val = max.read_value(&memory, fp)?;
-                let v_usize = v.to_usize();
-                let t_usize = max_val.to_usize();
-
+            Instruction::RangeCheck { .. } => {
                 // The runner should OOM at step 1 or step 3 if value >= max. See section 2.5.3 of
                 // minimal_zkVM.pdf.
-
                 range_check_pcs.push(pc);
-
-                let i = 3;
-
-                // Get x, which is the offset of m[fp + x] where value is stored
-                // m[m[fp + x] + 0]
-                let x = match value {
-                    MemOrFp::MemoryAfterFp { offset } => *offset,
-                    MemOrFp::Fp => 0,
-                };
-
-                // Step 1: if m[val] is undefined, set it to 0 via deref
-                // Otherwise, set m[fp + i] to m[val]
-                let step_1 = if matches!(memory.get(v_usize), Err(RunnerError::UndefinedMemory)) {
-                    Instruction::Deref {
-                        shift_0: x,
-                        shift_1: 0,
-                        res: MemOrFpOrConstant::Constant(F::ZERO),
-                    }
-                } else {
-                    Instruction::Deref {
-                        shift_0: x,
-                        shift_1: 0,
-                        res: MemOrFpOrConstant::MemoryAfterFp { offset: i },
-                    }
-                };
-
-                let mut j = i + 1;
-                if j == v_usize {
-                    j += 1;
-                }
-                let step_2 = Instruction::Computation {
-                    operation: Operation::Add,
-                    arg_a: MemOrConstant::MemoryAfterFp { offset: j },
-                    arg_c: MemOrFp::MemoryAfterFp { offset: x },
-                    res: MemOrConstant::Constant(F::from_usize(t_usize - 1)),
-                };
-
-                // For step 3, m[fp + k] needs to be defined!
-                let mut k = j + 1;
-
-                let step_3a = Instruction::Deref {
-                    shift_0: x,
-                    shift_1: 0,
-                    res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
-                };
-
-                let step_3b = Instruction::Deref {
-                    shift_0: j,
-                    shift_1: 0,
-                    res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
-                };
-
-                println!("i: {}, j: {}, k: {}", i, j, k);
-                let rca = RangeCheckInstrs {
-                    step_1,
-                    step_2,
-                    step_3a: Some(step_3a),
-                    step_3b,
-                };
-
-                range_check_instrs.insert(pc, rca);
-
                 pc += 1;
             }
             Instruction::Poseidon2_16 { arg_a, arg_b, res } => {
@@ -813,90 +834,65 @@ fn execute_bytecode_helper(
 
     let no_vec_runtime_memory = ap - initial_ap;
 
-    if range_check_pcs.is_empty() {
-        return Ok(ExecutionResult {
-            no_vec_runtime_memory,
-            public_memory_size,
-            memory,
-            pcs,
-            fps,
-            range_check_instrs: None,
-            range_check_pcs: None,
-        });
-    } else {
-        return Ok(ExecutionResult {
-            no_vec_runtime_memory,
-            public_memory_size,
-            memory,
-            pcs,
-            fps,
-            range_check_instrs: Some(range_check_instrs),
-            range_check_pcs: Some(range_check_pcs),
-        });
-    }
+    return Ok(ExecutionResult {
+        no_vec_runtime_memory,
+        public_memory_size,
+        memory,
+        pcs,
+        fps,
+        range_check_pcs,
+    });
 }
 
-//fn replace_range_check_instrs(
-    //bytecode: &mut Bytecode,
-    //range_check_pcs: &Vec<usize>,
-    //range_check_instrs: &BTreeMap<usize, RangeCheckInstrs>,
-//) {
-    //for (pc, instrs) in range_check_instrs.iter() {
-        //for instr in instrs {
-            //bytecode.instructions[*pc] = instr.clone();
-        //}
+///// Replace elements at `indices` with corresponding `repls` (same length).
+///// Indices may be unsorted; duplicates or OOB will error.
+//fn splice_many<T: Clone>(
+    //base: &[T],
+    //indices: &[usize],
+    //repls: &[&[T]],
+//) -> Result<Vec<T>, &'static str> {
+    //if indices.len() != repls.len() {
+        //return Err("indices and repls must have the same length");
     //}
+
+    //let mut pairs: Vec<(usize, &[T])> = indices.iter().cloned().zip(repls.iter().cloned()).collect();
+    //pairs.sort_by_key(|p| p.0);
+
+    //for w in pairs.windows(2) {
+        //if w[0].0 == w[1].0 { return Err("duplicate index"); }
+    //}
+    //if pairs.iter().any(|(i, _)| *i >= base.len()) {
+        //return Err("index out of bounds");
+    //}
+
+    //let extra = pairs.iter().map(|(_, r)| r.len()).sum::<usize>() as isize
+        //- pairs.len() as isize;
+    //let cap = (base.len() as isize + extra).max(0) as usize;
+
+    //let mut out = Vec::with_capacity(cap);
+    //let mut it = pairs.into_iter().peekable();
+
+    //for (i, item) in base.iter().enumerate() {
+        //if let Some(&(idx, repl)) = it.peek() {
+            //if idx == i {
+                //out.extend_from_slice(repl); // insert replacement
+                //it.next();                   // consume this pair
+                //continue;                    // skip original element at i
+            //}
+        //}
+        //out.push(item.clone());
+    //}
+    //Ok(out)
 //}
-//
-/// Replace elements at `indices` with corresponding `repls` (same length).
-/// Indices may be unsorted; duplicates or OOB will error.
-fn splice_many<T: Clone>(
-    base: &[T],
-    indices: &[usize],
-    repls: &[&[T]],
-) -> Result<Vec<T>, &'static str> {
-    if indices.len() != repls.len() {
-        return Err("indices and repls must have the same length");
-    }
 
-    let mut pairs: Vec<(usize, &[T])> = indices.iter().cloned().zip(repls.iter().cloned()).collect();
-    pairs.sort_by_key(|p| p.0);
+//#[test]
+//fn test_splice_many() {
+    //let a = [1, 2, 3, 4, 5];
+    //let indices = [1, 3];                   // positions to replace
+    //let c1 = [8];
+    //let c2 = [9];
+    //let repls: &[&[i32]] = &[&c1, &c2];
 
-    for w in pairs.windows(2) {
-        if w[0].0 == w[1].0 { return Err("duplicate index"); }
-    }
-    if pairs.iter().any(|(i, _)| *i >= base.len()) {
-        return Err("index out of bounds");
-    }
-
-    let extra = pairs.iter().map(|(_, r)| r.len()).sum::<usize>() as isize
-        - pairs.len() as isize;
-    let cap = (base.len() as isize + extra).max(0) as usize;
-
-    let mut out = Vec::with_capacity(cap);
-    let mut it = pairs.into_iter().peekable();
-
-    for (i, item) in base.iter().enumerate() {
-        if let Some(&(idx, repl)) = it.peek() {
-            if idx == i {
-                out.extend_from_slice(repl); // insert replacement
-                it.next();                   // consume this pair
-                continue;                    // skip original element at i
-            }
-        }
-        out.push(item.clone());
-    }
-    Ok(out)
-}
-
-#[test]
-fn test_splice_many() {
-    let a = [1, 2, 3, 4, 5];
-    let indices = [1, 3];                   // positions to replace
-    let c1 = [8];
-    let c2 = [9];
-    let repls: &[&[i32]] = &[&c1, &c2];
-
-    let out = splice_many(&a, &indices, repls).unwrap();
-    assert_eq!(out, vec![1, 8, 3, 9, 5]);
-}
+    //let out = splice_many(&a, &indices, repls).unwrap();
+    //assert_eq!(out, vec![1, 8, 3, 9, 5]);
+//}

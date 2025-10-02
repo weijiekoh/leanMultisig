@@ -38,9 +38,7 @@ fn range_check_program(value: usize, max: usize) -> String {
 #[test]
 fn test_range_check_compilation_and_execution() {
     //for (v, t) in range_check_test_cases() {
-    for (v, t) in vec![(0, 68), (63, 63), (15, 63)] {
-    //for (v, t) in vec![(0, 68)] {
-    //for (v, t) in vec![(16777217, 68)] {
+    for (v, t) in vec![(0, 67), (68, 66), (0, 68), (63, 63), (15, 63), (66, 65), (16777217, 68)] {
         println!("Range Check Test: v: {}, t: {}", v, t);
         let program = range_check_program(v, t);
         let (mut bytecode, function_locations) = compile_program(&program);

@@ -151,7 +151,7 @@ fn compile_function(
     let range_checks = find_range_checks(&function.instructions);
 
     // Allow for auxillary variables for range checks
-    stack_pos += range_checks.len() * 5;
+    stack_pos += range_checks.len() * 3;
 
     compiler.func_name = function.name.clone();
     compiler.var_positions = var_positions;
