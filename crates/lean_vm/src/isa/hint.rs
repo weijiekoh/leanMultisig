@@ -1,4 +1,4 @@
-use crate::core::{DIMENSION, F, LOG_VECTOR_LEN, Label, SourceLineNumber, VECTOR_LEN};
+use crate::core::{F, LOG_VECTOR_LEN, Label, SourceLineNumber, VECTOR_LEN};
 use crate::diagnostics::RunnerError;
 use crate::execution::{ExecutionHistory, Memory};
 use crate::isa::operands::MemOrConstant;
@@ -165,7 +165,7 @@ impl Hint {
                     } else {
                         assert_eq!(values.len(), 2);
                         let new_no_vec_memory = *ctx.ap - *ctx.checkpoint_ap;
-                        let new_vec_memory = (*ctx.ap_vec - *ctx.checkpoint_ap_vec) * DIMENSION;
+                        let new_vec_memory = (*ctx.ap_vec - *ctx.checkpoint_ap_vec) * VECTOR_LEN;
                         *ctx.std_out += &format!(
                             "[CHECKPOINT {}] new CPU cycles: {}, new runtime memory: {} ({:.1}% vec)\n",
                             values[1],

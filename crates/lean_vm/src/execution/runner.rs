@@ -281,7 +281,7 @@ fn execute_bytecode_helper(
         println!(
             "Runtime memory: {} ({:.2}% vec)",
             pretty_integer(runtime_memory_size),
-            (DIMENSION * (ap_vec - initial_ap_vec)) as f64 / runtime_memory_size as f64 * 100.0
+            (VECTOR_LEN * (ap_vec - initial_ap_vec)) as f64 / runtime_memory_size as f64 * 100.0
         );
         let used_memory_cells = memory
             .0
