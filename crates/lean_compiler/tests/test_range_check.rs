@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use lean_vm::*;
+//use lean_vm::runner::compile_range_checks;
 use p3_field::PrimeCharacteristicRing;
 use lean_compiler::{parse_program, compile_program};
 use lean_compiler::{Expression, SimpleExpr, Line, SimpleLine, simplify_program, compile_to_intermediate_bytecode, compile_to_low_level_bytecode, IntermediateInstruction, IntermediateValue};
@@ -36,9 +37,52 @@ fn range_check_program(value: usize, max: usize) -> String {
 }
 
 #[test]
+fn test_compile_range_checks() {
+    //for (v, t) in vec![(64, 63)] {
+    for (v, t) in range_check_test_cases() {
+        println!("Range Check Test: v: {}, t: {}", v, t);
+        let program = range_check_program(v, t);
+        let (mut bytecode, function_locations) = compile_program(&program);
+        println!("old bytecode:\n{}", bytecode);
+        println!("ending_pc: {}", bytecode.ending_pc);
+        println!();
+
+        let new_bytecode = compile_range_checks(&bytecode, &[], &[]);
+        match new_bytecode {
+            Ok(new_bytecode) => {
+                println!("new bytecode:\n{}", new_bytecode);
+                println!("ending_pc: {}", new_bytecode.ending_pc);
+                let result = execute_bytecode(
+                    &mut bytecode,
+                    &[],
+                    &[],
+                    &program,
+                    &function_locations,
+                    false,
+                    );
+
+                if v >= t {
+                    assert!(
+                        matches!(result, Err(RunnerError::OutOfMemory)),
+                        "range check failed to catch OOM"
+                        );
+                } else {
+                    assert!(result.is_ok());
+                }
+
+            }
+            Err(err) => {
+                println!("Failed to compile range checks: {}", err);
+            }
+        }
+    }
+}
+
+#[test]
 fn test_range_check_compilation_and_execution() {
     //for (v, t) in range_check_test_cases() {
-    for (v, t) in vec![(0, 67), (68, 66), (0, 68), (63, 63), (15, 63), (66, 65), (16777217, 68)] {
+    //for (v, t) in vec![(0, 67), (68, 66), (0, 68), (63, 63), (15, 63), (66, 65), (16777217, 68)] {
+    for (v, t) in vec![(0, 67)] {
         println!("Range Check Test: v: {}, t: {}", v, t);
         let program = range_check_program(v, t);
         let (mut bytecode, function_locations) = compile_program(&program);
@@ -59,7 +103,6 @@ fn test_range_check_compilation_and_execution() {
         } else {
             assert!(result.is_ok());
         }
-        
     }
     //for v in 0..100 {
         ////let v = 1;

@@ -31,38 +31,6 @@ Now that we have ensured that:
 
 Recall that `t <= 2^16` and `M <= 2^29 < p / 2`. This gives us `m[fp + x] < t`.
 
-## Memory hints
-
-The hard part is knowing what to store in `m[m[fp + x]]` and `m[m[fp + j]]`. We
-need to store the values already in those cells, as said cells could already be
-in use. Unfortunately, their contents cannot be known during compile-time, so
-the prover needs do extra work.
-
-e.g. if `m[m[fp + x]] = 123`, we need to set `m[fp + i]` to 123, so that in step
-1, when we set `m[m[fp + x]]` to `m[fp + i]`, 
-we won't change the value of `m[m[fp + x]]` which could already be in use.
-
-// We want to check that val < t
-// But there is already data in m[val]
-Possibilities
-  - v < 64
-    - m[v] is already initialised, so the deref will work
-  - v == 64
-    - m[64] is uninitialised, and some instructions are needed to initialise m[64]
-  - v > 64
-
-Where 64 is the length of the public memory initialised before execution.
-
-
-## Flowchart
-
-Initial state:
-    - m[fp + x] contains val
-    - m[fp + y] contains t
-
-Step 1: m[fp + i] = m[m[fp + x]] using deref
-    - Key idea: m[val] will OOM if val >= M
-
-m[val] is already initialised?
-    - Y:
-    - N:
+TODO: update this section - we may need 4 or 5 instructions instead of 3, as we
+may need to set m[fp + i] and m[fp + k] to 0, depending on whether m[m[fp + x]]
+and/or m[m[fp + j]] are defined.
