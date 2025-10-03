@@ -2,8 +2,8 @@
 
 use crate::HintExecutionContext;
 use crate::core::{
-    DIMENSION, F, MAX_RUNNER_MEMORY_SIZE, ONE_VEC_PTR, POSEIDON_16_NULL_HASH_PTR,
-    POSEIDON_24_NULL_HASH_PTR, PUBLIC_INPUT_START, VECTOR_LEN, ZERO_VEC_PTR,
+    DIMENSION, F, ONE_VEC_PTR, POSEIDON_16_NULL_HASH_PTR, POSEIDON_24_NULL_HASH_PTR,
+    PUBLIC_INPUT_START, VECTOR_LEN, ZERO_VEC_PTR,
 };
 use crate::diagnostics::{ExecutionResult, RunnerError};
 use crate::execution::{ExecutionHistory, Memory};
@@ -61,62 +61,47 @@ pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
 ///
 /// This is the main VM execution entry point that processes bytecode instructions
 /// and generates execution traces with witness data.
-pub fn execute_bytecode_impl(
+pub fn execute_bytecode(
     bytecode: &Bytecode,
     public_input: &[F],
     private_input: &[F],
     source_code: &str,
     function_locations: &BTreeMap<usize, String>,
+    no_vec_runtime_memory: usize, // size of the "non-vectorized" runtime memory
     profiler: bool,
 ) -> ExecutionResult {
     let mut std_out = String::new();
     let mut instruction_history = ExecutionHistory::new();
-    let first_exec = match execute_bytecode_helper(
-        bytecode,
-        public_input,
-        private_input,
-        MAX_RUNNER_MEMORY_SIZE / 2,
-        false,
-        &mut std_out,
-        &mut instruction_history,
-        false,
-        function_locations,
-    ) {
-        Ok(first_exec) => first_exec,
-        Err(err) => {
-            let lines_history = &instruction_history.lines;
-            let latest_instructions =
-                &lines_history[lines_history.len().saturating_sub(STACK_TRACE_INSTRUCTIONS)..];
-            println!(
-                "\n{}",
-                crate::diagnostics::pretty_stack_trace(
-                    source_code,
-                    latest_instructions,
-                    function_locations
-                )
-            );
-            if !std_out.is_empty() {
-                println!("╔══════════════════════════════════════════════════════════════╗");
-                println!("║                         STD-OUT                              ║");
-                println!("╚══════════════════════════════════════════════════════════════╝\n");
-                print!("{std_out}");
-            }
-            panic!("Error during bytecode execution: {err}");
-        }
-    };
-    instruction_history = ExecutionHistory::new();
     execute_bytecode_helper(
         bytecode,
         public_input,
         private_input,
-        first_exec.no_vec_runtime_memory,
-        true,
-        &mut String::new(),
+        no_vec_runtime_memory,
+        &mut std_out,
         &mut instruction_history,
         profiler,
         function_locations,
     )
-    .unwrap()
+    .unwrap_or_else(|err| {
+        let lines_history = &instruction_history.lines;
+        let latest_instructions =
+            &lines_history[lines_history.len().saturating_sub(STACK_TRACE_INSTRUCTIONS)..];
+        println!(
+            "\n{}",
+            crate::diagnostics::pretty_stack_trace(
+                source_code,
+                latest_instructions,
+                function_locations
+            )
+        );
+        if !std_out.is_empty() {
+            println!("╔══════════════════════════════════════════════════════════════╗");
+            println!("║                         STD-OUT                              ║");
+            println!("╚══════════════════════════════════════════════════════════════╝\n");
+            print!("{std_out}");
+        }
+        panic!("Error during bytecode execution: {err}");
+    })
 }
 
 /// Helper function that performs the actual bytecode execution
@@ -126,7 +111,6 @@ fn execute_bytecode_helper(
     public_input: &[F],
     private_input: &[F],
     no_vec_runtime_memory: usize,
-    final_execution: bool,
     std_out: &mut String,
     instruction_history: &mut ExecutionHistory,
     profiler: bool,
@@ -152,10 +136,6 @@ fn execute_bytecode_helper(
     let mut ap = initial_ap;
     let mut ap_vec = initial_ap_vec;
 
-    let mut poseidon16_calls = 0;
-    let mut poseidon24_calls = 0;
-    let mut dot_product_ext_ext_calls = 0;
-    let mut multilinear_eval_calls = 0;
     let mut cpu_cycles = 0;
 
     let mut last_checkpoint_cpu_cycles = 0;
@@ -214,7 +194,6 @@ fn execute_bytecode_helper(
             fp: &mut fp,
             pc: &mut pc,
             pcs: &pcs,
-            final_execution,
             poseidons_16: &mut poseidons_16,
             poseidons_24: &mut poseidons_24,
             dot_products: &mut dot_products,
@@ -225,114 +204,96 @@ fn execute_bytecode_helper(
             jump_counts: &mut jump_counts,
         };
         instruction.execute_instruction(&mut instruction_ctx)?;
-
-        // Update call counters based on instruction type
-        instruction.update_call_counters(
-            &mut poseidon16_calls,
-            &mut poseidon24_calls,
-            &mut dot_product_ext_ext_calls,
-            &mut multilinear_eval_calls,
-        );
     }
 
-    debug_assert_eq!(pc, bytecode.ending_pc);
+    assert_eq!(pc, bytecode.ending_pc);
     pcs.push(pc);
     fps.push(fp);
 
-    if final_execution {
-        // Ensure event counts match call counts in final execution
-        debug_assert_eq!(poseidon16_calls, poseidons_16.len());
-        debug_assert_eq!(poseidon24_calls, poseidons_24.len());
-        debug_assert_eq!(dot_product_ext_ext_calls, dot_products.len());
-        debug_assert_eq!(multilinear_eval_calls, multilinear_evals.len());
-        if profiler {
-            let report =
-                crate::diagnostics::profiling_report(instruction_history, function_locations);
-            println!("\n{report}");
-        }
-        if !std_out.is_empty() {
-            println!("╔═════════════════════════════════════════════════════════════════════════╗");
-            println!("║                                STD-OUT                                  ║");
-            println!("╚═════════════════════════════════════════════════════════════════════════╝");
-            print!("\n{std_out}");
-            println!(
-                "──────────────────────────────────────────────────────────────────────────\n"
-            );
-        }
+    let no_vec_runtime_memory = ap - initial_ap;
 
+    // Ensure event counts match call counts in final execution
+    if profiler {
+        let report = crate::diagnostics::profiling_report(instruction_history, function_locations);
+        println!("\n{report}");
+    }
+    if !std_out.is_empty() {
         println!("╔═════════════════════════════════════════════════════════════════════════╗");
-        println!("║                                 STATS                                   ║");
-        println!("╚═════════════════════════════════════════════════════════════════════════╝\n");
-
-        println!("CYCLES: {}", pretty_integer(cpu_cycles));
-        println!("MEMORY: {}", pretty_integer(memory.0.len()));
-        println!();
-
-        let runtime_memory_size = memory.0.len() - (PUBLIC_INPUT_START + public_input.len());
-        println!(
-            "Bytecode size: {}",
-            pretty_integer(bytecode.instructions.len())
-        );
-        println!("Public input size: {}", pretty_integer(public_input.len()));
-        println!(
-            "Private input size: {}",
-            pretty_integer(private_input.len())
-        );
-        println!(
-            "Runtime memory: {} ({:.2}% vec)",
-            pretty_integer(runtime_memory_size),
-            (VECTOR_LEN * (ap_vec - initial_ap_vec)) as f64 / runtime_memory_size as f64 * 100.0
-        );
-        let used_memory_cells = memory
-            .0
-            .iter()
-            .skip(PUBLIC_INPUT_START + public_input.len())
-            .filter(|&&x| x.is_some())
-            .count();
-        println!(
-            "Memory usage: {:.1}%",
-            used_memory_cells as f64 / runtime_memory_size as f64 * 100.0
-        );
-
-        println!();
-
-        if poseidon16_calls + poseidon24_calls > 0 {
-            println!(
-                "Poseidon2_16 calls: {}, Poseidon2_24 calls: {} (1 poseidon per {} instructions)",
-                pretty_integer(poseidon16_calls),
-                pretty_integer(poseidon24_calls),
-                cpu_cycles / (poseidon16_calls + poseidon24_calls)
-            );
-        }
-        if dot_product_ext_ext_calls > 0 {
-            println!(
-                "DotProduct calls: {}",
-                pretty_integer(dot_product_ext_ext_calls)
-            );
-        }
-        if multilinear_eval_calls > 0 {
-            println!(
-                "MultilinearEval calls: {}",
-                pretty_integer(multilinear_eval_calls)
-            );
-        }
-
-        if false {
-            println!("Low level instruction counts:");
-            println!(
-                "COMPUTE: {} ({} ADD, {} MUL)",
-                add_counts + mul_counts,
-                add_counts,
-                mul_counts
-            );
-            println!("DEREF: {deref_counts}");
-            println!("JUMP: {jump_counts}");
-        }
-
+        println!("║                                STD-OUT                                  ║");
+        println!("╚═════════════════════════════════════════════════════════════════════════╝");
+        print!("\n{std_out}");
         println!("──────────────────────────────────────────────────────────────────────────\n");
     }
 
-    let no_vec_runtime_memory = ap - initial_ap;
+    println!("╔═════════════════════════════════════════════════════════════════════════╗");
+    println!("║                                 STATS                                   ║");
+    println!("╚═════════════════════════════════════════════════════════════════════════╝\n");
+
+    println!("CYCLES: {}", pretty_integer(cpu_cycles));
+    println!("MEMORY: {}", pretty_integer(memory.0.len()));
+    println!();
+
+    let runtime_memory_size = memory.0.len() - (PUBLIC_INPUT_START + public_input.len());
+    println!(
+        "Bytecode size: {}",
+        pretty_integer(bytecode.instructions.len())
+    );
+    println!("Public input size: {}", pretty_integer(public_input.len()));
+    println!(
+        "Private input size: {}",
+        pretty_integer(private_input.len())
+    );
+    println!(
+        "Runtime memory: {} ({:.2}% vec) (no vec mem: {})",
+        pretty_integer(runtime_memory_size),
+        (VECTOR_LEN * (ap_vec - initial_ap_vec)) as f64 / runtime_memory_size as f64 * 100.0,
+        no_vec_runtime_memory
+    );
+    let used_memory_cells = memory
+        .0
+        .iter()
+        .skip(PUBLIC_INPUT_START + public_input.len())
+        .filter(|&&x| x.is_some())
+        .count();
+    println!(
+        "Memory usage: {:.1}%",
+        used_memory_cells as f64 / runtime_memory_size as f64 * 100.0
+    );
+
+    println!();
+
+    if poseidons_16.len() + poseidons_24.len() > 0 {
+        println!(
+            "Poseidon2_16 calls: {}, Poseidon2_24 calls: {} (1 poseidon per {} instructions)",
+            pretty_integer(poseidons_16.len()),
+            pretty_integer(poseidons_24.len()),
+            cpu_cycles / (poseidons_16.len() + poseidons_24.len())
+        );
+    }
+    if !dot_products.is_empty() {
+        println!("DotProduct calls: {}", pretty_integer(dot_products.len()));
+    }
+    if !multilinear_evals.is_empty() {
+        println!(
+            "MultilinearEval calls: {}",
+            pretty_integer(multilinear_evals.len())
+        );
+    }
+
+    if false {
+        println!("Low level instruction counts:");
+        println!(
+            "COMPUTE: {} ({} ADD, {} MUL)",
+            add_counts + mul_counts,
+            add_counts,
+            mul_counts
+        );
+        println!("DEREF: {deref_counts}");
+        println!("JUMP: {jump_counts}");
+    }
+
+    println!("──────────────────────────────────────────────────────────────────────────\n");
+
     Ok(ExecutionResult {
         no_vec_runtime_memory,
         public_memory_size,

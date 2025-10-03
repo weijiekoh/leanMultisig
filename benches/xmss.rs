@@ -1,11 +1,10 @@
 use std::{hint::black_box, time::Duration};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use rec_aggregation::bench_xmss;
+use rec_aggregation::run_xmss_benchmark;
 
 fn bench_xmss_benchmark(c: &mut Criterion) {
     const N: usize = 500;
-    const LOG_LIFETIME: usize = 32;
 
     let mut group = c.benchmark_group("xmss");
     group.sample_size(10);
@@ -15,7 +14,7 @@ fn bench_xmss_benchmark(c: &mut Criterion) {
 
     group.bench_function("xmss", |b| {
         b.iter(|| {
-            let duration = bench_xmss(N, LOG_LIFETIME);
+            let duration = run_xmss_benchmark(N).proving_time;
             black_box(duration);
         });
     });

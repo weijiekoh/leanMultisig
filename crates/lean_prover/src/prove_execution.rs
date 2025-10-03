@@ -29,9 +29,9 @@ pub fn prove_execution(
     bytecode: &Bytecode,
     source_code: &str,                            // debug purpose
     function_locations: &BTreeMap<usize, String>, // debug purpose
-    public_input: &[F],
-    private_input: &[F],
+    (public_input, private_input): (&[F], &[F]),
     whir_config_builder: WhirConfigBuilder,
+    no_vec_runtime_memory: usize, // size of the "non-vectorized" runtime memory
     vm_profiler: bool,
 ) -> (Vec<PF<EF>>, usize) {
     let ExecutionTrace {
@@ -52,6 +52,7 @@ pub fn prove_execution(
             private_input,
             source_code,
             function_locations,
+            no_vec_runtime_memory,
             vm_profiler,
         );
         get_execution_trace(bytecode, execution_result)

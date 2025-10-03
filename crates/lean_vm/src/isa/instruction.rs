@@ -105,7 +105,6 @@ pub struct InstructionContext<'a> {
     pub fp: &'a mut usize,
     pub pc: &'a mut usize,
     pub pcs: &'a Vec<usize>,
-    pub final_execution: bool,
     pub poseidons_16: &'a mut Vec<WitnessPoseidon16>,
     pub poseidons_24: &'a mut Vec<WitnessPoseidon24>,
     pub dot_products: &'a mut Vec<WitnessDotProduct>,
@@ -228,7 +227,7 @@ impl Instruction {
                 ctx.memory.set_vector(res_value.to_usize(), res0)?;
                 ctx.memory.set_vector(1 + res_value.to_usize(), res1)?;
 
-                if ctx.final_execution {
+                {
                     let cycle = ctx.pcs.len() - 1;
                     let addr_input_a = a_value.to_usize();
                     let addr_input_b = b_value.to_usize();
@@ -275,7 +274,7 @@ impl Instruction {
 
                 ctx.memory.set_vector(res_value.to_usize(), res)?;
 
-                if ctx.final_execution {
+                {
                     let cycle = ctx.pcs.len() - 1;
                     let addr_input_a = a_value.to_usize();
                     let addr_input_b = b_value.to_usize();
@@ -314,7 +313,7 @@ impl Instruction {
                     dot_product::<EF, _, _>(slice_0.iter().copied(), slice_1.iter().copied());
                 ctx.memory.set_ef_element(ptr_res, dot_product_result)?;
 
-                if ctx.final_execution {
+                {
                     let cycle = ctx.pcs.len() - 1;
                     ctx.dot_products.push(WitnessDotProduct {
                         cycle,
@@ -361,7 +360,7 @@ impl Instruction {
                 ctx.memory
                     .set_vector(ptr_res, res_vec.try_into().unwrap())?;
 
-                if ctx.final_execution {
+                {
                     let cycle = ctx.pcs.len() - 1;
                     ctx.multilinear_evals.push(WitnessMultilinearEval {
                         cycle,
@@ -378,23 +377,6 @@ impl Instruction {
                 *ctx.pc += 1;
                 Ok(())
             }
-        }
-    }
-
-    /// Update call counters based on instruction type
-    pub fn update_call_counters(
-        &self,
-        poseidon16_calls: &mut usize,
-        poseidon24_calls: &mut usize,
-        dot_product_ext_ext_calls: &mut usize,
-        multilinear_eval_calls: &mut usize,
-    ) {
-        match self {
-            Self::Poseidon2_16 { .. } => *poseidon16_calls += 1,
-            Self::Poseidon2_24 { .. } => *poseidon24_calls += 1,
-            Self::DotProductExtensionExtension { .. } => *dot_product_ext_ext_calls += 1,
-            Self::MultilinearEval { .. } => *multilinear_eval_calls += 1,
-            _ => {}
         }
     }
 }

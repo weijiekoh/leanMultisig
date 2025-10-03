@@ -201,7 +201,15 @@ fn build_test_case() -> (Bytecode, Vec<F>) {
 
 fn run_program() -> (Bytecode, ExecutionResult) {
     let (bytecode, public_input) = build_test_case();
-    let result = execute_bytecode(&bytecode, &public_input, &[], "", &BTreeMap::new(), false);
+    let result = execute_bytecode(
+        &bytecode,
+        &public_input,
+        &[],
+        "",
+        &BTreeMap::new(),
+        1 << 20,
+        false,
+    );
     (bytecode, result)
 }
 

@@ -32,7 +32,13 @@ pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
     (compiled, function_locations)
 }
 
-pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F], profiler: bool) {
+pub fn compile_and_run(
+    program: &str,
+    public_input: &[F],
+    private_input: &[F],
+    no_vec_runtime_memory: usize, // size of the "non-vectorized" runtime memory
+    profiler: bool,
+) {
     let (bytecode, function_locations) = compile_program(program);
     execute_bytecode(
         &bytecode,
@@ -40,6 +46,7 @@ pub fn compile_and_run(program: &str, public_input: &[F], private_input: &[F], p
         private_input,
         program,
         &function_locations,
+        no_vec_runtime_memory,
         profiler,
     );
 }

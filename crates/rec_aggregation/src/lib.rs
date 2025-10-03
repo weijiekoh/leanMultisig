@@ -4,4 +4,4 @@ pub mod recursion;
 pub mod xmss_aggregate;
 
 pub use recursion::bench_recursion;
-pub use xmss_aggregate::bench_xmss;
+pub use xmss_aggregate::run_xmss_benchmark;

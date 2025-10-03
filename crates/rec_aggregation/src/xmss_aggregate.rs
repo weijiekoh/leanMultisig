@@ -10,13 +10,13 @@ use rayon::prelude::*;
 use xmss::{PhonyXmssSecretKey, V, XmssSignature};
 
 #[derive(Default, Debug)]
-struct XmssBenchStats {
-    proving_time: Duration,
-    proof_size: usize,
-    verified_signatures: usize,
+pub struct XmssBenchStats {
+    pub proving_time: Duration,
+    pub proof_size: usize,
+    pub verified_signatures: usize,
 }
 
-fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBenchStats {
+pub fn run_xmss_benchmark(n_public_keys: usize) -> XmssBenchStats {
     // Public input:  message_hash | all_public_keys | bitield
     // Private input: signatures = (randomness | chain_tips | merkle_path)
     let mut program_str = r#"
@@ -220,6 +220,7 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
    "#.to_string();
 
     const INV_BITFIELD_DENSITY: usize = 1; // (1 / INV_BITFIELD_DENSITY) of the bits are 1 in the bitfield
+    const LOG_LIFETIME: usize = 32;
 
     let xmss_signature_size_padded = (V + 1 + LOG_LIFETIME) + LOG_LIFETIME.div_ceil(8);
     program_str = program_str
@@ -289,13 +290,22 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
     }
     let (bytecode, function_locations) = compile_program(&program_str);
     let time = Instant::now();
+
+    // in practice we will precompute all the possible values
+    // (depending on the number of recursions + the number of xmss signatures)
+    // (or even better: find a linear relation)
+    let no_vec_runtime_memory = match (n_public_keys, INV_BITFIELD_DENSITY, LOG_LIFETIME) {
+        (100, 1, 32) => 148329,
+        (500, 1, 32) => 741529,
+        _ => unimplemented!(),
+    };
     let (proof_data, proof_size) = prove_execution(
         &bytecode,
         &program_str,
         &function_locations,
-        &public_input,
-        &private_input,
+        (&public_input, &private_input),
         whir_config_builder(),
+        no_vec_runtime_memory,
         false,
     );
     let proving_time = time.elapsed();
@@ -307,14 +317,6 @@ fn run_xmss_benchmark<const LOG_LIFETIME: usize>(n_public_keys: usize) -> XmssBe
     }
 }
 
-pub fn bench_xmss(n: usize, log_lifetime: usize) -> Duration {
-    match log_lifetime {
-        32 => run_xmss_benchmark::<32>(n),
-        _ => panic!("unsupported log_lifetime {log_lifetime}"),
-    }
-    .proving_time
-}
-
 #[test]
 fn test_xmss_aggregate() {
     utils::init_tracing();
@@ -323,7 +325,7 @@ fn test_xmss_aggregate() {
         .unwrap_or("100".to_string())
         .parse()
         .unwrap();
-    let stats = run_xmss_benchmark::<32>(n_public_keys);
+    let stats = run_xmss_benchmark(n_public_keys);
     println!(
         "\nXMSS aggregation (n_signatures = {}, lifetime = 2^{})",
         stats.verified_signatures, 32

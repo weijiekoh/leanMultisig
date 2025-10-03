@@ -3,6 +3,8 @@ use lean_vm::*;
 use p3_symmetric::Permutation;
 use utils::{get_poseidon16, get_poseidon24};
 
+const DEFAULT_NO_VEC_RUNTIME_MEMORY: usize = 1 << 15;
+
 #[test]
 #[should_panic]
 fn test_duplicate_function_name() {
@@ -20,7 +22,7 @@ fn test_duplicate_function_name() {
         return;
     }
     "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -34,7 +36,7 @@ fn test_duplicate_constant_name() {
         return;
     }
     "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -55,7 +57,7 @@ fn test_fibonacci_program() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -73,7 +75,7 @@ fn test_edge_case_0() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -86,7 +88,7 @@ fn test_edge_case_1() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -104,7 +106,7 @@ fn test_edge_case_2() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -120,7 +122,7 @@ fn test_decompose_bits() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -136,7 +138,7 @@ fn test_unroll() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -148,7 +150,7 @@ fn test_rev_unroll() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -168,7 +170,7 @@ fn test_mini_program_0() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -211,7 +213,7 @@ fn test_mini_program_1() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -239,7 +241,7 @@ fn test_mini_program_2() {
         return sum, product;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -266,7 +268,13 @@ fn test_mini_program_3() {
     }
    "#;
     let mut public_input: [F; 16] = (0..16).map(F::new).collect::<Vec<F>>().try_into().unwrap();
-    compile_and_run(program, &public_input, &[], false);
+    compile_and_run(
+        program,
+        &public_input,
+        &[],
+        DEFAULT_NO_VEC_RUNTIME_MEMORY,
+        false,
+    );
 
     get_poseidon16().permute_mut(&mut public_input);
     let _ = public_input;
@@ -289,7 +297,13 @@ fn test_mini_program_4() {
     }
    "#;
     let mut public_input: [F; 24] = (0..24).map(F::new).collect::<Vec<F>>().try_into().unwrap();
-    compile_and_run(program, &public_input, &[], false);
+    compile_and_run(
+        program,
+        &public_input,
+        &[],
+        DEFAULT_NO_VEC_RUNTIME_MEMORY,
+        false,
+    );
 
     get_poseidon24().permute_mut(&mut public_input);
     dbg!(&public_input[16..]);
@@ -369,7 +383,7 @@ fn test_inlined() {
         return;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -421,7 +435,7 @@ fn test_match() {
         return x * x * x * x * x * x;
     }
    "#;
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 // #[test]
@@ -462,7 +476,7 @@ fn test_const_functions_calling_const_functions() {
     }
     "#;
 
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -485,7 +499,7 @@ fn test_inline_functions_calling_inline_functions() {
     }
     "#;
 
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }
 
 #[test]
@@ -512,5 +526,5 @@ fn test_nested_inline_functions() {
     }
     "#;
 
-    compile_and_run(program, &[], &[], false);
+    compile_and_run(program, &[], &[], DEFAULT_NO_VEC_RUNTIME_MEMORY, false);
 }

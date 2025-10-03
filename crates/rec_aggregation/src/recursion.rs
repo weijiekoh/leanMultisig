@@ -187,9 +187,12 @@ fn run_recursion_benchmark() -> RecursionBenchStats {
         &bytecode,
         &program_str,
         &function_locations,
-        &public_input,
-        &[],
+        (&public_input, &[]),
         whir_config_builder(),
+        // in practice we will precompute all the possible values
+        // (depending on the number of recursions + the number of xmss signatures)
+        // (or even better: find a linear relation)
+        256255,
         false,
     );
     let proving_time = time.elapsed();

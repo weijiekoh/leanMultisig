@@ -83,9 +83,9 @@ fn test_zk_vm() {
         &bytecode,
         &program_str,
         &function_locations,
-        &public_input,
-        &private_input,
+        (&public_input, &private_input),
         whir_config_builder(),
+        1 << 20,
         false,
     )
     .0;

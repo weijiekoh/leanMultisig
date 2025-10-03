@@ -64,6 +64,7 @@ if __name__ == "__main__":
         ('2025-09-14', 0.825),
         ('2025-09-28', 0.725),
         ('2025-10-01', 0.685),
+        ('2025-10-03', 0.647),
     ], target=0.125, target_label="Target (0.125 s)", title="Recursive WHIR opening", y_legend="Proving time (s)", file="recursive_whir_opening")
 
     create_duration_graph(data=[
@@ -75,6 +76,7 @@ if __name__ == "__main__":
         ('2025-09-14', 4.65),
         ('2025-09-28', 3.63),
         ('2025-10-01', 2.9),
+        ('2025-10-03', 2.81),
     ], target=0.5, target_label="Target (0.5 s)", title="500 XMSS aggregated: proving time", y_legend="Proving time (s)", file="xmss_aggregated_time")
 
     create_duration_graph(data=[
@@ -86,4 +88,5 @@ if __name__ == "__main__":
         ('2025-09-14', 4.65 / 0.72),
         ('2025-09-28', 3.63 / 0.63),
         ('2025-10-01', 2.9 / 0.42),
+        ('2025-10-03', 2.81 / 0.42),
     ], target=2.0, target_label="Target (2x)", title="500 XMSS aggregated: zkVM overhead vs raw Poseidons", y_legend="", file="xmss_aggregated_overhead")
