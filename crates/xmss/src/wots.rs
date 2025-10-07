@@ -28,9 +28,7 @@ impl WotsSecretKey {
     pub fn new(pre_images: [Digest; V]) -> Self {
         Self {
             pre_images,
-            public_key: WotsPublicKey(std::array::from_fn(|i| {
-                iterate_hash(&pre_images[i], W - 1, i % 2 == 1)
-            })),
+            public_key: WotsPublicKey(std::array::from_fn(|i| iterate_hash(&pre_images[i], W - 1))),
         }
     }
 
@@ -42,11 +40,7 @@ impl WotsSecretKey {
         let (randomness, encoding) = find_randomness_for_wots_encoding(message_hash, rng);
         WotsSignature {
             chain_tips: std::array::from_fn(|i| {
-                iterate_hash(
-                    &self.pre_images[i],
-                    encoding[i] as usize,
-                    i % 2 == 1 || (encoding[i] as usize) < W - 1,
-                )
+                iterate_hash(&self.pre_images[i], encoding[i] as usize)
             }),
             randomness,
         }
@@ -61,11 +55,7 @@ impl WotsSignature {
     ) -> Option<WotsPublicKey> {
         let encoding = wots_encode(message_hash, &signature.randomness)?;
         Some(WotsPublicKey(std::array::from_fn(|i| {
-            iterate_hash(
-                &self.chain_tips[i],
-                W - 1 - encoding[i] as usize,
-                i % 2 == 1,
-            )
+            iterate_hash(&self.chain_tips[i], W - 1 - encoding[i] as usize)
         })))
     }
 }
@@ -81,14 +71,8 @@ impl WotsPublicKey {
     }
 }
 
-fn iterate_hash(a: &Digest, n: usize, keep_left: bool) -> Digest {
-    (0..n).fold(*a, |acc, i| {
-        if keep_left || i + 1 < n {
-            poseidon16_compress(&acc, &Default::default())
-        } else {
-            poseidon16_compress_right(&acc, &Default::default())
-        }
-    })
+fn iterate_hash(a: &Digest, n: usize) -> Digest {
+    (0..n).fold(*a, |acc, _| poseidon16_compress(&acc, &Default::default()))
 }
 
 pub fn find_randomness_for_wots_encoding(

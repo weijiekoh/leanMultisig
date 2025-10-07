@@ -1,6 +1,9 @@
 
-// 1 OOD QUERY PER ROUND
+// 1 OOD QUERY PER ROUND -> TODO
 // 0 GRINDING IN SUMCHECK -> TODO
+
+const COMPRESSION = 1;
+const PERMUTATION = 0;
 
 const F_BITS = 31; // koala-bear = 31 bits
 const DIM = 5; // extension degree
@@ -340,8 +343,8 @@ fn sample_stir_indexes_and_fold(fs_state, num_queries, merkle_leaves_in_basefiel
                 left = states[j];
                 right = merkle_path + j;
             }
-            state_j_plus_1 = malloc_vec(2);
-            poseidon16(left, right, state_j_plus_1);
+            state_j_plus_1 = malloc_vec(1);
+            poseidon16(left, right, state_j_plus_1, COMPRESSION);
             states[j + 1] = state_j_plus_1;
         }
         assert_eq_vec(states[folded_domain_size], prev_root);
@@ -683,7 +686,7 @@ fn fs_new(transcript) -> 1 {
     }
 
     l_r_updated = malloc_vec(2);
-    poseidon16(new_l, fs_state[2], l_r_updated);
+    poseidon16(new_l, fs_state[2], l_r_updated, PERMUTATION);
     new_fs_state = malloc(4);
     new_fs_state[0] = fs_state[0] + 1; // read one 1 chunk of 8 field elements (7 are useless)
     new_fs_state[1] = l_r_updated;
@@ -741,7 +744,7 @@ fn fs_sample_helper(fs_state, n, res) -> 1 {
 
     // duplexing
     l_r = malloc_vec(2);
-    poseidon16(fs_state[1], fs_state[2], l_r);
+    poseidon16(fs_state[1], fs_state[2], l_r, PERMUTATION);
     new_fs_state = malloc(4);
     new_fs_state[0] = fs_state[0];
     new_fs_state[1] = l_r;
@@ -802,7 +805,7 @@ fn fs_observe(fs_state, n) -> 1 {
     // and return the updated fs_state
     // duplexing
     l_r = malloc_vec(2);
-    poseidon16(fs_state[0], fs_state[2], l_r);
+    poseidon16(fs_state[0], fs_state[2], l_r, PERMUTATION);
     new_fs_state = malloc(4);
     new_fs_state[0] = fs_state[0] + 1;
     new_fs_state[1] = l_r;

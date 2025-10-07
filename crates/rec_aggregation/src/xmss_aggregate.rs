@@ -20,6 +20,8 @@ pub fn run_xmss_benchmark(n_public_keys: usize) -> XmssBenchStats {
     // Public input:  message_hash | all_public_keys | bitield
     // Private input: signatures = (randomness | chain_tips | merkle_path)
     let mut program_str = r#"
+    const COMPRESSION = 1;
+    const PERMUTATION = 0;
 
     const V = 68;
     const W = 4;
@@ -60,8 +62,8 @@ pub fn run_xmss_benchmark(n_public_keys: usize) -> XmssBenchStats {
 
         // 1) We encode message_hash + randomness into the d-th layer of the hypercube
 
-        compressed = malloc_vec(2);
-        poseidon16(message_hash, randomness, compressed);
+        compressed = malloc_vec(1);
+        poseidon16(message_hash, randomness, compressed, COMPRESSION);
         compressed_ptr = compressed * 8;
         decomposed = decompose_custom(compressed_ptr[0], compressed_ptr[1], compressed_ptr[2], compressed_ptr[3], compressed_ptr[4], compressed_ptr[5]);
         
@@ -109,71 +111,37 @@ pub fn run_xmss_benchmark(n_public_keys: usize) -> XmssBenchStats {
         }
         assert sums[V - 1] == TARGET_SUM;
 
-        public_key = malloc_vec(V * 2);
+        public_key = malloc_vec(V);
 
         chain_tips_ptr = 8 * chain_tips;
         public_key_ptr = 8 * public_key;
 
-        for i in 0..V / 2 unroll {
-            match encoding[2 * i] {
+        for i in 0..V unroll {
+            match encoding[i] {
                 0 => {
-                    var_1 = chain_tips + 2 * i;
-                    var_2 = public_key + 4 * i;
-                    var_3 = malloc_vec(2);
-                    var_4 = malloc_vec(2);
-                    poseidon16(var_1, pointer_to_zero_vector, var_3);
-                    poseidon16(var_3, pointer_to_zero_vector, var_4);
-                    poseidon16(var_4, pointer_to_zero_vector, var_2);
+                    var_1 = chain_tips + i;
+                    var_2 = public_key + i;
+                    var_3 = malloc_vec(1);
+                    var_4 = malloc_vec(1);
+                    poseidon16(var_1, pointer_to_zero_vector, var_3, COMPRESSION);
+                    poseidon16(var_3, pointer_to_zero_vector, var_4, COMPRESSION);
+                    poseidon16(var_4, pointer_to_zero_vector, var_2, COMPRESSION);
                 }
                 1 => {
-                    var_3 = malloc_vec(2);
-                    var_1 = chain_tips + 2 * i;
-                    var_2 = public_key + 4 * i;
-                    poseidon16(var_1, pointer_to_zero_vector, var_3);
-                    poseidon16(var_3, pointer_to_zero_vector, var_2);
+                    var_3 = malloc_vec(1);
+                    var_1 = chain_tips + i;
+                    var_2 = public_key + i;
+                    poseidon16(var_1, pointer_to_zero_vector, var_3, COMPRESSION);
+                    poseidon16(var_3, pointer_to_zero_vector, var_2, COMPRESSION);
                 }
                 2 => {
-                    var_1 = chain_tips + 2 * i;
-                    var_2 = public_key + 4 * i;
-                    poseidon16(var_1, pointer_to_zero_vector, var_2);
+                    var_1 = chain_tips + i;
+                    var_2 = public_key + i;
+                    poseidon16(var_1, pointer_to_zero_vector, var_2, COMPRESSION);
                 }
                 3 => {
-                    var_1 = chain_tips_ptr + ((2 * i) * 8);
-                    var_2 = public_key_ptr + ((4 * i + 1) * 8);
-                    var_3 = var_1 + 3;
-                    var_4 = var_2 + 3;
-                    dot_product(var_1, pointer_to_one_vector * 8, var_2, 1);
-                    dot_product(var_3, pointer_to_one_vector * 8, var_4, 1);
-                }
-            }
-        }
-
-        for i in 0..V / 2 unroll {
-            match encoding[2 * i + 1] {
-                0 => {
-                    var_1 = chain_tips + (2 * i + 1);
-                    var_2 = public_key + (4 * i + 2);
-                    var_3 = malloc_vec(2);
-                    var_4 = malloc_vec(2);
-                    poseidon16(var_1, pointer_to_zero_vector, var_3);
-                    poseidon16(var_3, pointer_to_zero_vector, var_4);
-                    poseidon16(var_4, pointer_to_zero_vector, var_2);
-                }
-                1 => {
-                    var_1 = chain_tips + (2 * i + 1);
-                    var_2 = public_key + (4 * i + 2);
-                    var_3 = malloc_vec(2);
-                    poseidon16(var_1, pointer_to_zero_vector, var_3);
-                    poseidon16(var_3, pointer_to_zero_vector, var_2);
-                }
-                2 => {
-                    var_1 = chain_tips + (2 * i + 1);
-                    var_2 = public_key + (4 * i + 2);
-                    poseidon16(var_1, pointer_to_zero_vector, var_2);
-                }
-                3 => {
-                    var_1 = chain_tips_ptr + ((2 * i + 1) * 8);
-                    var_2 = public_key_ptr + ((4 * i + 2) * 8);
+                    var_1 = chain_tips_ptr + (i * 8);
+                    var_2 = public_key_ptr + (i * 8);
                     var_3 = var_1 + 3;
                     var_4 = var_2 + 3;
                     dot_product(var_1, pointer_to_one_vector * 8, var_2, 1);
@@ -183,30 +151,30 @@ pub fn run_xmss_benchmark(n_public_keys: usize) -> XmssBenchStats {
         }
 
         public_key_hashed = malloc_vec(V / 2);
-        poseidon24(public_key + 1, pointer_to_zero_vector, public_key_hashed);
+        poseidon24(public_key, pointer_to_zero_vector, public_key_hashed);
 
         for i in 1..V / 2 unroll {
-            poseidon24(public_key + (4 * i + 1), public_key_hashed + (i - 1), public_key_hashed + i);
+            poseidon24(public_key + (2*i), public_key_hashed + (i - 1), public_key_hashed + i);
         }
 
         wots_pubkey_hashed = public_key_hashed + (V / 2 - 1);
 
-        merkle_hashes = malloc_vec(LOG_LIFETIME * 2);
+        merkle_hashes = malloc_vec(LOG_LIFETIME);
         if merkle_are_left[0] == 1 {
-            poseidon16(wots_pubkey_hashed, merkle_neighbours, merkle_hashes);
+            poseidon16(wots_pubkey_hashed, merkle_neighbours, merkle_hashes, COMPRESSION);
         } else {
-            poseidon16(merkle_neighbours, wots_pubkey_hashed, merkle_hashes);
+            poseidon16(merkle_neighbours, wots_pubkey_hashed, merkle_hashes, COMPRESSION);
         }
 
         for h in 1..LOG_LIFETIME unroll {
             if merkle_are_left[h] == 1 {
-                poseidon16(merkle_hashes + (2 * (h-1)), merkle_neighbours + h, merkle_hashes + 2 * h);
+                poseidon16(merkle_hashes + (h-1), merkle_neighbours + h, merkle_hashes + h, COMPRESSION);
             } else {
-                poseidon16(merkle_neighbours + h, merkle_hashes + (2 * (h-1)), merkle_hashes + 2 * h);
+                poseidon16(merkle_neighbours + h, merkle_hashes + (h-1), merkle_hashes + h, COMPRESSION);
             }
         }
 
-        return merkle_hashes + (LOG_LIFETIME * 2 - 2);
+        return merkle_hashes + (LOG_LIFETIME - 1);
     }
 
     fn assert_eq_vec(x, y) inline {

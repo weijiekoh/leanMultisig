@@ -111,7 +111,9 @@ multilinear-toolkit.workspace = true
 # p3-poseidon2-air = { path = "../zk/Plonky3/poseidon2-air" }
 # p3-dft = { path = "../zk/Plonky3/dft" }
 # p3-challenger = { path = "../zk/Plonky3/challenger" }
-# p3-util = { path = "../zk/Plonky3/util" }
+
+# [patch."https://github.com/TomWambsgans/whir-p3.git"]
+# whir-p3 = { path = "../zk/whir/fork-whir-p3" }
 
 [dev-dependencies]
 criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }

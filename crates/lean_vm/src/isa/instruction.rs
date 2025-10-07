@@ -59,8 +59,10 @@ pub enum Instruction {
         arg_a: MemOrConstant,
         /// Second input vector (vectorized pointer, size 1)
         arg_b: MemOrConstant,
-        /// Output hash result (vectorized pointer, size 2)
+        /// Output hash result (vectorized pointer, size 1 or 2 depending on compression)
         res: MemOrFp,
+        /// Whether to perform compression (output size 1) or not (output size 2)
+        is_compression: bool,
     },
 
     /// Poseidon2 cryptographic hash with 24-element input
@@ -203,7 +205,12 @@ impl Instruction {
                 *ctx.jump_counts += 1;
                 Ok(())
             }
-            Self::Poseidon2_16 { arg_a, arg_b, res } => {
+            Self::Poseidon2_16 {
+                arg_a,
+                arg_b,
+                res,
+                is_compression,
+            } => {
                 let poseidon_16 = get_poseidon16();
 
                 let a_value = arg_a.read_value(ctx.memory, *ctx.fp)?;
@@ -225,25 +232,22 @@ impl Instruction {
                 let res1: [F; VECTOR_LEN] = input[VECTOR_LEN..].try_into().unwrap();
 
                 ctx.memory.set_vector(res_value.to_usize(), res0)?;
-                ctx.memory.set_vector(1 + res_value.to_usize(), res1)?;
+                if !is_compression {
+                    ctx.memory.set_vector(1 + res_value.to_usize(), res1)?;
+                }
 
                 {
                     let cycle = ctx.pcs.len() - 1;
                     let addr_input_a = a_value.to_usize();
                     let addr_input_b = b_value.to_usize();
                     let addr_output = res_value.to_usize();
-                    // Build output by concatenating the two result vectors we wrote to memory
-                    let output: [F; 16] = [res0.as_slice(), res1.as_slice()]
-                        .concat()
-                        .try_into()
-                        .unwrap();
                     ctx.poseidons_16.push(WitnessPoseidon16 {
                         cycle: Some(cycle),
                         addr_input_a,
                         addr_input_b,
                         addr_output,
                         input: input_before,
-                        output,
+                        is_compression: *is_compression,
                     });
                 }
 
@@ -285,7 +289,6 @@ impl Instruction {
                         addr_input_b,
                         addr_output,
                         input: input_before,
-                        output: res,
                     });
                 }
 
@@ -426,8 +429,16 @@ impl Display for Instruction {
                     "if {condition} != 0 jump to {label} = {dest} with next(fp) = {updated_fp}"
                 )
             }
-            Self::Poseidon2_16 { arg_a, arg_b, res } => {
-                write!(f, "{res} = poseidon2_16({arg_a}, {arg_b})")
+            Self::Poseidon2_16 {
+                arg_a,
+                arg_b,
+                res,
+                is_compression,
+            } => {
+                write!(
+                    f,
+                    "{res} = poseidon2_16({arg_a}, {arg_b}, compression={is_compression})"
+                )
             }
             Self::Poseidon2_24 { arg_a, arg_b, res } => {
                 write!(f, "{res} = poseidon2_24({arg_a}, {arg_b})")
