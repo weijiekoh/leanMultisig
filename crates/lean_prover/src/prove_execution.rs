@@ -466,13 +466,17 @@ pub fn prove_execution(
         multilinear_eval_powers: powers_const(grand_product_challenge_vm_multilinear_eval),
     };
 
-    let (grand_product_exec_sumcheck_point, grand_product_exec_sumcheck_inner_evals, _) =
+    let (grand_product_exec_sumcheck_point, mut grand_product_exec_sumcheck_inner_evals, _) =
         info_span!("Grand product sumcheck for Execution").in_scope(|| {
             sumcheck_prove(
                 1, // TODO univariate skip
                 MleGroupRef::Base(
-                    // TODO not all columns re required
-                    full_trace.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
+                    reorder_full_trace_for_precomp_foot_print(
+                        full_trace.iter().collect::<Vec<_>>(),
+                    )
+                    .iter()
+                    .map(|c| c.as_slice())
+                    .collect::<Vec<_>>(),
                 )
                 .pack(),
                 &precompile_foot_print_computation,
@@ -486,11 +490,28 @@ pub fn prove_execution(
             )
         });
 
-    prover_state.add_extension_scalars(&grand_product_exec_sumcheck_inner_evals);
+    // TODO compute eq polynomial 1 time and then inner product with each column
+    for col in [
+        COL_INDEX_OPERAND_C,
+        COL_INDEX_ADD,
+        COL_INDEX_MUL,
+        COL_INDEX_DEREF,
+        COL_INDEX_JUMP,
+        COL_INDEX_PC,
+        COL_INDEX_MEM_ADDRESS_A,
+        COL_INDEX_MEM_ADDRESS_B,
+        COL_INDEX_MEM_ADDRESS_C,
+    ] {
+        grand_product_exec_sumcheck_inner_evals.insert(
+            col,
+            full_trace[col].evaluate(&grand_product_exec_sumcheck_point),
+        );
+    }
     assert_eq!(
         N_TOTAL_COLUMNS,
         grand_product_exec_sumcheck_inner_evals.len()
-    ); // TODO open less columns
+    );
+    prover_state.add_extension_scalars(&grand_product_exec_sumcheck_inner_evals);
 
     let grand_product_exec_evals_on_each_column =
         &grand_product_exec_sumcheck_inner_evals[..N_INSTRUCTION_COLUMNS];

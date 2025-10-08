@@ -300,7 +300,7 @@ pub fn verify_execution(
     }
 
     let grand_product_exec_sumcheck_inner_evals =
-        verifier_state.next_extension_scalars_vec(N_TOTAL_COLUMNS)?;
+        verifier_state.next_extension_scalars_vec(N_TOTAL_COLUMNS)?; // TODO some of the values are unused
 
     let grand_product_exec_evals_on_each_column =
         &grand_product_exec_sumcheck_inner_evals[..N_INSTRUCTION_COLUMNS];
@@ -319,7 +319,12 @@ pub fn verify_execution(
                         grand_product_challenge_vm_multilinear_eval,
                     ),
                 }
-                .eval(&grand_product_exec_sumcheck_inner_evals, &[])
+                .eval(
+                    &reorder_full_trace_for_precomp_foot_print(
+                        grand_product_exec_sumcheck_inner_evals.clone(),
+                    ),
+                    &[],
+                )
             }
     {
         return Err(ProofError::InvalidProof);

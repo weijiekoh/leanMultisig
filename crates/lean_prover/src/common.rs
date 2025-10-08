@@ -144,6 +144,41 @@ pub struct PrecompileFootprint {
     pub multilinear_eval_powers: [EF; 6],
 }
 
+const PRECOMP_INDEX_OPERAND_A: usize = 0;
+const PRECOMP_INDEX_OPERAND_B: usize = 1;
+const PRECOMP_INDEX_FLAG_A: usize = 2;
+const PRECOMP_INDEX_FLAG_B: usize = 3;
+const PRECOMP_INDEX_FLAG_C: usize = 4;
+const PRECOMP_INDEX_AUX: usize = 5;
+const PRECOMP_INDEX_POSEIDON_16: usize = 6;
+const PRECOMP_INDEX_POSEIDON_24: usize = 7;
+const PRECOMP_INDEX_DOT_PRODUCT: usize = 8;
+const PRECOMP_INDEX_MULTILINEAR_EVAL: usize = 9;
+const PRECOMP_INDEX_MEM_VALUE_A: usize = 10;
+const PRECOMP_INDEX_MEM_VALUE_B: usize = 11;
+const PRECOMP_INDEX_MEM_VALUE_C: usize = 12;
+const PRECOMP_INDEX_FP: usize = 13;
+
+pub fn reorder_full_trace_for_precomp_foot_print<A: Copy>(full_trace: Vec<A>) -> Vec<A> {
+    assert_eq!(full_trace.len(), N_TOTAL_COLUMNS);
+    vec![
+        full_trace[COL_INDEX_OPERAND_A],
+        full_trace[COL_INDEX_OPERAND_B],
+        full_trace[COL_INDEX_FLAG_A],
+        full_trace[COL_INDEX_FLAG_B],
+        full_trace[COL_INDEX_FLAG_C],
+        full_trace[COL_INDEX_AUX],
+        full_trace[COL_INDEX_POSEIDON_16],
+        full_trace[COL_INDEX_POSEIDON_24],
+        full_trace[COL_INDEX_DOT_PRODUCT],
+        full_trace[COL_INDEX_MULTILINEAR_EVAL],
+        full_trace[COL_INDEX_MEM_VALUE_A],
+        full_trace[COL_INDEX_MEM_VALUE_B],
+        full_trace[COL_INDEX_MEM_VALUE_C],
+        full_trace[COL_INDEX_FP],
+    ]
+}
+
 impl PrecompileFootprint {
     fn air_eval<
         PointF: PrimeCharacteristicRing + Copy,
@@ -153,36 +188,36 @@ impl PrecompileFootprint {
         point: &[PointF],
         mul_point_f_and_ef: impl Fn(PointF, EF) -> ResultF,
     ) -> ResultF {
-        let nu_a = (ResultF::ONE - point[COL_INDEX_FLAG_A]) * point[COL_INDEX_MEM_VALUE_A]
-            + point[COL_INDEX_FLAG_A] * point[COL_INDEX_OPERAND_A];
-        let nu_b = (ResultF::ONE - point[COL_INDEX_FLAG_B]) * point[COL_INDEX_MEM_VALUE_B]
-            + point[COL_INDEX_FLAG_B] * point[COL_INDEX_OPERAND_B];
-        let nu_c = (ResultF::ONE - point[COL_INDEX_FLAG_C]) * point[COL_INDEX_MEM_VALUE_C]
-            + point[COL_INDEX_FLAG_C] * point[COL_INDEX_FP];
+        let nu_a = (ResultF::ONE - point[PRECOMP_INDEX_FLAG_A]) * point[PRECOMP_INDEX_MEM_VALUE_A]
+            + point[PRECOMP_INDEX_FLAG_A] * point[PRECOMP_INDEX_OPERAND_A];
+        let nu_b = (ResultF::ONE - point[PRECOMP_INDEX_FLAG_B]) * point[PRECOMP_INDEX_MEM_VALUE_B]
+            + point[PRECOMP_INDEX_FLAG_B] * point[PRECOMP_INDEX_OPERAND_B];
+        let nu_c = (ResultF::ONE - point[PRECOMP_INDEX_FLAG_C]) * point[PRECOMP_INDEX_MEM_VALUE_C]
+            + point[PRECOMP_INDEX_FLAG_C] * point[PRECOMP_INDEX_FP];
 
         (nu_a * self.p16_powers[2]
             + nu_b * self.p16_powers[3]
             + nu_c * self.p16_powers[4]
-            + mul_point_f_and_ef(point[COL_INDEX_AUX], self.p16_powers[5])
+            + mul_point_f_and_ef(point[PRECOMP_INDEX_AUX], self.p16_powers[5])
             + self.p16_powers[1])
-            * point[COL_INDEX_POSEIDON_16]
+            * point[PRECOMP_INDEX_POSEIDON_16]
             + (nu_a * self.p24_powers[2]
                 + nu_b * self.p24_powers[3]
                 + nu_c * self.p24_powers[4]
                 + self.p24_powers[1])
-                * point[COL_INDEX_POSEIDON_24]
+                * point[PRECOMP_INDEX_POSEIDON_24]
             + (nu_a * self.dot_product_powers[2]
                 + nu_b * self.dot_product_powers[3]
                 + nu_c * self.dot_product_powers[4]
-                + mul_point_f_and_ef(point[COL_INDEX_AUX], self.dot_product_powers[5])
+                + mul_point_f_and_ef(point[PRECOMP_INDEX_AUX], self.dot_product_powers[5])
                 + self.dot_product_powers[1])
-                * point[COL_INDEX_DOT_PRODUCT]
+                * point[PRECOMP_INDEX_DOT_PRODUCT]
             + (nu_a * self.multilinear_eval_powers[2]
                 + nu_b * self.multilinear_eval_powers[3]
                 + nu_c * self.multilinear_eval_powers[4]
-                + mul_point_f_and_ef(point[COL_INDEX_AUX], self.multilinear_eval_powers[5])
+                + mul_point_f_and_ef(point[PRECOMP_INDEX_AUX], self.multilinear_eval_powers[5])
                 + self.multilinear_eval_powers[1])
-                * point[COL_INDEX_MULTILINEAR_EVAL]
+                * point[PRECOMP_INDEX_MULTILINEAR_EVAL]
             + self.global_challenge
     }
 }
