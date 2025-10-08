@@ -827,6 +827,7 @@ pub fn prove_execution(
             + memory_poly_eq_point_alpha.square() * base_memory_lookup_statement_3.value,
         &base_memory_poly_eq_point,
         &base_memory_pushforward,
+        Some(non_zero_memory_size),
     );
     let poseidon_logup_star_statements = prove_logup_star(
         &mut prover_state,
@@ -839,6 +840,7 @@ pub fn prove_execution(
             .sum(),
         &poseidon_poly_eq_point,
         &poseidon_pushforward,
+        Some(non_zero_memory_size.div_ceil(VECTOR_LEN)),
     );
 
     let bytecode_logup_star_statements = prove_logup_star(
@@ -848,6 +850,7 @@ pub fn prove_execution(
         bytecode_lookup_claim_1.value + alpha_bytecode_lookup * bytecode_lookup_claim_2.value,
         &bytecode_poly_eq_point,
         &bytecode_pushforward,
+        Some(bytecode.instructions.len()),
     );
 
     let poseidon_lookup_memory_point = MultilinearPoint(

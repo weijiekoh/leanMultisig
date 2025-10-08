@@ -30,6 +30,7 @@ pub fn prove_logup_star<EF>(
     claimed_value: EF,
     poly_eq_point: &[EF],
     pushforward: &[EF], // already commited
+    max_index: Option<usize>,
 ) -> LogupStarStatements<EF>
 where
     EF: ExtensionField<PF<EF>>,
@@ -37,6 +38,10 @@ where
 {
     let table_length = table.unpacked_len();
     let indexes_length = indexes.len();
+    let max_index = max_index
+        .unwrap_or(table_length)
+        .next_multiple_of(packing_width::<EF>());
+    let max_index_packed = max_index / packing_width::<EF>();
 
     let (poly_eq_point_packed, pushforward_packed, mut table_packed) = info_span!("packing")
         .in_scope(|| {
@@ -101,7 +106,8 @@ where
         layer
     });
 
-    let (claim_left, _, eval_c_minux_indexes) = prove_gkr_quotient(prover_state, gkr_layer_left);
+    let (claim_left, _, eval_c_minux_indexes) =
+        prove_gkr_quotient(prover_state, gkr_layer_left, None);
 
     let gkr_layer_right = info_span!("building right").in_scope(|| {
         let mut layer =
@@ -113,12 +119,18 @@ where
                 .map(|i| random_challenge - PF::<EF>::from_usize(i))
                 .collect::<Vec<_>>(),
         );
-        parallel_clone(&pushforward_packed, &mut layer[..half_len_packed]);
+        parallel_clone(
+            &pushforward_packed[..max_index_packed],
+            &mut layer[..max_index_packed],
+        );
+        layer[max_index_packed..half_len_packed]
+            .par_iter_mut()
+            .for_each(|x| *x = EFPacking::<EF>::ZERO);
         parallel_clone(&challenge_minus_increment, &mut layer[half_len_packed..]);
         layer
     });
     let (claim_right, pushforward_final_eval, _) =
-        prove_gkr_quotient(prover_state, gkr_layer_right);
+        prove_gkr_quotient(prover_state, gkr_layer_right, Some(max_index_packed));
 
     let final_point_left = claim_left.point[1..].to_vec();
     let indexes_final_eval = random_challenge - eval_c_minux_indexes;
@@ -303,6 +315,7 @@ mod tests {
             claim.value,
             &poly_eq_point,
             &pushforward,
+            None,
         );
         println!("Proving logup_star took {} ms", time.elapsed().as_millis());
 
