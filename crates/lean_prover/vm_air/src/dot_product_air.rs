@@ -59,12 +59,7 @@ impl<AB: AirBuilder> Air<AB> for DotProductAir {
             value_b_up,
             res_up,
             computation_up,
-        ] = up
-            .iter()
-            .map(|v| v.clone().into())
-            .collect::<Vec<AB::Expr>>()
-            .try_into()
-            .unwrap();
+        ] = up.to_vec().try_into().ok().unwrap();
         let [
             start_flag_down,
             len_down,
@@ -75,12 +70,9 @@ impl<AB: AirBuilder> Air<AB> for DotProductAir {
             _value_b_down,
             _res_down,
             computation_down,
-        ] = down
-            .iter()
-            .map(|v| v.clone().into())
-            .collect::<Vec<AB::Expr>>()
-            .try_into()
-            .unwrap();
+        ] = down.to_vec().try_into().ok().unwrap();
+
+        // TODO we could some some of the following computation in the base field
 
         builder.assert_bool(start_flag_down.clone());
 
