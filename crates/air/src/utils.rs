@@ -145,13 +145,14 @@ pub(crate) fn columns_up_and_down<F: Field>(columns: &[&[F]]) -> Vec<Vec<F>> {
 }
 
 pub(crate) fn column_up<F: Field>(column: &[F]) -> Vec<F> {
-    let mut up = column.to_vec();
+    let mut up = parallel_clone_vec(column);
     up[column.len() - 1] = up[column.len() - 2];
     up
 }
 
 pub(crate) fn column_down<F: Field>(column: &[F]) -> Vec<F> {
-    let mut down = column[1..].to_vec();
-    down.push(*down.last().unwrap());
+    let mut down = unsafe { uninitialized_vec(column.len()) };
+    parallel_clone(&column[1..], &mut down[..column.len() - 1]);
+    down[column.len() - 1] = down[column.len() - 2];
     down
 }

@@ -195,16 +195,25 @@ fn open_structured_columns<EF: ExtensionField<PF<EF>> + ExtensionField<IF>, IF: 
 
     let batched_column =
         multilinears_linear_combination(witness, &poly_eq_batching_scalars[..n_columns]);
-    let mut batched_column_mixed = column_up(&batched_column);
-    add_multilinears_inplace(
-        &mut batched_column_mixed,
-        &scale_poly(&column_down(&batched_column), alpha),
-    );
+
+    let batched_column_mixed = info_span!("mixing up / down").in_scope(|| {
+        let mut batched_column_mixed = column_down(&batched_column);
+        add_multilinears_inplace(
+            &mut batched_column_mixed,
+            &scale_poly(&column_up(&batched_column), alpha),
+        );
+        batched_column_mixed
+    });
+
     // TODO do not recompute this (we can deduce it from already computed values)
-    let sub_evals = fold_multilinear_chunks(
-        &batched_column_mixed,
-        &MultilinearPoint(outer_sumcheck_challenge[1..log_n_rows - univariate_skips + 1].to_vec()),
-    );
+    let sub_evals = info_span!("fold_multilinear_chunks").in_scope(|| {
+        fold_multilinear_chunks(
+            &batched_column_mixed,
+            &MultilinearPoint(
+                outer_sumcheck_challenge[1..log_n_rows - univariate_skips + 1].to_vec(),
+            ),
+        )
+    });
     prover_state.add_extension_scalars(&sub_evals);
 
     let epsilons = prover_state.sample_vec(univariate_skips);
@@ -216,29 +225,39 @@ fn open_structured_columns<EF: ExtensionField<PF<EF>> + ExtensionField<IF>, IF: 
     .concat();
 
     // TODO do not recompute this (we can deduce it from already computed values)
-    let inner_sum = batched_column_mixed.evaluate(&MultilinearPoint(point.clone()));
+    let inner_sum = info_span!("mixed column eval")
+        .in_scope(|| batched_column_mixed.evaluate(&MultilinearPoint(point.clone())));
 
-    let mut mat_up = matrix_up_folded(&point);
-    add_multilinears_inplace(&mut mat_up, &scale_poly(&matrix_down_folded(&point), alpha));
-    let inner_mle = MleGroupOwned::Extension(vec![mat_up, batched_column]);
+    let mut mat_up = matrix_up_folded(&point, alpha);
+    matrix_down_folded(&point, &mut mat_up);
+    let inner_mle = info_span!("packing").in_scope(|| {
+        MleGroupOwned::ExtensionPacked(vec![
+            pack_extension(&mat_up),
+            pack_extension(&batched_column),
+        ])
+    });
 
-    let (inner_challenges, _, _) = sumcheck_prove::<EF, _, _, _>(
-        1,
-        inner_mle,
-        &ProductComputation,
-        &ProductComputation,
-        &[],
-        None,
-        false,
-        prover_state,
-        inner_sum,
-        None,
-    );
+    let (inner_challenges, _, _) = info_span!("structured columns sumcheck").in_scope(|| {
+        sumcheck_prove::<EF, _, _, _>(
+            1,
+            inner_mle,
+            &ProductComputation,
+            &ProductComputation,
+            &[],
+            None,
+            false,
+            prover_state,
+            inner_sum,
+            None,
+        )
+    });
 
-    let evaluations_remaining_to_prove = witness
-        .iter()
-        .map(|col| col.evaluate(&inner_challenges))
-        .collect::<Vec<_>>();
+    let evaluations_remaining_to_prove = info_span!("final evals").in_scope(|| {
+        witness
+            .iter()
+            .map(|col| col.evaluate(&inner_challenges))
+            .collect::<Vec<_>>()
+    });
     prover_state.add_extension_scalars(&evaluations_remaining_to_prove);
 
     (inner_challenges, evaluations_remaining_to_prove)

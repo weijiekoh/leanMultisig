@@ -9,21 +9,21 @@ pub fn build_poseidon_columns(
     poseidons_16: &[WitnessPoseidon16],
     poseidons_24: &[WitnessPoseidon24],
 ) -> (Vec<Vec<F>>, Vec<Vec<F>>) {
-    let poseidon_16_data = poseidons_16.iter().map(|w| w.input).collect::<Vec<_>>();
+    let poseidon_16_data = poseidons_16.par_iter().map(|w| w.input).collect::<Vec<_>>();
     let poseidon_16_compress = poseidons_16
-        .iter()
+        .par_iter()
         .map(|w| w.is_compression)
         .collect::<Vec<_>>();
-    let poseidon_16_dndex_res = poseidons_16
-        .iter()
+    let poseidon_16_index_res = poseidons_16
+        .par_iter()
         .map(|w| w.addr_output)
         .collect::<Vec<_>>();
     let witness_matrix_poseidon_16 = generate_trace_poseidon_16(
         &poseidon_16_data,
         &poseidon_16_compress,
-        &poseidon_16_dndex_res,
+        &poseidon_16_index_res,
     );
-    let poseidon_24_data = poseidons_24.iter().map(|w| w.input).collect::<Vec<_>>();
+    let poseidon_24_data = poseidons_24.par_iter().map(|w| w.input).collect::<Vec<_>>();
     let witness_matrix_poseidon_24 = generate_trace_poseidon_24(&poseidon_24_data);
     let transposed_16 = witness_matrix_poseidon_16.transpose();
     let cols_16 = transposed_16.row_slices().map(<[F]>::to_vec).collect();

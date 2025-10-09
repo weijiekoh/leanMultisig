@@ -5,7 +5,9 @@ use p3_field::{ExtensionField, Field, dot_product};
 use p3_util::log2_strict_usize;
 
 use multilinear_toolkit::prelude::*;
+use tracing::instrument;
 
+#[instrument(skip_all)]
 pub fn multilinears_linear_combination<
     F: Field,
     EF: ExtensionField<F>,

@@ -177,10 +177,11 @@ fn verify_structured_columns<EF: ExtensionField<PF<EF>>>(
     ) != dot_product::<EF, _, _>(
         all_witness_up.iter().copied(),
         poly_eq_batching_scalars.iter().copied(),
-    ) + dot_product::<EF, _, _>(
-        all_witness_down.iter().copied(),
-        poly_eq_batching_scalars.iter().copied(),
     ) * alpha
+        + dot_product::<EF, _, _>(
+            all_witness_down.iter().copied(),
+            poly_eq_batching_scalars.iter().copied(),
+        )
     {
         return Err(ProofError::InvalidProof);
     }
@@ -202,7 +203,7 @@ fn verify_structured_columns<EF: ExtensionField<PF<EF>>>(
     let up = matrix_up_lde(&matrix_lde_point);
     let down = matrix_down_lde(&matrix_lde_point);
 
-    let final_value = inner_sumcheck_stement.value / (up + alpha * down);
+    let final_value = inner_sumcheck_stement.value / (up * alpha + down);
 
     let evaluations_remaining_to_verify = verifier_state.next_extension_scalars_vec(n_columns)?;
 
