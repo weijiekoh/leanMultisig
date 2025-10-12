@@ -236,6 +236,9 @@ where
 
     let mut eq_poly_packed = pack_extension(&eq_poly);
 
+    // TODO for the top layer, the denomiators have a structured form: constant - index.
+    // We can skip one EE multilication in the sumcheck computation.
+
     let sum_x_packed: EFPacking<EF> = (0..n_non_zeros_numerator - quarter_len_packed)
         .into_par_iter()
         .map(|i| {
