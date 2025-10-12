@@ -52,7 +52,7 @@ pub fn prove_execution(
         memory, // padded with zeros to next power of two
     } = info_span!("Witness generation").in_scope(|| {
         let execution_result = execute_bytecode(
-            bytecode,
+            &mut bytecode.clone(),
             public_input,
             private_input,
             source_code,

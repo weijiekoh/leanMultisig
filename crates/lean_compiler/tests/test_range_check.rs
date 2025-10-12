@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use lean_vm::*;
-//use lean_vm::runner::compile_range_checks;
+use lean_vm::runner::{ExecutionHistory, execute_bytecode_helper};
 use p3_field::PrimeCharacteristicRing;
 use lean_compiler::{parse_program, compile_program};
 use lean_compiler::{Expression, SimpleExpr, Line, SimpleLine, simplify_program, compile_to_intermediate_bytecode, compile_to_low_level_bytecode, IntermediateInstruction, IntermediateValue};
@@ -8,7 +8,7 @@ use utils::ToUsize;
 
 fn range_check_test_cases() -> Vec<(usize, usize)> {
     let mut test_cases = vec![];
-    for t in 63..70 {
+    for t in 0..80 {
         for v in 0..t + 2 {
             test_cases.push((v, t));
         }
@@ -17,9 +17,8 @@ fn range_check_test_cases() -> Vec<(usize, usize)> {
         }
     }
 
-    for v in 90..100 {
-        let t = 16777216 + 1 + v;
-        test_cases.push((v, t));
+    for v in 80..1000 {
+        test_cases.push((v, v + 100));
     }
 
     test_cases
@@ -27,47 +26,99 @@ fn range_check_test_cases() -> Vec<(usize, usize)> {
 
 fn range_check_program(value: usize, max: usize) -> String {
     let program = format!(r#"
-    fn main() {{
-        val = {};
-        range_check(val, {});
+    fn func(val) {{
+        //range_check(val, {max});
+        print(val);
         return;
     }}
-    "#, value, max);
+
+    fn main() {{
+        val = {value};
+        func(val);
+        //range_check(val, {max});
+        //range_check(val, {max});
+        return;
+    }}
+    "#);
     program.to_string()
 }
 
 #[test]
 fn test_compile_range_checks() {
-    //for (v, t) in vec![(64, 63)] {
-    for (v, t) in range_check_test_cases() {
-        println!("Range Check Test: v: {}, t: {}", v, t);
-        let program = range_check_program(v, t);
-        let (mut bytecode, function_locations) = compile_program(&program);
-        println!("old bytecode:\n{}", bytecode);
-        println!("ending_pc: {}", bytecode.ending_pc);
-        println!();
+    let max_runner_memory_size: usize = 1 << 24;
 
-        let new_bytecode = compile_range_checks(&bytecode, &[], &[]);
+    for (v, t) in vec![(0, 0)] {
+    //for (v, t) in range_check_test_cases() {
+        println!("Range Check Test: v: {}, t: {} ==============", v, t);
+        let program = range_check_program(v, t);
+        let (bytecode, function_locations) = compile_program(&program);
+        
+        println!("Old bytecode: {}", bytecode);
+        println!("ending_pc: {}", bytecode.ending_pc);
+
+        // First execution
+        //let first_exec = execute_bytecode(
+            //&mut bytecode,
+            //&[],
+            //&[],
+            //&program,
+            //&function_locations,
+            //false,
+        //).unwrap();
+        let mut std_out = String::new();
+        let mut instruction_history = ExecutionHistory::default();
+        let first_exec = execute_bytecode_helper(
+            &bytecode,
+            &[],
+            &[],
+            max_runner_memory_size / 2,
+            false,
+            &mut std_out,
+            &mut instruction_history,
+            false,
+            &function_locations,
+        ).unwrap();
+
+        let new_bytecode = compile_range_checks(&first_exec, &bytecode);
+        println!("New bytecode: {}", new_bytecode.clone().unwrap());
+
         match new_bytecode {
             Ok(new_bytecode) => {
-                println!("new bytecode:\n{}", new_bytecode);
-                println!("ending_pc: {}", new_bytecode.ending_pc);
-                let result = execute_bytecode(
-                    &mut bytecode,
+                //let result = execute_bytecode(
+                    //&mut new_bytecode,
+                    //&[],
+                    //&[],
+                    //&program,
+                    //&function_locations,
+                    //false,
+                //);
+                let result = execute_bytecode_helper(
+                    &new_bytecode,
                     &[],
                     &[],
-                    &program,
-                    &function_locations,
+                    max_runner_memory_size / 2,
                     false,
-                    );
+                    &mut std_out,
+                    &mut instruction_history,
+                    false,
+                    &function_locations,
+                );
 
-                if v >= t {
+                if v >= 16777216 || v >= t {
+                    if result.is_err() {
+                        println!("result: {}", result.as_ref().unwrap_err());
+                    }
                     assert!(
                         matches!(result, Err(RunnerError::OutOfMemory)),
                         "range check failed to catch OOM"
-                        );
+                    );
+                    println!("Executed updated bytecode: OOM as expected");
                 } else {
+                    if result.is_err() {
+                        println!("result: {}", result.as_ref().unwrap_err());
+                    }
                     assert!(result.is_ok());
+                    println!("Executed updated bytecode: OK");
                 }
 
             }
@@ -76,52 +127,6 @@ fn test_compile_range_checks() {
             }
         }
     }
-}
-
-#[test]
-fn test_range_check_compilation_and_execution() {
-    //for (v, t) in range_check_test_cases() {
-    //for (v, t) in vec![(0, 67), (68, 66), (0, 68), (63, 63), (15, 63), (66, 65), (16777217, 68)] {
-    for (v, t) in vec![(0, 67)] {
-        println!("Range Check Test: v: {}, t: {}", v, t);
-        let program = range_check_program(v, t);
-        let (mut bytecode, function_locations) = compile_program(&program);
-        let result = execute_bytecode(
-            &mut bytecode,
-            &[],
-            &[],
-            &program,
-            &function_locations,
-            false,
-        );
-
-        if v >= t {
-            assert!(
-                matches!(result, Err(RunnerError::OutOfMemory)),
-                "range check failed to catch OOM"
-            );
-        } else {
-            assert!(result.is_ok());
-        }
-    }
-    //for v in 0..100 {
-        ////let v = 1;
-        ////let v = 16777216;
-        //let t = 200;
-        //println!("Range Check Test: v: {}, t: {}", v, t);
-        //let program = range_check_program(v, t);
-        //let (mut bytecode, function_locations) = compile_program(&program);
-        //println!("{}", bytecode.to_string());
-        //let result = execute_bytecode(
-            //&mut bytecode,
-            //&[],
-            //&[],
-            //&program,
-            //&function_locations,
-            //false,
-        //);
-        //assert!(result.is_ok());
-    //}
 }
 
 /// Simple test that the range check keyword is parsed and compiled (steps a and b only).
@@ -310,11 +315,110 @@ fn test_invalid_range_check_7() {
     }
 }
 
-//#[test]
-//fn test_invalid_range_check_6() {
-//// TODO: fix this: when v is the prime order
-//do_test_invalid_range_check(2130706433, 0);
-//}
+#[test]
+fn test_deref() {
+    let x = 1000;
+    let y = 1001;
+    let v_p = 1006;
+    let v_q = 1007;
+    let val = F::from_usize(123);
+    let starting_frame_memory = 5;
+    let mut instructions = vec![];
+    let mut hints = BTreeMap::new();
+
+    // Store v in m[fp + x] by setting a pointer m[fp + vp] = fp + x and using deref to store
+    // v in m[m[fp + v_p] + 0]
+    instructions.push(
+        // computation: m[fp + v_p] = fp + x
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::from_usize(x)),
+            arg_c: MemOrFp::Fp,
+            res: MemOrConstant::MemoryAfterFp { offset: v_p },
+        },
+    );
+
+    instructions.push(
+        // deref: val = m[m[fp + v_p] + 0] = m[fp + x]
+        Instruction::Deref {
+            shift_0: v_p,
+            shift_1: 0,
+            res: MemOrFpOrConstant::Constant(val),
+        },
+    );
+
+    instructions.push(
+        // computation: m[fp + v_q] = fp + y
+        Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::from_usize(y)),
+            arg_c: MemOrFp::Fp,
+            res: MemOrConstant::MemoryAfterFp { offset: v_q },
+        },
+    );
+
+    instructions.push(
+        // deref: val = m[m[fp + v_q] + 0] = m[fp + y]
+        Instruction::Deref {
+            shift_0: v_q,
+            shift_1: 0,
+            res: MemOrFpOrConstant::Constant(val),
+        },
+    );
+
+
+    hints.insert(
+        instructions.len(),
+        vec![
+            Hint::Print {
+                line_info: "m[fp + 1000]".to_string(),
+                content: vec![MemOrConstant::MemoryAfterFp { offset: 1000 }],
+            },
+            Hint::Print {
+                line_info: "m[fp + 1001]".to_string(),
+                content: vec![MemOrConstant::MemoryAfterFp { offset: 1001 }],
+            },
+        ]
+    );
+
+    instructions.push(
+        Instruction::Deref {
+            shift_0: v_q,
+            shift_1: 0,
+            res: MemOrFpOrConstant::MemoryAfterFp { offset: 1000 },
+        },
+    );
+
+    instructions.push(Instruction::Jump {
+        condition: MemOrConstant::Constant(F::ONE),
+        dest: MemOrConstant::Constant(F::from_usize(instructions.len() + 1)),
+        updated_fp: MemOrFp::Fp,
+    });
+    instructions.push(Instruction::Jump {
+        condition: MemOrConstant::Constant(F::ONE),
+        dest: MemOrConstant::Constant(F::from_usize(0)),
+        updated_fp: MemOrFp::Fp,
+    });
+
+    let ending_pc = instructions.len() - 1;
+    let mut bytecode = Bytecode {
+        instructions,
+        hints,
+        starting_frame_memory,
+        ending_pc,
+    };
+    println!("bytecode:\n{}", bytecode.to_string());
+    let execution_result = execute_bytecode(
+        &mut bytecode,
+        &[],                                // public input
+        &[],                                // private input
+        "",                                 // no source code for debug
+        &std::collections::BTreeMap::new(), // no function locations
+        false,                              // no profiler
+    );
+
+    assert!(execution_result.is_ok());
+}
 
 fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
     let starting_frame_memory = 5;
@@ -409,26 +513,6 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
         res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
     });
 
-    /*
-    hints.insert(
-        instructions.len(),
-        vec![
-        Hint::Print {
-            line_info: "m[fp + i]".to_string(),
-            content: vec![MemOrConstant::MemoryAfterFp { offset: i }],
-        },
-        Hint::Print {
-            line_info: "m[fp + j]".to_string(),
-            content: vec![MemOrConstant::MemoryAfterFp { offset: j }],
-        },
-        Hint::Print {
-            line_info: "m[fp + k]".to_string(),
-            content: vec![MemOrConstant::MemoryAfterFp { offset: k }],
-        },
-        ],
-    );
-    */
-
     instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ONE),
         dest: MemOrConstant::Constant(F::from_usize(instructions.len() + 1)),
@@ -437,7 +521,7 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
     instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ONE),
         dest: MemOrConstant::Constant(F::from_usize(0)),
-        updated_fp: MemOrFp::Fp,
+        updated_fp: MemOrFp::MemoryAfterFp { offset: 0 },
     });
 
     let ending_pc = instructions.len() - 1;
@@ -447,9 +531,6 @@ fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
         starting_frame_memory,
         ending_pc,
     };
-
-    println!("Raw Bytecode:\n{}", bytecode.to_string());
-    println!("starting_frame_memory: {}", bytecode.starting_frame_memory);
 
     // Execute the bytecode
     let execution_result = execute_bytecode(

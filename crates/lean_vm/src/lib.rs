@@ -2,9 +2,9 @@ use p3_koala_bear::{KoalaBear, QuinticExtensionFieldKB};
 
 mod error;
 mod lean_isa;
-mod memory;
+pub mod memory;
 mod profiler;
-mod runner;
+pub mod runner;
 mod stack_trace;
 pub use error::*;
 pub use lean_isa::*;

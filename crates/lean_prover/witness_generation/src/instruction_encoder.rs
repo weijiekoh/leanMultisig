@@ -97,6 +97,11 @@ pub fn field_representation(instr: &Instruction) -> [F; N_INSTRUCTION_COLUMNS] {
             set_nu_c(&mut fields, res);
             fields[COL_INDEX_AUX] = F::from_usize(*n_vars); // AUX stores `n_vars`
         }
+        Instruction::RangeCheck { .. } => {
+            // RangeCheck instructions should be replaced by compile_range_checks before witness generation
+            // This is a no-op encoding since these should not appear in final bytecode
+            // All fields remain F::ZERO (already initialized)
+        }
     }
     fields
 }

@@ -31,6 +31,26 @@ Now that we have ensured that:
 
 Recall that `t <= 2^16` and `M <= 2^29 < p / 2`. This gives us `m[fp + x] < t`.
 
-TODO: update this section - we may need 4 or 5 instructions instead of 3, as we
-may need to set m[fp + i] and m[fp + k] to 0, depending on whether m[m[fp + x]]
-and/or m[m[fp + j]] are defined.
+## Implementation
+
+### `range_check()` keyword and hint
+
+We introduce a new language keyword: `range_check(v, t)`, where `v` must be a
+variable, and `t` must be a literal (e.g. `range_check(x, 100)` is valid, but
+`range_check(x, y)` is not).
+
+The compiler will treat `range_check()` as a hint. It will insert 3-step
+range-check opcodes at the end of execution (right before the opcode with PC
+`bytecode.ending_pc`), and update `bytecode.ending_pc` accordingly. This is
+necessary because it is too complex to insert these opcodes in-place without
+first executing the bytecode to determine which memory locations will and will
+not be set so as to determine correct `i`, `j`, and `k` values per range check.
+To complicate matters, the way the compiler sets up JUMP destinations in memory
+may conflict with these auxiliary memory cells. Finally, this approach is more
+auditble and less complex.
+
+### Linking the hints to the 3-step range-check opcodes
+
+It is necessary to affix metadata to each `range_check` hint to indicate which
+set of 3 opcodes will implement it. This is to make it clear that if one of the
+3 opcodes fails, the programmer can determine which range check failed.

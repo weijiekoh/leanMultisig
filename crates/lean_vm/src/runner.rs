@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{ BTreeMap, BTreeSet };
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::multilinear::MultilinearPoint;
 use p3_util::log2_ceil_usize;
@@ -13,13 +13,6 @@ use crate::stack_trace::pretty_stack_trace;
 use utils::{ ToUsize, get_poseidon16, get_poseidon24, pretty_integer, Poseidon16, Poseidon24};
 
 const STACK_TRACE_INSTRUCTIONS: usize = 5000;
-
-#[derive(Debug, Clone)]
-pub struct RangeCheckInstrs {
-    step_1: Instruction,
-    step_2: Instruction,
-    step_3: Instruction,
-}
 
 impl MemOrConstant {
     pub fn read_value(&self, memory: &Memory, fp: usize) -> Result<F, RunnerError> {
@@ -84,7 +77,7 @@ impl MemOrFpOrConstant {
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ExecutionHistory {
+pub struct ExecutionHistory {
     pub(crate) lines: Vec<LocationInSourceCode>,
     pub(crate) cycles: Vec<usize>, // for each line, how many cycles it took
 }
@@ -136,173 +129,371 @@ fn find_next_undefined_cell(state: &State, start_offset: usize) -> usize {
     z
 }
 
-pub fn compile_range_checks(
-    bytecode: &Bytecode,
-    public_input: &[F],
-    private_input: &[F],
-) -> Result<Bytecode, RunnerError> {
-    let mut std_out = String::new();
-    let mut instruction_history = ExecutionHistory::default();
+fn find_next_undefined_cell_from_mem(
+    mem: &Memory,
+    conflicts: &BTreeSet<usize>,
+    memory_write_history: &BTreeMap<usize, (usize, usize)>,
+    pos: usize,
+) -> usize {
+    let mut z = pos;
 
-    let no_vec_runtime_memory = MAX_RUNNER_MEMORY_SIZE / 2;
-    let mut state = State::init(bytecode, public_input, private_input, no_vec_runtime_memory)?;
-    
-    let mut range_check_pcs: Vec<usize> = Vec::new();
-
-    // Check that the last 2 instructions are JUMPs, and remove them
-    let mut updated_bytecode = bytecode.clone();
-    let jump_last = updated_bytecode.instructions.remove(updated_bytecode.instructions.len() - 1);
-    let jump_penult = updated_bytecode.instructions.remove(updated_bytecode.instructions.len() - 1);
-    assert!(matches!(jump_penult, Instruction::Jump { .. }));
-    assert!(matches!(jump_last, Instruction::Jump { .. }));
-
-    while state.pc < bytecode.ending_pc - 1 {
-        if state.pc >= bytecode.instructions.len() {
-            return Err(RunnerError::PCOutOfBounds);
-        }
-
-        state.debug_state.pcs.push(state.pc);
-        state.debug_state.fps.push(state.fp);
-
-        state.debug_state.cpu_cycles += 1;
-        state.debug_state.cpu_cycles_before_new_line += 1;
-
-        let hints = bytecode.hints.get(&state.pc).unwrap_or(&vec![]).clone();
-        let should_continue = execute_hints(
-            &mut state,
-            &hints,
-            &mut std_out,
-            &mut instruction_history,
-        )?;
-        
-        if should_continue {
-            continue;
-        }
-
-        let instruction = &bytecode.instructions[state.pc];
-        if matches!(instruction, Instruction::RangeCheck { .. }) {
-            range_check_pcs.push(state.pc);
-        }
-        execute_instruction(&mut state, instruction)?;
+    while !matches!(mem.get(z), Err(RunnerError::UndefinedMemory)) {
+        z += 1;
     }
 
-    for pc in range_check_pcs {
-        let rc_instr = updated_bytecode.instructions[pc].clone();
-        match rc_instr {
+    loop {
+        if conflicts.contains(&z) || memory_write_history.contains_key(&z) {
+            z = find_next_undefined_cell_from_mem(mem, conflicts, memory_write_history, z + 1);
+        } else {
+            break;
+        }
+    }
+    z
+}
+
+pub fn calc_t_1_v(v: usize, t: usize) -> usize {
+    (F::from_usize(v) - F::ONE - F::from_usize(t)).to_usize()
+}
+
+pub fn is_undef(mem: &Memory, pos: usize) -> bool {
+    matches!(mem.get(pos), Err(RunnerError::UndefinedMemory))
+}
+
+pub fn compile_range_checks(
+    first_exec: &ExecutionResult,
+    bytecode: &Bytecode,
+) -> Result<Bytecode, RunnerError> {
+    /*
+     * With val stored in m[fp + x], and t being a constant, the goal is to replace each RangeCheck
+     * instruction with the following 3 instructions:
+     *
+     * 1. Using DEREF, set `m[fp + i]` to `m[m[fp + x]]`.
+     *     - Since this will fail if `m[fp + x] >= M`, we ensure that `m[fp + x] < M`.
+     * 
+     * 2. Using ADD, ensure (via constraint-solving): `m[fp + j] + m[m[fp + x]] = (t - 1)`.
+     * 
+     * 3. Using DEREF, ensure `m[m[fp + j]] = m[fp + k]`.
+     *     - Since this will fail if `m[fp + j] >= M`, we ensure that `(t - 1) - m[fp + x] < M`.
+     *
+     * according to section 2.5.3 of minimal_zkVM.pdf.
+     *
+     * This is how we solve for the i, j, and k values. First, establish these principles:
+     *
+     * 1. Performing a DEREF of the form m[m[fp + x]] == m[fp + i] will fail if:
+     *      - both m[m[fp + x]] and m[fp + i] are undefined
+     *      - m[m[fp + x]] is defined, and m[fp + i] is already set to a different value
+     *      - m[fp + i] is defined, and m[m[fp + x]] is already set to a different value
+     * 2. Performing a DEREF of the form m[m[fp + x]] == m[fp + i] will succeed if:
+     *      - m[m[fp + x]] is defined, and m[fp + i] is undefined
+     *      - m[fp + i] is defined, and m[m[fp + x]] is undefined
+     * 3. Performing and ADD of the form m[fp + j] + m[m[fp + x]] == c will fail if:
+     *      - both m[fp + j] and m[m[fp + x]] are undefined
+     * 4. Performing and ADD of the form m[fp + j] + m[m[fp + x]] == c will succeed if:
+     *      - m[fp + j] is undefined
+     *
+     * Most importantly, at each range check, we need to know if m[m[fp + x]] or m[m[fp + j]] will
+     * be set at some point in the future, and if so, what it will be set to, or if it will have
+     * already been set. This can be done by looking up the memory_write_history map in first_exec.
+     * We also need to consider if the memory location was set during initialisation.
+     *
+     * TODO: rewrite this
+     */
+
+    // Convenience mapping: instr_idx -> (fp, offset, val, t, t - 1 - v)
+    let mut rcs: BTreeMap<usize, (usize, usize, usize, usize, usize)> = BTreeMap::new();
+
+    // Stores the keys of rcs in order of execution
+    let mut rcs_idxs: Vec<usize> = Vec::with_capacity(rcs.len());
+
+    // Used for the first instruction to set the zero cell
+    let mut first_rcs_fp = None;
+
+    for i in 0..bytecode.instructions.len() {
+        match &bytecode.instructions[i] {
             Instruction::RangeCheck { value, max } => {
-                let v_usize = value.read_value(&state.memory, state.fp)?.to_usize();
-                let t_usize = max.read_value(&state.memory, state.fp)?.to_usize();
-
-                // Step 1: use deref with m[m[fp + x]] to force an OOM if val >= M
-                let i = if matches!(&state.memory.get(v_usize), Err(RunnerError::UndefinedMemory)) {
-                    // If m[m[fp + x]] is undefined, find some i that is undefined, and store 0 in
-                    // it. We can't just search for some m[fp + i] = 0 because there may not be any
-                    // available, and find_next_zero_cell() will run forever.
-                    let next_undefined = find_next_undefined_cell(&state, state.fp);
-                    let offset = next_undefined - state.fp;
-                    // Store 0 in this cell
-                    let instr = Instruction::Computation {
-                        operation: Operation::Add,
-                        arg_a: MemOrConstant::Constant(F::ZERO),
-                        arg_c: MemOrFp::MemoryAfterFp { offset },
-                        res: MemOrConstant::Constant(F::ZERO),
+                // Find the execution step where this instruction was executed
+                let execution_step = first_exec.pcs.iter().position(|&pc| pc == i);
+                if let Some(step) = execution_step {
+                    let fp = first_exec.fps[step];
+                    if first_rcs_fp.is_none() {
+                        first_rcs_fp = Some(fp);
+                    }
+                    
+                    // Get the offset of the value from the current fp
+                    let v_off = match value {
+                        MemOrFp::MemoryAfterFp { offset } => *offset,
+                        MemOrFp::Fp => 0, // fp is at offset 0
                     };
-                    execute_instruction(&mut state, &instr)?;
-                    updated_bytecode.instructions.push(instr.clone());
-                    updated_bytecode.ending_pc += 1;
-                    offset
-                } else {
-                    // Otherwise, find some i such that m[fp + i] is undefined
-                    find_next_undefined_cell(&state, 0)
-                };
-
-                let x = match value {
-                    MemOrFp::MemoryAfterFp { offset } => offset,
-                    _ => unreachable!(),
-                }.clone();
-
-                let step_1 = Instruction::Deref {
-                    shift_0: x,
-                    shift_1: 0,
-                    res: MemOrFpOrConstant::MemoryAfterFp { offset: i },
-                };
-
-                execute_instruction(&mut state, &step_1)?;
-
-                updated_bytecode.instructions.push(step_1.clone());
-                updated_bytecode.ending_pc += 1;
-
-                // Step 2: use add to store (t - 1) - v in m[fp + j]
-                // Find j such that m[fp + j] is undefined
-                let j = find_next_undefined_cell(&state, i + 1);
-                let step_2 = Instruction::Computation {
-                    operation: Operation::Add,
-                    arg_a: MemOrConstant::MemoryAfterFp { offset: j },
-                    arg_c: MemOrFp::MemoryAfterFp { offset: x },
-                    res: MemOrConstant::Constant(F::from_usize(t_usize - 1)),
-                };
-
-                execute_instruction(&mut state, &step_2)?;
-
-                updated_bytecode.instructions.push(step_2.clone());
-                updated_bytecode.ending_pc += 1;
-
-                // m[fp + j] should be defined
-                assert!(state.memory.get(state.fp + j).is_ok());
-
-                // Step 3: use deref with m[m[fp + j]] to force an OOM if val >= max
-                let m_fp_j = &state.memory.get(state.fp + j).unwrap().to_usize();
-                let k = if matches!(&state.memory.get(*m_fp_j), Err(RunnerError::UndefinedMemory)) {
-                    // If m[m[fp + j]] is undefined, find some k that is undefined, and store 0 in
-                    // it. We can't just search for some m[fp + ,] = 0 because there may not be any
-                    // available, and find_next_zero_cell() will run forever.
-                    let next_undefined = find_next_undefined_cell(&state, state.fp);
-                    let offset = next_undefined - state.fp;
-                    // Store 0 in this cell
-                    let instr = Instruction::Computation {
-                        operation: Operation::Add,
-                        arg_a: MemOrConstant::Constant(F::ZERO),
-                        arg_c: MemOrFp::MemoryAfterFp { offset },
-                        res: MemOrConstant::Constant(F::ZERO),
+                    
+                    // Get v and t
+                    let v = first_exec.memory.get(fp + v_off).unwrap().to_usize();
+                    let t = match max {
+                        MemOrConstant::Constant(t) => t.to_usize(),
+                        MemOrConstant::MemoryAfterFp { .. } => unimplemented!(),
                     };
-                    execute_instruction(&mut state, &instr)?;
-                    updated_bytecode.instructions.push(instr.clone());
-                    updated_bytecode.ending_pc += 1;
-                    offset
-                } else {
-                    // Otherwise, find some k such that m[fp + k] is undefined
-                    find_next_undefined_cell(&state, j + 1)
-                };
 
-                // m[m[fp + j]] = m[fp + k]
-                let step_3 = Instruction::Deref {
-                    shift_0: j,
-                    shift_1: 0,
-                    res: MemOrFpOrConstant::MemoryAfterFp { offset: k },
-                };
-                execute_instruction(&mut state, &step_3)?;
-
-                updated_bytecode.instructions.push(step_3.clone());
-                updated_bytecode.ending_pc += 1;
+                    // Update the convenience mapping
+                    rcs.insert(i, (fp, v_off, v, t, calc_t_1_v(t, v)));
+                    rcs_idxs.push(i);
+                }
             }
             _ => {}
         }
     }
 
-    let jump_last = Instruction::Jump {
-        condition: MemOrConstant::one(),
-        dest: MemOrConstant::Constant(F::from_usize(updated_bytecode.instructions.len() - 1)),
-        updated_fp: MemOrFp::Fp,
-    };
-    let jump_penult = Instruction::Jump {
-        condition: MemOrConstant::one(),
-        dest: MemOrConstant::Constant(F::from_usize(updated_bytecode.instructions.len() - 2)),
-        updated_fp: MemOrFp::Fp,
+    // Return the bytecode unmodified if there are no range checks
+    if rcs.is_empty() {
+        return Ok(bytecode.clone());
+    }
+
+    // Create the grid. Some(index) = defined at said instr index, None = undefined
+    let mut v_pos: BTreeMap<usize, Option<(i32, usize)>> = BTreeMap::new();
+    let mut q_pos: BTreeMap<usize, Option<(i32, usize)>> = BTreeMap::new();
+
+    // The set of memory locations that may conflict with auxillary cells
+    let mut conflicts: BTreeSet<usize> = BTreeSet::new();
+
+    fn lookup_initial_memory(value: usize, initial_memory: &Memory) -> Option<usize> {
+        for i in 0..initial_memory.0.len() {
+            if initial_memory.0[i].is_some() && initial_memory.0[i].unwrap().to_usize() == value {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    // Populate the v and q rows, as well as conflicts
+    for i in &rcs_idxs {
+        let (_fp, _v_off, v, _t, q) = rcs.get(&i).unwrap();
+
+        // Check if v and q are already defined in first_exec.memory_write_history or
+        // first_exec.initial_memory
+
+        // If v < initial_memory.len(), then assume it's defined
+        if *v >= first_exec.initial_memory.0.len() {
+            let vv = first_exec.memory_write_history.get(&v).copied();
+            if vv.is_some() {
+                let vu = vv.unwrap();
+                v_pos.insert(*i, Some((vu.0 as i32, vu.1)));
+            } else {
+                v_pos.insert(*i, None);
+            }
+        } else {
+            let cell = first_exec.initial_memory.get(*v).unwrap().to_usize();
+            v_pos.insert(*i, Some((-1, cell)));
+        }
+
+        // If q < initial_memory.len(), then assume it's defined
+        if *q >= first_exec.initial_memory.0.len() {
+            let qq = first_exec.memory_write_history.get(&q).copied();
+            if qq.is_some() {
+                let qu = qq.unwrap();
+                q_pos.insert(*i, Some((qu.0 as i32, qu.1)));
+            } else {
+                q_pos.insert(*i, None);
+            }
+        } else {
+            let cell = first_exec.initial_memory.get(*q).unwrap().to_usize();
+            q_pos.insert(*i, Some((-1, cell)));
+        }
+        conflicts.insert(*v);
+        conflicts.insert(*q);
+    }
+
+    // Used to find an undefined cell to set it to 0 such that it can be accessed by DEREF by any
+    // DEREF in the code, no matter where it is
+    let largest_fp = first_exec.fps.iter().max().unwrap();
+    let z_pos = find_next_undefined_cell_from_mem(
+        &first_exec.memory,
+        &conflicts,
+        &first_exec.memory_write_history,
+        *largest_fp,
+    );
+    conflicts.insert(z_pos);
+
+    let z_instr = Instruction::Computation {
+        operation: Operation::Add,
+        arg_a: MemOrConstant::Constant(F::ZERO),
+        arg_c: MemOrFp::MemoryAfterFp { offset: z_pos - first_rcs_fp.unwrap() },
+        res: MemOrConstant::Constant(F::ZERO),
     };
 
-    updated_bytecode.instructions.push(jump_last);
-    updated_bytecode.instructions.push(jump_penult);
-    updated_bytecode.ending_pc = updated_bytecode.instructions.len() - 2;
+    let mut instrs_to_insert: BTreeMap<usize, Vec<Instruction>> = BTreeMap::new();
+    for i in 0..rcs.len() {
+        instrs_to_insert.insert(rcs_idxs[i], vec![]);
+    }
+
+    instrs_to_insert.get_mut(&rcs_idxs[0]).unwrap().push(z_instr);
+    println!("z_pos: {}", z_pos);
+    println!("rcs: {:?}", rcs);
+
+    for i in &rcs_idxs {
+        let (fp, v_off, _v, _t, q) = rcs.get(&i).unwrap();
+
+        // Step 1: deref m[m[fp + x]] == m[fp + i]
+        let step_1 = match v_pos.get(i).unwrap() {
+            Some((instr_pc, cell)) => {
+                if *instr_pc > *i as i32 {
+                    // m[v] will be defined later, so set it to that value
+                    Instruction::Deref {
+                        shift_0: *v_off,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::Constant(F::from_usize(*cell)),
+                    }
+                } else {
+                    // m[v] has been defined, so search for an i where m[fp + i] is undefined
+                    let abs_pos = find_next_undefined_cell_from_mem(
+                        &first_exec.memory,
+                        &conflicts,
+                        &first_exec.memory_write_history,
+                        *fp + 1,
+                    );
+
+                    conflicts.insert(abs_pos);
+                    println!("setting m[{}] to m[m[fp + {}] + 0]", abs_pos, v_off);
+
+                    Instruction::Deref {
+                        shift_0: *v_off,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::MemoryAfterFp { offset: abs_pos - fp },
+                    }
+                }
+            }
+            None => {
+                // m[v] will be undefined, so use z
+                Instruction::Deref {
+                    shift_0: *v_off,
+                    shift_1: 0,
+                    res: MemOrFpOrConstant::MemoryAfterFp { offset: z_pos - fp },
+                }
+            }
+        };
+
+        // Step 2: m[fp + j] = t - 1 - v
+        let abs_j_pos = find_next_undefined_cell_from_mem(
+            &first_exec.memory,
+            &conflicts,
+            &first_exec.memory_write_history,
+            *fp,
+        );
+
+        conflicts.insert(abs_j_pos);
+
+        let step_2 = Instruction::Computation {
+            operation: Operation::Add,
+            arg_a: MemOrConstant::Constant(F::ZERO), // 0
+            arg_c: MemOrFp::MemoryAfterFp { offset: abs_j_pos - fp }, // Unknown; solves to t - 1 - v
+            res: MemOrConstant::Constant(F::from_usize(*q)), // t - 1 - v
+        };
+
+        // Step 3: m[fp + k] = m[m[fp + j]]
+        let step_3 = match q_pos.get(i).unwrap() {
+            Some((instr_pc, cell)) => {
+                if *instr_pc > *i as i32 {
+                    // m[q] will be defined later, so set it to that value
+                    Instruction::Deref {
+                        shift_0: abs_j_pos - fp,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::Constant(F::from_usize(*cell)),
+                    }
+                } else {
+                    // m[q] has been defined, so search for an k where m[fp + k] is undefined
+                    let abs_k_pos = find_next_undefined_cell_from_mem(
+                        &first_exec.memory,
+                        &conflicts,
+                        &first_exec.memory_write_history,
+                        *fp,
+                    );
+                    conflicts.insert(abs_k_pos);
+                    Instruction::Deref {
+                        shift_0: abs_j_pos - fp,
+                        shift_1: 0,
+                        res: MemOrFpOrConstant::MemoryAfterFp { offset: abs_k_pos - fp },
+                    }
+                }
+            }
+            None => {
+                println!("3");
+                // If m[q] will not be defined, so use z
+                Instruction::Deref {
+                    shift_0: abs_j_pos - fp,
+                    shift_1: 0,
+                    res: MemOrFpOrConstant::MemoryAfterFp { offset: z_pos - fp },
+                }
+            }
+        };
+
+        instrs_to_insert.get_mut(i).unwrap().push(step_1);
+        instrs_to_insert.get_mut(i).unwrap().push(step_2);
+        instrs_to_insert.get_mut(i).unwrap().push(step_3);
+    }
+
+    let mut updated_bytecode = bytecode.clone();
+    // Naively replace each range_check with their corresponding steps in instrs_to_insert
+    // in-place. Update jump instructions to account for instruction position changes.
+    // A next iteration of this should handle the offsets at the compiler level.
+    
+    let mut new_instructions = Vec::new();
+    let mut index_offset = 0; // Tracks how many extra instructions have been inserted so far
+    
+    for (original_idx, instruction) in bytecode.instructions.iter().enumerate() {
+        match instruction {
+            Instruction::RangeCheck { .. } => {
+                // Replace with generated instruction sequence
+                if let Some(replacement_instrs) = instrs_to_insert.get(&original_idx) {
+                    new_instructions.extend(replacement_instrs.iter().cloned());
+                    // Track the net change in instruction count
+                    index_offset += replacement_instrs.len().saturating_sub(1);
+                } else {
+                    // This shouldn't happen since we populated instrs_to_insert for all range checks
+                    new_instructions.push(instruction.clone());
+                }
+            }
+            Instruction::Jump { condition, dest, updated_fp } => {
+                // Update jump destinations to account for inserted instructions
+                let updated_dest = match dest {
+                    MemOrConstant::Constant(old_dest_field) => {
+                        let old_dest = old_dest_field.to_usize();
+                        // Calculate how many instructions were inserted before this jump destination
+                        let offset_at_dest = instrs_to_insert.iter()
+                            .filter(|(idx, _instrs)| **idx < old_dest)
+                            .map(|(_, instrs)| instrs.len().saturating_sub(1))
+                            .sum::<usize>();
+                        let new_dest = old_dest + offset_at_dest;
+                        MemOrConstant::Constant(F::from_usize(new_dest))
+                    }
+                    _ => *dest, // Don't modify non-constant destinations
+                };
+                
+                new_instructions.push(Instruction::Jump {
+                    condition: *condition,
+                    dest: updated_dest,
+                    updated_fp: *updated_fp,
+                });
+            }
+            _ => {
+                // Copy other instructions unchanged
+                new_instructions.push(instruction.clone());
+            }
+        }
+    }
+
+    // Update the instructions
+    updated_bytecode.instructions = new_instructions;
+
+    // Adjust ending_pc for inserted instructions
+    updated_bytecode.ending_pc = bytecode.ending_pc + index_offset; 
+    
+    // Update hints to account for shifted instruction positions
+    let mut updated_hints = BTreeMap::new();
+    for (pc, hints) in &bytecode.hints {
+        let offset_at_pc = instrs_to_insert.iter()
+            .filter(|(idx, _instrs)| **idx < *pc)
+            .map(|(_, instrs)| instrs.len().saturating_sub(1))
+            .sum::<usize>();
+        updated_hints.insert(pc + offset_at_pc, hints.clone());
+    }
+    updated_bytecode.hints = updated_hints;
 
     Ok(updated_bytecode)
 }
@@ -317,6 +508,7 @@ pub fn execute_bytecode(
 ) -> Result<ExecutionResult, RunnerError> {
     let mut std_out = String::new();
     let mut instruction_history = ExecutionHistory::default();
+
     let first_exec = match execute_bytecode_helper(
         bytecode,
         public_input,
@@ -329,19 +521,13 @@ pub fn execute_bytecode(
         function_locations,
     ) {
         Ok(first_exec) => {
-            println!("First execution: Ok");
             first_exec
         }
         Err(err) => {
-            println!("First execution: Err");
             print_execution_error(&err, &std_out, &instruction_history, source_code, function_locations);
             return Err(err);
         }
     };
-
-    let fp = first_exec.fps[first_exec.fps.len() - 2];
-    assert!(fp != 0, "the penultimate fp should not be 0");
-    assert_eq!(first_exec.fps[first_exec.fps.len() - 1], 0, "The final fp should be 0");
 
     instruction_history = ExecutionHistory::default();
     let second_exec = match execute_bytecode_helper(
@@ -356,11 +542,9 @@ pub fn execute_bytecode(
         function_locations,
     ) {
         Ok(second_exec) => {
-            println!("Second execution: Ok\n----------------------------------\n");
             Ok(second_exec)
         }
         Err(err) => {
-            println!("Second execution: Err");
             print_execution_error(&err, &std_out, &instruction_history, source_code, function_locations);
             return Err(err);
         }
@@ -373,6 +557,8 @@ pub struct ExecutionResult {
     pub no_vec_runtime_memory: usize,
     pub public_memory_size: usize,
     pub memory: Memory,
+    pub initial_memory: Memory,
+    pub memory_write_history: BTreeMap<usize, (usize, usize)>,
     pub pcs: Vec<usize>,
     pub fps: Vec<usize>,
 }
@@ -414,7 +600,7 @@ pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
 }
 
 #[allow(clippy::too_many_arguments)] // TODO
-fn execute_bytecode_helper(
+pub fn execute_bytecode_helper(
     bytecode: &Bytecode,
     public_input: &[F],
     private_input: &[F],
@@ -426,6 +612,10 @@ fn execute_bytecode_helper(
     function_locations: &BTreeMap<usize, String>,
 ) -> Result<ExecutionResult, RunnerError> {
     let mut state = State::init(bytecode, public_input, private_input, no_vec_runtime_memory)?;
+
+    // address -> (pc, value) at which it was first written
+    let mut memory_write_history: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    let initial_memory = state.memory.clone();
 
     while state.pc != bytecode.ending_pc {
         if state.pc >= bytecode.instructions.len() {
@@ -444,6 +634,7 @@ fn execute_bytecode_helper(
             &hints,
             std_out,
             instruction_history,
+            &mut memory_write_history,
         )?;
         
         if should_continue {
@@ -451,7 +642,11 @@ fn execute_bytecode_helper(
         }
 
         let instruction = &bytecode.instructions[state.pc];
-        execute_instruction(&mut state, instruction)?;
+        println!("fp: {}; exec pc: {}; instr: {}", state.fp, state.pc, instruction);
+        if hints.len() > 0 {
+            println!("hints: {:?}", hints);
+        }
+        execute_instruction(&mut state, &mut memory_write_history, instruction)?;
     }
 
     debug_assert_eq!(state.pc, bytecode.ending_pc);
@@ -476,7 +671,9 @@ fn execute_bytecode_helper(
     return Ok(ExecutionResult {
         no_vec_runtime_memory,
         public_memory_size: state.public_memory_size,
+        memory_write_history,
         memory: state.memory,
+        initial_memory,
         pcs: state.debug_state.pcs,
         fps: state.debug_state.fps,
     });
@@ -583,6 +780,7 @@ fn execute_hints(
     hints: &Vec<Hint>,
     std_out: &mut String,
     instruction_history: &mut ExecutionHistory,
+    memory_write_history: &mut BTreeMap<usize, (usize, usize)>,
 ) -> Result<bool, RunnerError> {
     // Hints do not increase state.pc, but they can mutate other parts of the state.
     for hint in hints {
@@ -594,6 +792,7 @@ fn execute_hints(
                 vectorized_len,
             } => {
                 let size = size.read_value(&state.memory, state.fp)?.to_usize();
+                let pos = state.fp + *offset;
 
                 if *vectorized {
                     assert!(*vectorized_len >= LOG_VECTOR_LEN, "TODO");
@@ -602,13 +801,14 @@ fn execute_hints(
                     while !(state.ap_vec * VECTOR_LEN).is_multiple_of(1 << *vectorized_len) {
                         state.ap_vec += 1;
                     }
-                    state.memory.set(
-                        state.fp + *offset,
-                        F::from_usize(state.ap_vec >> (*vectorized_len - LOG_VECTOR_LEN)),
-                    )?;
+
+                    let val = F::from_usize(state.ap_vec >> (*vectorized_len - LOG_VECTOR_LEN));
+                    state.memory.set(state.fp + *offset, val)?;
+                    memory_write_history.insert(pos, (state.pc, val.to_usize()));
                     state.ap_vec += size << (*vectorized_len - LOG_VECTOR_LEN);
                 } else {
-                    state.memory.set(state.fp + *offset, F::from_usize(state.ap))?;
+                    state.memory.set(pos, F::from_usize(state.ap))?;
+                    memory_write_history.insert(pos, (state.pc, state.ap));
                     state.ap += size;
                 }
             }
@@ -622,18 +822,23 @@ fn execute_hints(
                     for i in 0..F::bits() {
                         let bit = F::from_bool(value & (1 << i) != 0);
                         state.memory.set(memory_index, bit)?;
+                        memory_write_history.insert(memory_index, (state.pc, bit.to_usize()));
                         memory_index += 1;
                     }
                 }
             }
             Hint::CounterHint { res_offset } => {
-                state.memory.set(state.fp + *res_offset, F::from_usize(state.debug_state.counter_hint))?;
+                let pos = state.fp + *res_offset;
+                state.memory.set(pos, F::from_usize(state.debug_state.counter_hint))?;
+                memory_write_history.insert(pos, (state.pc, state.debug_state.counter_hint));
                 state.debug_state.counter_hint += 1;
             }
             Hint::Inverse { arg, res_offset } => {
                 let value = arg.read_value(&state.memory, state.fp)?;
                 let result = value.try_inverse().unwrap_or(F::ZERO);
-                state.memory.set(state.fp + *res_offset, result)?;
+                let pos = state.fp + *res_offset;
+                state.memory.set(pos, result)?;
+                memory_write_history.insert(pos, (state.pc, result.to_usize()));
             }
             Hint::Print { line_info, content } => {
                 let values = content
@@ -679,6 +884,7 @@ fn execute_hints(
 
 fn execute_instruction(
     state: &mut State,
+    memory_write_history: &mut BTreeMap<usize, (usize, usize)>,
     instruction: &Instruction,
 ) -> Result<(), RunnerError> {
     match instruction {
@@ -694,6 +900,7 @@ fn execute_instruction(
                 let b_value = arg_c.read_value(&state.memory, state.fp)?;
                 let res_value = operation.compute(a_value, b_value);
                 state.memory.set(memory_address_res, res_value)?;
+                memory_write_history.insert(memory_address_res, (state.pc, res_value.to_usize()));
             } else if arg_a.is_value_unknown(&state.memory, state.fp) {
                 let memory_address_a = arg_a.memory_address(state.fp)?;
                 let res_value = res.read_value(&state.memory, state.fp)?;
@@ -702,6 +909,7 @@ fn execute_instruction(
                     .inverse_compute(res_value, b_value)
                     .ok_or(RunnerError::DivByZero)?;
                 state.memory.set(memory_address_a, a_value)?;
+                memory_write_history.insert(memory_address_a, (state.pc, a_value.to_usize()));
             } else if arg_c.is_value_unknown(&state.memory, state.fp) {
                 let memory_address_b = arg_c.memory_address(state.fp)?;
                 let res_value = res.read_value(&state.memory, state.fp)?;
@@ -710,6 +918,7 @@ fn execute_instruction(
                     .inverse_compute(res_value, a_value)
                     .ok_or(RunnerError::DivByZero)?;
                 state.memory.set(memory_address_b, b_value)?;
+                memory_write_history.insert(memory_address_b, (state.pc, b_value.to_usize()));
             } else {
                 let a_value = arg_a.read_value(&state.memory, state.fp)?;
                 let b_value = arg_c.read_value(&state.memory, state.fp)?;
@@ -733,14 +942,17 @@ fn execute_instruction(
             res,
         } => {
             if res.is_value_unknown(&state.memory, state.fp) {
-                let memory_address_res = res.memory_address(state.fp)?;
+                let pos = res.memory_address(state.fp)?;
                 let ptr = state.memory.get(state.fp + shift_0)?;
                 let value = state.memory.get(ptr.to_usize() + shift_1)?;
-                state.memory.set(memory_address_res, value)?;
+                state.memory.set(pos, value)?;
+                memory_write_history.insert(pos, (state.pc, value.to_usize()));
             } else {
                 let value = res.read_value(&state.memory, state.fp)?;
                 let ptr = state.memory.get(state.fp + shift_0)?;
-                state.memory.set(ptr.to_usize() + shift_1, value)?;
+                let pos = ptr.to_usize() + shift_1;
+                state.memory.set(pos, value)?;
+                memory_write_history.insert(pos, (state.pc, value.to_usize()));
             }
 
             state.debug_state.deref_counts += 1;
@@ -767,8 +979,6 @@ fn execute_instruction(
         // the runner will replace Instruction::RangeCheck instances with the actual 3-step
         // range check instructions (deref, add, and deref)
         Instruction::RangeCheck { .. } => {
-            // The runner should OOM at step 1 or step 3 if value >= max. See section 2.5.3 of
-            // minimal_zkVM.pdf.
             state.increment_pc();
         }
         Instruction::Poseidon2_16 { arg_a, arg_b, res } => {
@@ -791,7 +1001,14 @@ fn execute_instruction(
             let res1: [F; VECTOR_LEN] = input[VECTOR_LEN..].try_into().unwrap();
 
             state.memory.set_vector(res_value.to_usize(), res0)?;
+            for (_i, v) in res0.iter().enumerate() {
+                memory_write_history.insert(res_value.to_usize(), (state.pc, v.to_usize()));
+            }
+
             state.memory.set_vector(1 + res_value.to_usize(), res1)?;
+            for (_i, v) in res1.iter().enumerate() {
+                memory_write_history.insert(res_value.to_usize(), (state.pc, v.to_usize()));
+            }
 
             state.increment_pc();
         }
@@ -816,6 +1033,9 @@ fn execute_instruction(
             let res: [F; VECTOR_LEN] = input[2 * VECTOR_LEN..].try_into().unwrap();
 
             state.memory.set_vector(res_value.to_usize(), res)?;
+            for (_i, v) in res.iter().enumerate() {
+                memory_write_history.insert(res_value.to_usize(), (state.pc, v.to_usize()));
+            }
 
             state.increment_pc();
         }
@@ -837,6 +1057,10 @@ fn execute_instruction(
             let dot_product = dot_product::<EF, _, _>(slice_0.into_iter(), slice_1.into_iter());
             state.memory.set_ef_element(ptr_res, dot_product)?;
 
+            //for (i, v) in dot_product.as_basis_coefficients_slice().iter().enumerate() {
+                //memory_write_history.insert(ptr_res + i, (state.pc, v.to_usize()));
+            //}
+
             state.increment_pc();
         }
         Instruction::MultilinearEval {
@@ -856,7 +1080,9 @@ fn execute_instruction(
             let log_point_size = log2_ceil_usize(*n_vars * DIMENSION);
             let point_slice = state.memory.slice(ptr_point << log_point_size, *n_vars * DIMENSION)?;
             for i in *n_vars * DIMENSION..(*n_vars * DIMENSION).next_power_of_two() {
-                state.memory.set((ptr_point << log_point_size) + i, F::ZERO)?; // padding
+                let pos = (ptr_point << log_point_size) + i;
+                state.memory.set(pos, F::ZERO)?; // padding
+                memory_write_history.insert(pos, (state.pc, 0));
             }
             let point = point_slice[..*n_vars * DIMENSION]
                 .chunks_exact(DIMENSION)
@@ -866,7 +1092,12 @@ fn execute_instruction(
             let eval = slice_coeffs.evaluate(&MultilinearPoint(point));
             let mut res_vec = eval.as_basis_coefficients_slice().to_vec();
             res_vec.resize(VECTOR_LEN, F::ZERO);
-            state.memory.set_vector(ptr_res, res_vec.try_into().unwrap())?;
+            state.memory.set_vector(ptr_res, res_vec.clone().try_into().unwrap())?;
+
+            for (i, v) in res_vec.iter().enumerate() {
+                let idx = VECTOR_LEN * ptr_res + i;
+                memory_write_history.insert(idx, (state.pc, v.to_usize()));
+            }
 
             state.increment_pc();
         }
@@ -994,12 +1225,3 @@ impl State {
         self.pc += 1;
     }
 }
- 
-//fn state_transition(
-    //state: &mut State,
-    //pc_to_execute: usize,
-//) -> Result<State, RunnerError> {
-    //if pc_to_execute > state.bytecode.ending_pc {
-        //return Err(RunnerError::PCOutOfBounds);
-    //}
-//}
