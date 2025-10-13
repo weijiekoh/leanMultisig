@@ -172,7 +172,7 @@ where
             MleGroupRef::Extension(vec![u0_folded, u1_folded, u2_folded, u3_folded]),
             &GKRQuotientComputation { u4_const, u5_const },
             &GKRQuotientComputation { u4_const, u5_const },
-            &[EF::ONE],
+            &[],
             Some((claim.point.0[1..].to_vec(), None)),
             false,
             prover_state,
@@ -412,37 +412,6 @@ where
     );
 
     Ok(Evaluation::new(next_point, next_claim))
-}
-
-pub struct GKRQuotientComputation<EF> {
-    u4_const: EF,
-    u5_const: EF,
-}
-
-impl<IF: ExtensionField<PF<EF>>, EF: ExtensionField<IF>> SumcheckComputation<IF, EF>
-    for GKRQuotientComputation<EF>
-{
-    fn eval(&self, point: &[IF], _: &[EF]) -> EF {
-        // U4.U2.U3 + U5.[U0.U3 + U1.U2]
-        self.u4_const * point[2] * point[3]
-            + self.u5_const * (point[0] * point[3] + point[1] * point[2])
-    }
-    fn degree(&self) -> usize {
-        2
-    }
-}
-
-impl<EF: ExtensionField<PF<EF>>> SumcheckComputationPacked<EF> for GKRQuotientComputation<EF> {
-    fn eval_packed_base(&self, _: &[PFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
-        todo!()
-    }
-    fn eval_packed_extension(&self, point: &[EFPacking<EF>], _: &[EF]) -> EFPacking<EF> {
-        point[2] * point[3] * self.u4_const
-            + (point[0] * point[3] + point[1] * point[2]) * self.u5_const
-    }
-    fn degree(&self) -> usize {
-        2
-    }
 }
 
 fn sum_quotients_2_by_2<EF: PrimeCharacteristicRing + Sync + Send + Copy>(
