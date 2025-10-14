@@ -1,6 +1,7 @@
 use crate::common::*;
 use crate::*;
 use ::air::table::AirTable;
+use lean_runner::execute_bytecode;
 use lean_vm::*;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
@@ -31,7 +32,7 @@ pub fn prove_execution(
     function_locations: &BTreeMap<usize, String>, // debug purpose
     (public_input, private_input): (&[F], &[F]),
     whir_config_builder: WhirConfigBuilder,
-    no_vec_runtime_memory: usize, // size of the "non-vectorized" runtime memory
+    _no_vec_runtime_memory: usize, // size of the "non-vectorized" runtime memory
     vm_profiler: bool,
 ) -> (Vec<PF<EF>>, usize) {
     let ExecutionTrace {
@@ -47,14 +48,14 @@ pub fn prove_execution(
         memory, // padded with zeros to next power of two
     } = info_span!("Witness generation").in_scope(|| {
         let execution_result = execute_bytecode(
-            bytecode,
+            &mut bytecode.clone(),
             public_input,
             private_input,
             source_code,
             function_locations,
-            no_vec_runtime_memory,
             vm_profiler,
-        );
+        )
+        .unwrap();
         get_execution_trace(bytecode, execution_result)
     });
 

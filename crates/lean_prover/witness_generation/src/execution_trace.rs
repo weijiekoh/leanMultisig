@@ -4,6 +4,7 @@ use crate::{
     COL_INDEX_MEM_VALUE_A, COL_INDEX_MEM_VALUE_B, COL_INDEX_MEM_VALUE_C, COL_INDEX_PC,
     N_EXEC_COLUMNS, N_INSTRUCTION_COLUMNS,
 };
+use lean_runner::ExecutionResult;
 use lean_vm::*;
 use p3_field::Field;
 use p3_field::PrimeCharacteristicRing;

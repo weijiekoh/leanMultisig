@@ -18,6 +18,7 @@ struct Compiler {
     args_count: usize,
     stack_size: usize,
     const_mallocs: BTreeMap<ConstMallocLabel, usize>, // const_malloc_label -> start = memory offset from fp
+    range_checks: BTreeSet<(SimpleExpr, ConstExpression)>,
 }
 
 impl Compiler {
@@ -130,7 +131,7 @@ fn compile_function(
 
     internal_vars.retain(|var| !function.arguments.contains(var));
 
-    // memory layout: pc, fp, args, return_vars, internal_vars
+    // memory layout: pc, fp, args, return_vars, internal_vars, range_check_vars
     let mut stack_pos = 2; // Reserve space for pc and fp
     let mut var_positions = BTreeMap::new();
 
@@ -146,10 +147,14 @@ fn compile_function(
     }
     stack_pos += internal_vars.len();
 
+    // Look for range check statements
+    let range_checks = find_range_checks(&function.instructions);
+
     compiler.func_name = function.name.clone();
     compiler.var_positions = var_positions;
     compiler.stack_size = stack_pos;
     compiler.args_count = function.arguments.len();
+    compiler.range_checks = range_checks;
 
     let mut declared_vars: BTreeSet<Var> = function.arguments.iter().cloned().collect();
     compile_lines(&function.instructions, compiler, None, &mut declared_vars)
@@ -597,6 +602,12 @@ fn compile_lines(
                     location: *location,
                 });
             }
+            SimpleLine::RangeCheck { value, max } => {
+                instructions.push(IntermediateInstruction::RangeCheck {
+                    value: IntermediateValue::from_simple_expr(value, compiler),
+                    max: max.clone(), // TODO: support max being an IntermediateValue
+                });
+            }
         }
     }
 
@@ -795,8 +806,47 @@ fn find_internal_vars(lines: &[SimpleLine]) -> BTreeSet<Var> {
             | SimpleLine::Print { .. }
             | SimpleLine::FunctionRet { .. }
             | SimpleLine::Precompile { .. }
-            | SimpleLine::LocationReport { .. } => {}
+            | SimpleLine::LocationReport { .. }
+            | SimpleLine::RangeCheck { .. } => {}
         }
     }
     internal_vars
+}
+
+fn find_range_checks(lines: &[SimpleLine]) -> BTreeSet<(SimpleExpr, ConstExpression)> {
+    let mut range_checks = BTreeSet::new();
+    for line in lines {
+        match line {
+            SimpleLine::Match { arms, .. } => {
+                for arm in arms {
+                    range_checks.extend(find_range_checks(arm));
+                }
+            }
+            SimpleLine::IfNotZero {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                range_checks.extend(find_range_checks(then_branch));
+                range_checks.extend(find_range_checks(else_branch));
+            }
+            SimpleLine::RangeCheck { value, max } => {
+                range_checks.insert((value.clone(), max.clone()));
+            }
+            SimpleLine::Assignment { .. }
+            | SimpleLine::FunctionCall { .. }
+            | SimpleLine::HintMAlloc { .. }
+            | SimpleLine::ConstMalloc { .. }
+            | SimpleLine::DecomposeBits { .. }
+            | SimpleLine::DecomposeCustom { .. }
+            | SimpleLine::CounterHint { .. }
+            | SimpleLine::RawAccess { .. }
+            | SimpleLine::Panic { .. }
+            | SimpleLine::Print { .. }
+            | SimpleLine::FunctionRet { .. }
+            | SimpleLine::Precompile { .. }
+            | SimpleLine::LocationReport { .. } => {}
+        }
+    }
+    range_checks
 }

@@ -8,6 +8,9 @@ use rayon::prelude::*;
 pub const MIN_LOG_MEMORY_SIZE: usize = 16;
 pub const MAX_LOG_MEMORY_SIZE: usize = 29;
 
+// Note: MAX_RUNNER_MEMORY_SIZE is defined in crate::core::constants
+// For now, we restrict ourselves to executions where memory usage < 2^24 words.
+// But the VM supports theorically a memory of size 2^29.
 /// VM memory implementation with sparse allocation
 #[derive(Debug, Clone, Default)]
 pub struct Memory(pub Vec<Option<F>>);
@@ -47,6 +50,10 @@ impl Memory {
         }
         if let Some(existing) = &mut self.0[index] {
             if *existing != value {
+                println!(
+                    "Memory address {} is already set to {}, and cannot be set to {}",
+                    index, existing, value
+                );
                 return Err(RunnerError::MemoryAlreadySet);
             }
         } else {

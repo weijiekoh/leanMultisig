@@ -65,6 +65,11 @@ pub enum Hint {
     },
     /// Jump destination label (for debugging purposes)
     Label { label: Label },
+    /// Range check hint for values
+    RangeCheck {
+        value: super::operands::MemOrFp,
+        max: MemOrConstant,
+    },
 }
 
 /// Execution state for hint processing
@@ -192,6 +197,10 @@ impl Hint {
                 *ctx.cpu_cycles_before_new_line = 0;
             }
             Self::Label { .. } => {}
+            Self::RangeCheck { .. } => {
+                // Range checks are handled by the range check compilation system
+                // This hint just marks the range check for later compilation
+            }
         }
         Ok(())
     }
@@ -264,6 +273,9 @@ impl Display for Hint {
             }
             Self::Label { label } => {
                 write!(f, "label: {label}")
+            }
+            Self::RangeCheck { value, max } => {
+                write!(f, "range_check({value}, {max})")
             }
         }
     }
