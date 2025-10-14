@@ -41,7 +41,10 @@ impl Memory {
         }
         if let Some(existing) = &mut self.0[index] {
             if *existing != value {
-                println!("Memory address {} is already set to {}, and cannot be set to {}", index, existing, value);
+                println!(
+                    "Memory address {} is already set to {}, and cannot be set to {}",
+                    index, existing, value
+                );
                 return Err(RunnerError::MemoryAlreadySet);
             }
         } else {

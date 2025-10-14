@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
 use lean_vm::*;
 use p3_field::PrimeCharacteristicRing;
+use std::collections::{BTreeMap, BTreeSet};
 use utils::ToUsize;
 
 #[derive(Debug, Clone)]
@@ -18,13 +18,13 @@ fn find_next_zero_cell(memory: &Memory, start_offset: usize) -> Option<usize> {
     }
     let mut z = start_offset;
 
-    loop { 
+    loop {
         if z >= memory.0.len() {
             break;
         }
         let m_fp_z = &memory.get(z);
         if !m_fp_z.is_err() && m_fp_z.clone().unwrap() == F::ZERO {
-            return Some(z)
+            return Some(z);
         }
         z += 1;
     }
@@ -61,9 +61,11 @@ pub fn compile_range_checks(
     bytecode: &Bytecode,
 ) -> Result<Bytecode, RunnerError> {
     // Early return if no range checks exist
-    if !bytecode.hints.values().any(|hints| 
-        hints.iter().any(|h| matches!(h, Hint::RangeCheck { .. }))
-    ) {
+    if !bytecode
+        .hints
+        .values()
+        .any(|hints| hints.iter().any(|h| matches!(h, Hint::RangeCheck { .. })))
+    {
         return Ok(bytecode.clone());
     }
 
@@ -71,8 +73,7 @@ pub fn compile_range_checks(
     let mut rcs: BTreeMap<(usize, usize), RangeCheckInfo> = BTreeMap::new();
 
     // Validate that the last fp is 0
-    let last_fp = first_exec.fps.last()
-        .ok_or(RunnerError::PCOutOfBounds)?; // Using existing error type
+    let last_fp = first_exec.fps.last().ok_or(RunnerError::PCOutOfBounds)?; // Using existing error type
     if *last_fp != 0 {
         return Err(RunnerError::PCOutOfBounds); // Using existing error type for now
     }
@@ -85,16 +86,14 @@ pub fn compile_range_checks(
 
     // Assume that the destination of the penultimate jump is the last instruction
     match pen_instr {
-        Instruction::Jump { dest, .. } => {
-            match dest {
-                MemOrConstant::Constant(c) => {
-                    assert_eq!(c.to_usize(), first_exec.pcs[first_exec.pcs.len() - 1]);
-                }
-                MemOrConstant::MemoryAfterFp { .. } => {
-                    unreachable!();
-                }
+        Instruction::Jump { dest, .. } => match dest {
+            MemOrConstant::Constant(c) => {
+                assert_eq!(c.to_usize(), first_exec.pcs[first_exec.pcs.len() - 1]);
             }
-        }
+            MemOrConstant::MemoryAfterFp { .. } => {
+                unreachable!();
+            }
+        },
         _ => {}
     }
 
@@ -117,21 +116,22 @@ pub fn compile_range_checks(
                         MemOrConstant::MemoryAfterFp { .. } => {
                             unreachable!();
                         }
-                        MemOrConstant::Constant(c) => {
-                            c.to_usize()
-                        }
+                        MemOrConstant::Constant(c) => c.to_usize(),
                     };
 
                     // q = t - 1 - v in the field
                     let q = (F::from_usize(t) - F::ONE - F::from_usize(v)).to_usize();
 
-                    rcs.insert((*pc, hint_idx), RangeCheckInfo {
-                        hint_fp,
-                        v_pos,
-                        v,
-                        t,
-                        q,
-                    });
+                    rcs.insert(
+                        (*pc, hint_idx),
+                        RangeCheckInfo {
+                            hint_fp,
+                            v_pos,
+                            v,
+                            t,
+                            q,
+                        },
+                    );
 
                     conflicts.insert(v);
                     conflicts.insert(t);
@@ -144,24 +144,23 @@ pub fn compile_range_checks(
     // Since the range check vals are referenced by offset, our fp must be the smallest possible
     // value: 0.
     let fp = 0;
-    
+
     let mut instrs_to_insert: Vec<Instruction> = vec![];
 
     // Look for any 0 cells past fp, or create one
-    let z_pos = find_next_zero_cell(&first_exec.memory, fp)
-        .unwrap_or_else(|| {
-            let z_pos = find_next_undefined_cell_from_mem(&first_exec.memory, &conflicts, fp);
-            if first_exec.memory.get(z_pos).is_err() {
-                let z_instr = Instruction::Computation {
-                    operation: Operation::Add,
-                    arg_a: MemOrConstant::Constant(F::ZERO),
-                    arg_c: MemOrFp::MemoryAfterFp { offset: z_pos - fp },
-                    res: MemOrConstant::Constant(F::ZERO),
-                };
-                instrs_to_insert.push(z_instr);
-            }
-            z_pos
-        });
+    let z_pos = find_next_zero_cell(&first_exec.memory, fp).unwrap_or_else(|| {
+        let z_pos = find_next_undefined_cell_from_mem(&first_exec.memory, &conflicts, fp);
+        if first_exec.memory.get(z_pos).is_err() {
+            let z_instr = Instruction::Computation {
+                operation: Operation::Add,
+                arg_a: MemOrConstant::Constant(F::ZERO),
+                arg_c: MemOrFp::MemoryAfterFp { offset: z_pos - fp },
+                res: MemOrConstant::Constant(F::ZERO),
+            };
+            instrs_to_insert.push(z_instr);
+        }
+        z_pos
+    });
 
     conflicts.insert(z_pos);
 
@@ -221,28 +220,28 @@ pub fn compile_range_checks(
 
     // Create the updated bytecode with range check instructions appended at the end
     let mut updated_bytecode = bytecode.clone();
-    
+
     // Find the index of the penultimate instruction in the instruction list
     let penultimate_pc = first_exec.pcs[first_exec.pcs.len() - 2];
-    
+
     // Append the range check instructions to the end
     let first_range_check_pc = updated_bytecode.instructions.len();
     updated_bytecode.instructions.extend(instrs_to_insert);
-    
+
     // Add a final jump that terminates execution
     updated_bytecode.instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ZERO), // Never jump - terminates execution
-        dest: MemOrConstant::Constant(F::ZERO), // Doesn't matter since condition is false
+        dest: MemOrConstant::Constant(F::ZERO),      // Doesn't matter since condition is false
         updated_fp: MemOrFp::Fp,
     });
-    
+
     // Update the penultimate jump to point to the first range check instruction
     if let Instruction::Jump { dest, .. } = &mut updated_bytecode.instructions[penultimate_pc] {
         *dest = MemOrConstant::Constant(F::from_usize(first_range_check_pc));
     }
-    
+
     // Update ending_pc to point after the final jump
     updated_bytecode.ending_pc = updated_bytecode.instructions.len();
-    
+
     Ok(updated_bytecode)
 }

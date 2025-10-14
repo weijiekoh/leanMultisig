@@ -645,8 +645,9 @@ fn parse_range_check_statement(
     let mut inner = pair.into_inner();
     let value = parse_expression(inner.next().unwrap(), constants)?;
     let max_expr = parse_expression(inner.next().unwrap(), constants)?;
-    let max = ConstExpression::try_from(max_expr)
-        .map_err(|_| ParseError::SemanticError("Range check max must be a constant expression".to_string()))?;
+    let max = ConstExpression::try_from(max_expr).map_err(|_| {
+        ParseError::SemanticError("Range check max must be a constant expression".to_string())
+    })?;
     Ok(Line::RangeCheck { value, max })
 }
 

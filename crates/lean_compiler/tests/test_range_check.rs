@@ -1,13 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
+use lean_compiler::{
+    Expression, Line, SimpleExpr, SimpleLine, compile_to_intermediate_bytecode,
+    compile_to_low_level_bytecode, simplify_program,
+};
+use lean_compiler::{compile_program, parse_program};
+use lean_runner::{ExecutionHistory, execute_bytecode, execute_bytecode_helper};
 use lean_vm::*;
-use lean_runner::{ExecutionHistory, execute_bytecode_helper, execute_bytecode};
 use p3_field::PrimeCharacteristicRing;
-use lean_compiler::{parse_program, compile_program};
-use lean_compiler::{Expression, SimpleExpr, Line, SimpleLine, simplify_program, compile_to_intermediate_bytecode, compile_to_low_level_bytecode};
-use utils::ToUsize;
-use rayon::prelude::*;
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
+use rayon::prelude::*;
+use std::collections::{BTreeMap, BTreeSet};
+use utils::ToUsize;
 
 fn critical_test_cases() -> BTreeSet<(usize, usize)> {
     let mut test_cases = BTreeSet::new();
@@ -28,7 +31,7 @@ fn random_test_cases(num_test_cases: usize) -> BTreeSet<(usize, usize)> {
     let v_max = 16777215 * 2;
     let t_max = 65536;
     let mut rng = ChaCha20Rng::seed_from_u64(0);
-    
+
     let mut test_cases = BTreeSet::new();
 
     for _ in 0..num_test_cases / 2 {
@@ -36,7 +39,7 @@ fn random_test_cases(num_test_cases: usize) -> BTreeSet<(usize, usize)> {
         let v = rng.random_range(0..v_max) as usize;
         test_cases.insert((v, t));
     }
-    
+
     for _ in 0..num_test_cases / 2 {
         let t = rng.random_range(0..t_max) as usize;
         let v = rng.random_range(0..v_max) as usize;
@@ -52,7 +55,8 @@ fn random_test_cases(num_test_cases: usize) -> BTreeSet<(usize, usize)> {
 
 // TODO: create more test programs
 fn range_check_program(value: usize, max: usize) -> String {
-    let program = format!(r#"
+    let program = format!(
+        r#"
     fn func(val) {{
         if 0 == 0 {{
             range_check(val, {max});
@@ -69,14 +73,15 @@ fn range_check_program(value: usize, max: usize) -> String {
         range_check(val, {max});
         return;
     }}
-    "#);
+    "#
+    );
     program.to_string()
 }
 
 #[test]
 fn test_compile_range_checks() {
     //for (v, t) in range_check_test_cases() {
-        //do_test_range_check(v, t, true);
+    //do_test_range_check(v, t, true);
     //}
     //println!("range_check_test_cases: {:?}", range_check_test_cases().len());
 
@@ -94,7 +99,7 @@ fn do_test_range_check(v: usize, t: usize, verbose: bool) {
 
     let program = range_check_program(v, t);
     let (bytecode, function_locations) = compile_program(&program); // Range checks are automatically compiled now
-    
+
     if verbose {
         println!("Range Check Test: v: {}, t: {} ==============", v, t);
         println!("Compiled bytecode: \n{}", bytecode);
@@ -156,12 +161,20 @@ fn test_range_check_parsing_and_compilation_a_to_c() {
                     Expression::Value(SimpleExpr::Var(v)) => {
                         assert_eq!(v, "val", "Range check value should be 'val'");
                         if let Some(max_val) = max.naive_eval() {
-                            assert_eq!(max_val.to_usize(), max_usize, "Range check max should be 2");
+                            assert_eq!(
+                                max_val.to_usize(),
+                                max_usize,
+                                "Range check max should be 2"
+                            );
                         }
                     }
-                    _ => assert!(false, "{}", format!("Unexpected range check value type: {:?}", value)),
+                    _ => assert!(
+                        false,
+                        "{}",
+                        format!("Unexpected range check value type: {:?}", value)
+                    ),
                 }
-                
+
                 found = true;
             }
             _ => {}
@@ -184,13 +197,16 @@ fn test_range_check_parsing_and_compilation_a_to_c() {
                             assert_eq!(max_val.to_usize(), max_usize, "Range check max match");
                         }
                     }
-                    _ => assert!(false, "{}", format!("Unexpected range check value type: {:?}", value)),
+                    _ => assert!(
+                        false,
+                        "{}",
+                        format!("Unexpected range check value type: {:?}", value)
+                    ),
                 }
                 found = true;
             }
             _ => {}
         }
-
     }
     assert!(found, "Range check not found in the simplified program");
 
@@ -203,13 +219,16 @@ fn test_range_check_parsing_and_compilation_a_to_c() {
             match hint {
                 Hint::RangeCheck { value, max } => {
                     assert!(
-                        matches!(value, MemOrFp::MemoryAfterFp { .. }), 
-                       "Range check value should be memory reference in low level bytecode"
+                        matches!(value, MemOrFp::MemoryAfterFp { .. }),
+                        "Range check value should be memory reference in low level bytecode"
                     );
-                    
+
                     match max {
                         MemOrConstant::MemoryAfterFp { .. } => {
-                            assert!(false, "Range check max should be evaluable constant in low level bytecode");
+                            assert!(
+                                false,
+                                "Range check max should be evaluable constant in low level bytecode"
+                            );
                             unreachable!();
                         }
                         MemOrConstant::Constant(c) => {
@@ -379,7 +398,6 @@ fn test_deref() {
         },
     );
 
-
     hints.insert(
         instructions.len(),
         vec![
@@ -391,16 +409,14 @@ fn test_deref() {
                 line_info: "m[fp + 1001]".to_string(),
                 content: vec![MemOrConstant::MemoryAfterFp { offset: 1001 }],
             },
-        ]
+        ],
     );
 
-    instructions.push(
-        Instruction::Deref {
-            shift_0: v_q,
-            shift_1: 0,
-            res: MemOrFpOrConstant::MemoryAfterFp { offset: 1000 },
-        },
-    );
+    instructions.push(Instruction::Deref {
+        shift_0: v_q,
+        shift_1: 0,
+        res: MemOrFpOrConstant::MemoryAfterFp { offset: 1000 },
+    });
 
     instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ONE),
@@ -504,8 +520,8 @@ fn range_check(v: usize, t: usize) -> Result<lean_runner::ExecutionResult, Runne
     instructions.push(Instruction::Computation {
         operation: Operation::Add,
         arg_a: MemOrConstant::MemoryAfterFp { offset: j }, // Unknown: m[fp + j] will be solved to
-                                                           // (t-1) - m[val]
-        arg_c: MemOrFp::MemoryAfterFp { offset: x },       // Known:   m[fp + x] = m[val]
+        // (t-1) - m[val]
+        arg_c: MemOrFp::MemoryAfterFp { offset: x }, // Known:   m[fp + x] = m[val]
         res: MemOrConstant::MemoryAfterFp { offset: t_p }, // Known:   t - 1
     });
 

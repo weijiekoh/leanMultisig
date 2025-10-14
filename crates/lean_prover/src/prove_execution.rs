@@ -58,7 +58,8 @@ pub fn prove_execution(
             source_code,
             function_locations,
             vm_profiler,
-        ).unwrap();
+        )
+        .unwrap();
         get_execution_trace(bytecode, &execution_result)
     });
 

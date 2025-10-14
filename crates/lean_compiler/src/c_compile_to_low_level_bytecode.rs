@@ -12,7 +12,7 @@ impl IntermediateInstruction {
             | Self::DecomposeBits { .. }
             | Self::CounterHint { .. }
             | Self::Inverse { .. }
-            | Self::LocationReport { .. } 
+            | Self::LocationReport { .. }
             | Self::RangeCheck { .. } => true,
             Self::Computation { .. }
             | Self::Panic
@@ -22,7 +22,7 @@ impl IntermediateInstruction {
             | Self::Poseidon2_16 { .. }
             | Self::Poseidon2_24 { .. }
             | Self::DotProduct { .. }
-            | Self::MultilinearEval { .. }  => false,
+            | Self::MultilinearEval { .. } => false,
         }
     }
 }

@@ -1,10 +1,10 @@
+use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, dot_product};
+use p3_symmetric::Permutation;
+use p3_util::log2_ceil_usize;
 use std::collections::BTreeMap;
+use utils::ToUsize;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::poly::multilinear::MultilinearPoint;
-use p3_util::log2_ceil_usize;
-use p3_symmetric::Permutation;
-use p3_field::{ BasedVectorSpace, PrimeCharacteristicRing, dot_product, Field };
-use utils::ToUsize;
 
 use lean_vm::*;
 
@@ -28,7 +28,11 @@ fn print_execution_error(
         &lines_history[lines_history.len().saturating_sub(STACK_TRACE_INSTRUCTIONS)..];
     println!(
         "\n{}",
-        crate::stack_trace::pretty_stack_trace(source_code, latest_instructions, function_locations)
+        crate::stack_trace::pretty_stack_trace(
+            source_code,
+            latest_instructions,
+            function_locations
+        )
     );
     if !std_out.is_empty() {
         println!("╔══════════════════════════════════════════════════════════════╗");
@@ -61,11 +65,15 @@ pub fn execute_bytecode(
         false,
         function_locations,
     ) {
-        Ok(first_exec) => {
-            first_exec
-        }
+        Ok(first_exec) => first_exec,
         Err(err) => {
-            print_execution_error(&err, &std_out, &instruction_history, source_code, function_locations);
+            print_execution_error(
+                &err,
+                &std_out,
+                &instruction_history,
+                source_code,
+                function_locations,
+            );
             return Err(err);
         }
     };
@@ -82,11 +90,15 @@ pub fn execute_bytecode(
         profiler,
         function_locations,
     ) {
-        Ok(second_exec) => {
-            Ok(second_exec)
-        }
+        Ok(second_exec) => Ok(second_exec),
         Err(err) => {
-            print_execution_error(&err, &std_out, &instruction_history, source_code, function_locations);
+            print_execution_error(
+                &err,
+                &std_out,
+                &instruction_history,
+                source_code,
+                function_locations,
+            );
             return Err(err);
         }
     };
@@ -166,13 +178,8 @@ pub fn execute_bytecode_helper(
         state.debug_state.cpu_cycles_before_new_line += 1;
 
         let hints = bytecode.hints.get(&state.pc).unwrap_or(&vec![]).clone();
-        let should_continue = execute_hints(
-            &mut state,
-            &hints,
-            std_out,
-            instruction_history,
-        )?;
-        
+        let should_continue = execute_hints(&mut state, &hints, std_out, instruction_history)?;
+
         if should_continue {
             continue;
         }
@@ -180,7 +187,7 @@ pub fn execute_bytecode_helper(
         let instruction = &bytecode.instructions[state.pc];
         //println!("fp: {}; exec pc: {}; instr: {}", state.fp, state.pc, instruction);
         //if hints.len() > 0 {
-            //println!("hints: {:?}", hints);
+        //println!("hints: {:?}", hints);
         //}
         execute_instruction(&mut state, instruction)?;
     }
@@ -233,16 +240,17 @@ fn print_execution_stats(
         println!("║                                STD-OUT                                  ║");
         println!("╚═════════════════════════════════════════════════════════════════════════╝");
         print!("\n{std_out}");
-        println!(
-            "──────────────────────────────────────────────────────────────────────────\n"
-        );
+        println!("──────────────────────────────────────────────────────────────────────────\n");
     }
 
     println!("╔═════════════════════════════════════════════════════════════════════════╗");
     println!("║                                 STATS                                   ║");
     println!("╚═════════════════════════════════════════════════════════════════════════╝\n");
 
-    println!("CYCLES: {}", utils::pretty_integer(state.debug_state.cpu_cycles));
+    println!(
+        "CYCLES: {}",
+        utils::pretty_integer(state.debug_state.cpu_cycles)
+    );
     println!("MEMORY: {}", utils::pretty_integer(state.memory.0.len()));
     println!();
 
@@ -251,7 +259,10 @@ fn print_execution_stats(
         "Bytecode size: {}",
         utils::pretty_integer(bytecode.instructions.len())
     );
-    println!("Public input size: {}", utils::pretty_integer(public_input.len()));
+    println!(
+        "Public input size: {}",
+        utils::pretty_integer(public_input.len())
+    );
     println!(
         "Private input size: {}",
         utils::pretty_integer(private_input.len())
@@ -259,9 +270,11 @@ fn print_execution_stats(
     println!(
         "Runtime memory: {} ({:.2}% vec)",
         utils::pretty_integer(runtime_memory_size),
-        (DIMENSION * (state.ap_vec - state.initial_ap_vec)) as f64 / runtime_memory_size as f64 * 100.0
+        (DIMENSION * (state.ap_vec - state.initial_ap_vec)) as f64 / runtime_memory_size as f64
+            * 100.0
     );
-    let used_memory_cells = state.memory
+    let used_memory_cells = state
+        .memory
         .0
         .iter()
         .skip(PUBLIC_INPUT_START + public_input.len())
@@ -279,7 +292,8 @@ fn print_execution_stats(
             "Poseidon2_16 calls: {}, Poseidon2_24 calls: {} (1 poseidon per {} instructions)",
             utils::pretty_integer(state.debug_state.poseidon16_calls),
             utils::pretty_integer(state.debug_state.poseidon24_calls),
-            state.debug_state.cpu_cycles / (state.debug_state.poseidon16_calls + state.debug_state.poseidon24_calls)
+            state.debug_state.cpu_cycles
+                / (state.debug_state.poseidon16_calls + state.debug_state.poseidon24_calls)
         );
     }
     if state.debug_state.dot_product_ext_ext_calls > 0 {
@@ -360,7 +374,9 @@ fn execute_hints(
             }
             Hint::CounterHint { res_offset } => {
                 let pos = state.fp + *res_offset;
-                state.memory.set(pos, F::from_usize(state.debug_state.counter_hint))?;
+                state
+                    .memory
+                    .set(pos, F::from_usize(state.debug_state.counter_hint))?;
                 state.debug_state.counter_hint += 1;
             }
             Hint::Inverse { arg, res_offset } => {
@@ -381,18 +397,23 @@ fn execute_hints(
                     } else {
                         assert_eq!(values.len(), 2);
                         let new_no_vec_memory = state.ap - state.checkpoint_state.checkpoint_ap;
-                        let new_vec_memory = (state.ap_vec - state.checkpoint_state.checkpoint_ap_vec) * DIMENSION;
+                        let new_vec_memory =
+                            (state.ap_vec - state.checkpoint_state.checkpoint_ap_vec) * DIMENSION;
                         *std_out += &format!(
                             "[CHECKPOINT {}] new CPU cycles: {}, new runtime memory: {} ({:.1}% vec)\n",
                             values[1],
-                            utils::pretty_integer(state.debug_state.cpu_cycles - state.checkpoint_state.last_checkpoint_cpu_cycles),
+                            utils::pretty_integer(
+                                state.debug_state.cpu_cycles
+                                    - state.checkpoint_state.last_checkpoint_cpu_cycles
+                            ),
                             utils::pretty_integer(new_no_vec_memory + new_vec_memory),
                             new_vec_memory as f64 / (new_no_vec_memory + new_vec_memory) as f64
                                 * 100.0
                         );
                     }
 
-                    state.checkpoint_state.last_checkpoint_cpu_cycles = state.debug_state.cpu_cycles;
+                    state.checkpoint_state.last_checkpoint_cpu_cycles =
+                        state.debug_state.cpu_cycles;
                     state.checkpoint_state.checkpoint_ap = state.ap;
                     state.checkpoint_state.checkpoint_ap_vec = state.ap_vec;
                     return Ok(true); // Return early to continue the execution loop
@@ -403,21 +424,26 @@ fn execute_hints(
             }
             Hint::LocationReport { location } => {
                 instruction_history.lines.push(*location);
-                instruction_history.cycles.push(state.debug_state.cpu_cycles_before_new_line);
+                instruction_history
+                    .cycles
+                    .push(state.debug_state.cpu_cycles_before_new_line);
                 state.debug_state.cpu_cycles_before_new_line = 0;
             }
             Hint::RangeCheck { value, max } => {
-                state.pending_range_checks.insert(state.ap, (value.read_value(&state.memory, state.fp)?.to_usize(), max.read_value(&state.memory, state.fp)?.to_usize()));
+                state.pending_range_checks.insert(
+                    state.ap,
+                    (
+                        value.read_value(&state.memory, state.fp)?.to_usize(),
+                        max.read_value(&state.memory, state.fp)?.to_usize(),
+                    ),
+                );
             }
         }
     }
     Ok(false) // Don't continue the execution loop
 }
 
-fn execute_instruction(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<(), RunnerError> {
+fn execute_instruction(state: &mut State, instruction: &Instruction) -> Result<(), RunnerError> {
     match instruction {
         Instruction::Computation {
             operation,
@@ -560,8 +586,12 @@ fn execute_instruction(
             let ptr_arg_1 = arg1.read_value(&state.memory, state.fp)?.to_usize();
             let ptr_res = res.read_value(&state.memory, state.fp)?.to_usize();
 
-            let slice_0 = state.memory.get_continuous_slice_of_ef_elements(ptr_arg_0, *size)?;
-            let slice_1 = state.memory.get_continuous_slice_of_ef_elements(ptr_arg_1, *size)?;
+            let slice_0 = state
+                .memory
+                .get_continuous_slice_of_ef_elements(ptr_arg_0, *size)?;
+            let slice_1 = state
+                .memory
+                .get_continuous_slice_of_ef_elements(ptr_arg_1, *size)?;
 
             let dot_product = dot_product::<EF, _, _>(slice_0.into_iter(), slice_1.into_iter());
             state.memory.set_ef_element(ptr_res, dot_product)?;
@@ -583,7 +613,9 @@ fn execute_instruction(
             let slice_coeffs = state.memory.slice(ptr_coeffs << *n_vars, n_coeffs)?;
 
             let log_point_size = log2_ceil_usize(*n_vars * DIMENSION);
-            let point_slice = state.memory.slice(ptr_point << log_point_size, *n_vars * DIMENSION)?;
+            let point_slice = state
+                .memory
+                .slice(ptr_point << log_point_size, *n_vars * DIMENSION)?;
             for i in *n_vars * DIMENSION..(*n_vars * DIMENSION).next_power_of_two() {
                 let pos = (ptr_point << log_point_size) + i;
                 state.memory.set(pos, F::ZERO)?; // padding
@@ -596,7 +628,9 @@ fn execute_instruction(
             let eval = slice_coeffs.evaluate(&MultilinearPoint(point));
             let mut res_vec = eval.as_basis_coefficients_slice().to_vec();
             res_vec.resize(VECTOR_LEN, F::ZERO);
-            state.memory.set_vector(ptr_res, res_vec.clone().try_into().unwrap())?;
+            state
+                .memory
+                .set_vector(ptr_res, res_vec.clone().try_into().unwrap())?;
 
             state.increment_pc();
         }
@@ -668,10 +702,7 @@ impl DebugState {
 }
 
 impl CheckpointState {
-    fn init(
-        initial_ap: usize,
-        initial_ap_vec: usize,
-    ) -> CheckpointState {
+    fn init(initial_ap: usize, initial_ap_vec: usize) -> CheckpointState {
         CheckpointState {
             last_checkpoint_cpu_cycles: 0,
             checkpoint_ap: initial_ap,

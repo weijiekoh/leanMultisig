@@ -1,16 +1,16 @@
 use std::collections::BTreeMap;
 
+use lean_runner::{ExecutionHistory, execute_bytecode_helper};
 use lean_vm::*;
-use lean_runner::{execute_bytecode_helper, ExecutionHistory};
 
 pub use crate::{
-    lang::{Line, Expression, SimpleExpr, ConstExpression},
     a_simplify_lang::{SimpleLine, simplify_program},
     b_compile_intermediate::compile_to_intermediate_bytecode,
     c_compile_to_low_level_bytecode::compile_to_low_level_bytecode,
-    parser::parse_program,
+    d_compile_range_checks::{RangeCheckInfo, compile_range_checks, is_undef},
     intermediate_bytecode::{IntermediateInstruction, IntermediateValue},
-    d_compile_range_checks::{compile_range_checks, RangeCheckInfo, is_undef},
+    lang::{ConstExpression, Expression, Line, SimpleExpr},
+    parser::parse_program,
 };
 
 mod a_simplify_lang;
@@ -23,7 +23,6 @@ mod parser;
 mod precompiles;
 pub use precompiles::PRECOMPILES;
 
-
 pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
     let (parsed_program, function_locations) = parse_program(program).unwrap();
     // println!("Parsed program: {}", parsed_program.to_string());
@@ -33,11 +32,13 @@ pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
     // println!("Intermediate Bytecode:\n\n{}", intermediate_bytecode.to_string());
     let mut compiled = compile_to_low_level_bytecode(intermediate_bytecode).unwrap();
     //println!("Compiled Program:\n\n{}", compiled.to_string());
-    
+
     // Check if range checks exist - if so, compile them
-    if compiled.hints.values().any(|hints| 
-        hints.iter().any(|h| matches!(h, Hint::RangeCheck { .. }))
-    ) {
+    if compiled
+        .hints
+        .values()
+        .any(|hints| hints.iter().any(|h| matches!(h, Hint::RangeCheck { .. })))
+    {
         // First execution to get execution trace for range check compilation
         let mut std_out = String::new();
         let mut instruction_history = ExecutionHistory::default();
@@ -51,12 +52,13 @@ pub fn compile_program(program: &str) -> (Bytecode, BTreeMap<usize, String>) {
             &mut instruction_history,
             false,
             &function_locations,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Compile range checks using the execution result
         compiled = compile_range_checks(&first_exec, &compiled).unwrap();
     }
-    
+
     (compiled, function_locations)
 }
 

@@ -586,7 +586,6 @@ fn compile_lines(
                     max: max.clone(), // TODO: support max being an IntermediateValue
                 });
             }
-
         }
     }
 
