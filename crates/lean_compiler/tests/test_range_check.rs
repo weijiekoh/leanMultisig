@@ -145,7 +145,7 @@ fn do_test_range_check(v: usize, t: usize, verbose: bool) {
 
 /// Test that the range check keyword is parsed and compiled (steps a to c only).
 #[test]
-fn test_range_check_parsing_and_compilation_a_to_c() {
+fn test_range_check_parsing_and_compilation() {
     let value_usize = 1;
     let max_usize = 2;
     let program = range_check_program(value_usize, max_usize);
@@ -244,6 +244,10 @@ fn test_range_check_parsing_and_compilation_a_to_c() {
 
     assert!(found, "Range check not found in the intermediate bytecode");
 }
+
+// The following tests are on manually written bytecode that implement the range-check technique.
+// In practice, the compiler compiles the range_check keyword via compile_range_checks() in
+// crates/lean_compiler/src/d_compile_range_checks.rs.
 
 // Passes if the range check works when v < t
 fn do_test_valid_range_check(v: usize, t: usize) {
