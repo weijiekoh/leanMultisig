@@ -51,6 +51,10 @@ pub enum IntermediateInstruction {
         res: IntermediateValue,    // vectorized pointer, of size 1
         n_vars: ConstExpression,
     },
+    RangeCheck {
+        value: IntermediateValue,
+        max: ConstExpression, // TODO: support IntermediateValue
+    },
     // HINTS (does not appears in the final bytecode)
     Inverse {
         // If the value is zero, it will return zero.
@@ -253,6 +257,9 @@ impl Display for IntermediateInstruction {
                 Ok(())
             }
             Self::LocationReport { .. } => Ok(()),
+            Self::RangeCheck { value, max } => {
+                write!(f, "range_check({value}, {max})")
+            }
         }
     }
 }

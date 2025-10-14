@@ -2,6 +2,7 @@ use crate::common::*;
 use crate::*;
 use ::air::table::AirTable;
 use lean_vm::*;
+use lean_runner::execute_bytecode;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
 use multilinear_toolkit::prelude::*;
@@ -47,14 +48,14 @@ pub fn prove_execution(
         memory, // padded with zeros to next power of two
     } = info_span!("Witness generation").in_scope(|| {
         let execution_result = execute_bytecode(
-            bytecode,
+            &mut bytecode.clone(),
             public_input,
             private_input,
             source_code,
             function_locations,
-            no_vec_runtime_memory,
             vm_profiler,
-        );
+        )
+        .unwrap();
         get_execution_trace(bytecode, execution_result)
     });
 

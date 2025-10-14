@@ -5,6 +5,7 @@ use crate::{
     N_EXEC_COLUMNS, N_INSTRUCTION_COLUMNS,
 };
 use lean_vm::*;
+use lean_runner::ExecutionResult;
 use p3_field::Field;
 use p3_field::PrimeCharacteristicRing;
 use rayon::prelude::*;

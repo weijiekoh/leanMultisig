@@ -367,6 +367,7 @@ name = "lean_compiler"
 version = "0.1.0"
 dependencies = [
  "air",
+ "lean_runner",
  "lean_vm",
  "lookup",
  "multilinear-toolkit",
@@ -383,6 +384,7 @@ dependencies = [
  "pest",
  "pest_derive",
  "rand",
+ "rand_chacha",
  "rayon",
  "tracing",
  "utils",
@@ -396,6 +398,7 @@ version = "0.1.0"
 dependencies = [
  "air",
  "lean_compiler",
+ "lean_runner",
  "lean_vm",
  "lookup",
  "multilinear-toolkit",
@@ -419,6 +422,23 @@ dependencies = [
  "whir-p3",
  "witness_generation",
  "xmss",
+]
+
+[[package]]
+name = "lean_runner"
+version = "0.1.0"
+dependencies = [
+ "lean_vm",
+ "multilinear-toolkit",
+ "p3-field",
+ "p3-symmetric",
+ "p3-util",
+ "rand_chacha",
+ "rayon",
+ "thiserror",
+ "tracing",
+ "utils",
+ "whir-p3",
 ]
 
 [[package]]
@@ -1548,6 +1568,7 @@ dependencies = [
  "air",
  "derive_more",
  "lean_compiler",
+ "lean_runner",
  "lean_vm",
  "lookup",
  "multilinear-toolkit",

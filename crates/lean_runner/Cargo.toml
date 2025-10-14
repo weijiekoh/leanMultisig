@@ -1,0 +1,23 @@
+[package]
+name = "lean_runner"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lean_vm.workspace = true
+utils.workspace = true
+p3-field.workspace = true
+p3-symmetric.workspace = true
+p3-util.workspace = true
+whir-p3.workspace = true
+multilinear-toolkit.workspace = true
+rayon.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+rayon = "1.11.0"
+rand_chacha = "0.9.0"

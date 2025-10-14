@@ -2,8 +2,6 @@
 
 use lean_vm::{EF, F};
 use utils::*;
-
-use lean_vm::execute_bytecode;
 use whir_p3::{FoldingFactor, SecurityAssumption, WhirConfigBuilder};
 use witness_generation::*;
 
