@@ -4,6 +4,7 @@ use lean_compiler::{
 };
 use lean_compiler::{compile_program, parse_program};
 use lean_runner::{ExecutionHistory, execute_bytecode, execute_bytecode_helper};
+use lean_vm::core::Label;
 use lean_vm::*;
 use p3_field::PrimeCharacteristicRing;
 use rand::Rng;
@@ -424,11 +425,13 @@ fn test_deref() {
 
     instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ONE),
+        label: Label::custom("test_jump_1"),
         dest: MemOrConstant::Constant(F::from_usize(instructions.len() + 1)),
         updated_fp: MemOrFp::Fp,
     });
     instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ONE),
+        label: Label::custom("test_jump_2"),
         dest: MemOrConstant::Constant(F::from_usize(0)),
         updated_fp: MemOrFp::Fp,
     });
@@ -548,11 +551,13 @@ fn range_check(v: usize, t: usize) -> Result<lean_runner::ExecutionResult, Runne
 
     instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ONE),
+        label: Label::custom("test_jump_3"),
         dest: MemOrConstant::Constant(F::from_usize(instructions.len() + 1)),
         updated_fp: MemOrFp::Fp,
     });
     instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ONE),
+        label: Label::custom("test_jump_4"),
         dest: MemOrConstant::Constant(F::from_usize(0)),
         updated_fp: MemOrFp::MemoryAfterFp { offset: 0 },
     });

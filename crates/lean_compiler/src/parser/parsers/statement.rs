@@ -303,13 +303,14 @@ pub struct RangeCheckParser;
 impl Parse<Line> for RangeCheckParser {
     fn parse(pair: ParsePair<'_>, ctx: &mut ParseContext) -> ParseResult<Line> {
         let mut inner = pair.into_inner();
-        let value = ExpressionParser::parse(next_inner_pair(&mut inner, "range check value")?, ctx)?;
-        let max_expr = ExpressionParser::parse(next_inner_pair(&mut inner, "range check max")?, ctx)?;
-        
-        let max = crate::lang::ConstExpression::try_from(max_expr).map_err(|_| {
-            SemanticError::new("Range check max must be a constant expression")
-        })?;
-        
+        let value =
+            ExpressionParser::parse(next_inner_pair(&mut inner, "range check value")?, ctx)?;
+        let max_expr =
+            ExpressionParser::parse(next_inner_pair(&mut inner, "range check max")?, ctx)?;
+
+        let max = crate::lang::ConstExpression::try_from(max_expr)
+            .map_err(|_| SemanticError::new("Range check max must be a constant expression"))?;
+
         Ok(Line::RangeCheck { value, max })
     }
 }

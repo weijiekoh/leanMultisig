@@ -1,8 +1,8 @@
 use crate::common::*;
 use crate::*;
 use ::air::table::AirTable;
-use lean_vm::*;
 use lean_runner::execute_bytecode;
+use lean_vm::*;
 use lookup::prove_gkr_product;
 use lookup::{compute_pushforward, prove_logup_star};
 use multilinear_toolkit::prelude::*;
@@ -32,7 +32,7 @@ pub fn prove_execution(
     function_locations: &BTreeMap<usize, String>, // debug purpose
     (public_input, private_input): (&[F], &[F]),
     whir_config_builder: WhirConfigBuilder,
-    no_vec_runtime_memory: usize, // size of the "non-vectorized" runtime memory
+    _no_vec_runtime_memory: usize, // size of the "non-vectorized" runtime memory
     vm_profiler: bool,
 ) -> (Vec<PF<EF>>, usize) {
     let ExecutionTrace {

@@ -1,10 +1,11 @@
+use multilinear_toolkit::prelude::*;
 use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, dot_product};
 use p3_symmetric::Permutation;
 use p3_util::log2_ceil_usize;
 use std::collections::BTreeMap;
 use utils::ToUsize;
-use multilinear_toolkit::prelude::*;
 
+use lean_vm::witness::*;
 use lean_vm::*;
 
 const STACK_TRACE_INSTRUCTIONS: usize = 5000;
@@ -112,6 +113,10 @@ pub struct ExecutionResult {
     pub initial_memory: Memory,
     pub pcs: Vec<usize>,
     pub fps: Vec<usize>,
+    pub poseidons_16: Vec<WitnessPoseidon16>,
+    pub poseidons_24: Vec<WitnessPoseidon24>,
+    pub dot_products: Vec<WitnessDotProduct>,
+    pub multilinear_evals: Vec<WitnessMultilinearEval>,
 }
 
 pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
@@ -217,6 +222,10 @@ pub fn execute_bytecode_helper(
         initial_memory,
         pcs: state.debug_state.pcs,
         fps: state.debug_state.fps,
+        poseidons_16: Vec::new(),
+        poseidons_24: Vec::new(),
+        dot_products: Vec::new(),
+        multilinear_evals: Vec::new(),
     });
 }
 
@@ -545,7 +554,12 @@ fn execute_instruction(state: &mut State, instruction: &Instruction) -> Result<(
 
             state.debug_state.jump_counts += 1;
         }
-        Instruction::Poseidon2_16 { arg_a, arg_b, res, is_compression: _ } => {
+        Instruction::Poseidon2_16 {
+            arg_a,
+            arg_b,
+            res,
+            is_compression: _,
+        } => {
             state.debug_state.poseidon16_calls += 1;
 
             let a_value = arg_a.read_value(&state.memory, state.fp)?;
