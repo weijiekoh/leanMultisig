@@ -425,6 +425,7 @@ dependencies = [
  "pest",
  "pest_derive",
  "rand",
+ "rand_chacha",
  "rayon",
  "sumcheck",
  "tracing",

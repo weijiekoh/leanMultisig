@@ -1944,6 +1944,7 @@ fn replace_vars_by_const_in_lines(lines: &mut [Line], map: &BTreeMap<Var, F>) {
         }
     }
 }
+
 impl Display for SimpleLine {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_string_with_indent(0))

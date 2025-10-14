@@ -150,9 +150,6 @@ fn compile_function(
     // Look for range check statements
     let range_checks = find_range_checks(&function.instructions);
 
-    // Allow for auxillary variables for range checks
-    stack_pos += range_checks.len() * 3;
-
     compiler.func_name = function.name.clone();
     compiler.var_positions = var_positions;
     compiler.stack_size = stack_pos;

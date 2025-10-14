@@ -29,3 +29,7 @@ p3-poseidon2-air.workspace = true
 lookup.workspace = true
 sumcheck.workspace = true
 lean_vm.workspace = true
+
+[dev-dependencies]
+rayon = "1.11.0"
+rand_chacha = "0.9.0"
