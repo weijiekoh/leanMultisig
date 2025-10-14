@@ -44,6 +44,7 @@ air = { path = "crates/air" }
 sumcheck = { path = "crates/sumcheck" }
 utils = { path = "crates/utils" }
 lean_vm = { path = "crates/lean_vm" }
+lean_runner = { path = "crates/lean_runner" }
 xmss = { path = "crates/xmss" }
 packed_pcs = { path = "crates/packed_pcs" }
 lookup = { path = "crates/lookup" }

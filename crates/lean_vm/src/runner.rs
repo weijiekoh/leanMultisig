@@ -105,17 +105,23 @@ fn print_execution_error(
     println!("Execution failed with error: {:?}", err);
 }
 
-fn find_next_zero_cell(state: &State, start_offset: usize) -> usize {
-    // TODO: fix this there may not be a zero cell to locate and this function may run forever!
+fn find_next_zero_cell(memory: &Memory, start_offset: usize) -> Option<usize> {
+    if start_offset >= memory.0.len() {
+        return None;
+    }
     let mut z = start_offset;
+
     loop { 
-        let m_fp_z = &state.memory.get(state.fp + z);
-        if !m_fp_z.is_err() && m_fp_z.clone().unwrap() == F::ZERO {
+        if z >= memory.0.len() {
             break;
+        }
+        let m_fp_z = &memory.get(z);
+        if !m_fp_z.is_err() && m_fp_z.clone().unwrap() == F::ZERO {
+            return Some(z)
         }
         z += 1;
     }
-    z
+    None
 }
 
 fn find_next_undefined_cell_from_mem(
@@ -143,47 +149,35 @@ pub fn is_undef(mem: &Memory, pos: usize) -> bool {
     matches!(mem.get(pos), Err(RunnerError::UndefinedMemory))
 }
 
+#[derive(Debug, Clone)]
+struct RangeCheckInfo {
+    hint_fp: usize,
+    v_pos: usize,
+    v: usize,
+    t: usize,
+    q: usize, // t - 1 - v
+}
+
 pub fn compile_range_checks(
     first_exec: &ExecutionResult,
     bytecode: &Bytecode,
 ) -> Result<Bytecode, RunnerError> {
-    /*
-     * With val stored in m[fp + x], and t being a constant, the goal is to replace each RangeCheck
-     * instruction with the following 3 instructions:
-     *
-     * 1. Using DEREF, set `m[fp + i]` to `m[m[fp + x]]`.
-     *     - Since this will fail if `m[fp + x] >= M`, we ensure that `m[fp + x] < M`.
-     * 
-     * 2. Using ADD, ensure (via constraint-solving): `m[fp + j] + m[m[fp + x]] = (t - 1)`.
-     * 
-     * 3. Using DEREF, ensure `m[m[fp + j]] = m[fp + k]`.
-     *     - Since this will fail if `m[fp + j] >= M`, we ensure that `(t - 1) - m[fp + x] < M`.
-     *
-     * according to section 2.5.3 of minimal_zkVM.pdf.
-     *
-     * This is how we solve for the i, j, and k values. First, establish these principles:
-     *
-     * 1. Performing a DEREF of the form m[m[fp + x]] == m[fp + i] will fail if:
-     *      - both m[m[fp + x]] and m[fp + i] are undefined
-     *      - m[m[fp + x]] is defined, and m[fp + i] is already set to a different value
-     *      - m[fp + i] is defined, and m[m[fp + x]] is already set to a different value
-     * 2. Performing a DEREF of the form m[m[fp + x]] == m[fp + i] will succeed if:
-     *      - m[m[fp + x]] is defined, and m[fp + i] is undefined
-     *      - m[fp + i] is defined, and m[m[fp + x]] is undefined
-     * 3. Performing and ADD of the form m[fp + j] + m[m[fp + x]] == c will fail if:
-     *      - both m[fp + j] and m[m[fp + x]] are undefined
-     * 4. Performing and ADD of the form m[fp + j] + m[m[fp + x]] == c will succeed if:
-     *      - m[fp + j] is undefined
-     *
-     * TODO: rewrite this
-     */
+    // Early return if no range checks exist
+    if !bytecode.hints.values().any(|hints| 
+        hints.iter().any(|h| matches!(h, Hint::RangeCheck { .. }))
+    ) {
+        return Ok(bytecode.clone());
+    }
 
-    // Convenience mapping: instr_idx -> (fp, v_pos, val, t, t - 1 - v)
-    // v_off is the offset of val **from its fp, not necessarily from 0**.
-    let mut rcs: BTreeMap<(usize, usize), (usize, usize, usize, usize, usize)> = BTreeMap::new();
+    // Convenience mapping: instr_idx -> RangeCheckInfo
+    let mut rcs: BTreeMap<(usize, usize), RangeCheckInfo> = BTreeMap::new();
 
-    // Assume that the last fp is 0
-    assert_eq!(first_exec.fps[first_exec.fps.len() - 1], 0);
+    // Validate that the last fp is 0
+    let last_fp = first_exec.fps.last()
+        .ok_or(RunnerError::PCOutOfBounds)?; // Using existing error type
+    if *last_fp != 0 {
+        return Err(RunnerError::PCOutOfBounds); // Using existing error type for now
+    }
 
     // Find the penultimate instruction
     let pen_instr = bytecode.instructions[first_exec.pcs[first_exec.pcs.len() - 2]].clone();
@@ -208,9 +202,6 @@ pub fn compile_range_checks(
 
     // Keep track of memory locations we will write to
     let mut conflicts: BTreeSet<usize> = BTreeSet::new();
-    //for i in 0..first_exec.memory.0.len() {
-        //conflicts.insert(i);
-    //}
 
     for (pc, hints) in &bytecode.hints {
         for (hint_idx, hint) in hints.iter().enumerate() {
@@ -232,8 +223,18 @@ pub fn compile_range_checks(
                             c.to_usize()
                         }
                     };
+
+                    // q = t - 1 - v in the field
                     let q = (F::from_usize(t) - F::ONE - F::from_usize(v)).to_usize();
-                    rcs.insert((*pc, hint_idx), (hint_fp, v_pos, v, t, q));
+
+                    rcs.insert((*pc, hint_idx), RangeCheckInfo {
+                        hint_fp,
+                        v_pos,
+                        v,
+                        t,
+                        q,
+                    });
+
                     conflicts.insert(v);
                     conflicts.insert(t);
                 }
@@ -242,37 +243,33 @@ pub fn compile_range_checks(
         }
     }
 
-    // Return the bytecode unmodified if there are no range checks
-    if rcs.is_empty() {
-        return Ok(bytecode.clone());
-    }
-
     // Since the range check vals are referenced by offset, our fp must be the smallest possible
-    // value: 0. TODO: This also means that the final jump instruction must point to the our first
-    // instruction, and we need to update ending_pc to point to our final instruction.
-    let fp = 0; //first_exec.initial_memory.0.len() + 1;
+    // value: 0.
+    let fp = 0;
     
-    // The instructions we will insert
-    let mut instrs_to_insert: Vec<Instruction> = vec![];//Vec::with_capacity();
+    let mut instrs_to_insert: Vec<Instruction> = vec![];
 
     // Look for any 0 cells past fp, or create one
-    // TODO: fix find_next_zero_cell and use it
-    let z_pos = find_next_undefined_cell_from_mem(&first_exec.memory, &conflicts, fp);
-    if first_exec.memory.get(z_pos).is_err() {
-        let z_instr = Instruction::Computation {
-            operation: Operation::Add,
-            arg_a: MemOrConstant::Constant(F::ZERO),
-            arg_c: MemOrFp::MemoryAfterFp { offset: z_pos - fp },
-            res: MemOrConstant::Constant(F::ZERO),
-        };
-        instrs_to_insert.push(z_instr);
-    }
+    let z_pos = find_next_zero_cell(&first_exec.memory, fp)
+        .unwrap_or_else(|| {
+            let z_pos = find_next_undefined_cell_from_mem(&first_exec.memory, &conflicts, fp);
+            if first_exec.memory.get(z_pos).is_err() {
+                let z_instr = Instruction::Computation {
+                    operation: Operation::Add,
+                    arg_a: MemOrConstant::Constant(F::ZERO),
+                    arg_c: MemOrFp::MemoryAfterFp { offset: z_pos - fp },
+                    res: MemOrConstant::Constant(F::ZERO),
+                };
+                instrs_to_insert.push(z_instr);
+            }
+            z_pos
+        });
 
     conflicts.insert(z_pos);
 
-    for ((_pc, _hint_idx), (_hint_fp, v_pos, v, _t, q)) in &rcs {
+    for ((_pc, _hint_idx), rc_info) in &rcs {
         // Step 1: DEREF m[m[fp + x]] == m[fp + i]
-        let i = if is_undef(&first_exec.memory, *v) {
+        let i = if is_undef(&first_exec.memory, rc_info.v) {
             // if m[v] is undefined, use z
             z_pos
         } else {
@@ -280,24 +277,28 @@ pub fn compile_range_checks(
             find_next_undefined_cell_from_mem(&first_exec.memory, &conflicts, fp)
         };
         let step_1 = Instruction::Deref {
-            shift_0: *v_pos - fp,
+            shift_0: rc_info.v_pos - fp,
             shift_1: 0,
             res: MemOrFpOrConstant::MemoryAfterFp { offset: i - fp },
         };
+
+        // Since the step 1 deref writes to m[i], add i to conflicts
         conflicts.insert(i);
 
-        // Step 2: ADD   m[fp + j] = t - 1 - v
+        // Step 2: ADD m[fp + j] = t - 1 - v
         let j = find_next_undefined_cell_from_mem(&first_exec.memory, &conflicts, i);
         let step_2 = Instruction::Computation {
             operation: Operation::Add,
             arg_a: MemOrConstant::Constant(F::ZERO), // 0
             arg_c: MemOrFp::MemoryAfterFp { offset: j - fp }, // Unknown; solves to t - 1 - v
-            res: MemOrConstant::Constant(F::from_usize(*q)), // t - 1 - v
+            res: MemOrConstant::Constant(F::from_usize(rc_info.q)), // t - 1 - v
         };
+
+        // Since the step 2 add writes to m[j], add j to conflicts
         conflicts.insert(j);
 
         // Step 3: DEREF m[fp + k] = m[m[fp + j]]
-        let k = if is_undef(&first_exec.memory, *q) && !conflicts.contains(q) {
+        let k = if is_undef(&first_exec.memory, rc_info.q) && !conflicts.contains(&rc_info.q) {
             // if m[q] is undefined, use z
             z_pos
         } else {
@@ -310,21 +311,18 @@ pub fn compile_range_checks(
             shift_1: 0,
             res: MemOrFpOrConstant::MemoryAfterFp { offset: k - fp },
         };
-        conflicts.insert(k);
 
-        conflicts.insert(*q);
+        // Since the step 3 deref may write to m[k] or m[q], add q and k to conflicts
+        conflicts.insert(k);
+        conflicts.insert(rc_info.q);
 
         instrs_to_insert.push(step_1);
         instrs_to_insert.push(step_2);
         instrs_to_insert.push(step_3);
-
-        //println!("v: {}; t: {}; q: {}; i: {}; j: {}; k: {}; z_pos: {}", v, t, q, i, j, k, z_pos);
     }
 
     // Create the updated bytecode with range check instructions appended at the end
     let mut updated_bytecode = bytecode.clone();
-    
-    // Store original ending_pc for the final jump
     
     // Find the index of the penultimate instruction in the instruction list
     let penultimate_pc = first_exec.pcs[first_exec.pcs.len() - 2];
@@ -334,12 +332,11 @@ pub fn compile_range_checks(
     updated_bytecode.instructions.extend(instrs_to_insert);
     
     // Add a final jump that terminates execution
-    let final_jump = Instruction::Jump {
+    updated_bytecode.instructions.push(Instruction::Jump {
         condition: MemOrConstant::Constant(F::ZERO), // Never jump - terminates execution
         dest: MemOrConstant::Constant(F::ZERO), // Doesn't matter since condition is false
         updated_fp: MemOrFp::Fp,
-    };
-    updated_bytecode.instructions.push(final_jump);
+    });
     
     // Update the penultimate jump to point to the first range check instruction
     if let Instruction::Jump { dest, .. } = &mut updated_bytecode.instructions[penultimate_pc] {
@@ -452,7 +449,7 @@ pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
     public_memory
 }
 
-#[allow(clippy::too_many_arguments)] // TODO
+#[allow(clippy::too_many_arguments)]
 pub fn execute_bytecode_helper(
     bytecode: &Bytecode,
     public_input: &[F],

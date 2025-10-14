@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use lean_vm::*;
 use lean_vm::runner::{ExecutionHistory, execute_bytecode_helper};
 use p3_field::PrimeCharacteristicRing;
@@ -9,15 +9,15 @@ use rayon::prelude::*;
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 
-fn range_check_test_cases() -> Vec<(usize, usize)> {
-    let mut test_cases = vec![];
+fn range_check_test_cases() -> BTreeSet<(usize, usize)> {
+    let mut test_cases = BTreeSet::new();
 
     for t in 0..200 {
-        for v in 0..t {
-            test_cases.push((v, t));
+        for v in 0..t * 2 {
+            test_cases.insert((v, t));
         }
         for v in 16777215..16777300 {
-            test_cases.push((v, t));
+            test_cases.insert((v, t));
         }
     }
 
@@ -26,27 +26,29 @@ fn range_check_test_cases() -> Vec<(usize, usize)> {
     let t_max = 65536;
     let mut rng = ChaCha20Rng::seed_from_u64(0);
     
-    let num_test_cases = 10000;
+    let num_test_cases = 10000; //16777216 * 2;
 
     for _ in 0..num_test_cases / 2 {
         let t = rng.random_range(0..t_max) as usize;
         let v = rng.random_range(0..v_max) as usize;
-        test_cases.push((v, t));
+        test_cases.insert((v, t));
     }
     
     for _ in 0..num_test_cases / 2 {
         let t = rng.random_range(0..t_max) as usize;
         let v = rng.random_range(0..v_max) as usize;
         if v >= t {
-            test_cases.push((v, t));
+            test_cases.insert((v, t));
         } else {
-            test_cases.push((t, v));
+            test_cases.insert((t, v));
         }
     }
 
+    println!("generated {} test cases", test_cases.len());
     test_cases
 }
 
+// TODO: create more test programs
 fn range_check_program(value: usize, max: usize) -> String {
     let program = format!(r#"
     fn func(val) {{
@@ -84,14 +86,12 @@ fn test_compile_range_checks() {
 
 fn do_test_range_check(v: usize, t: usize, verbose: bool) {
     let max_runner_memory_size: usize = 1 << 24;
-    
-    if verbose {
-        println!("Range Check Test: v: {}, t: {} ==============", v, t);
-    }
+
     let program = range_check_program(v, t);
     let (bytecode, function_locations) = compile_program(&program);
     
     if verbose {
+        println!("Range Check Test: v: {}, t: {} ==============", v, t);
         println!("Old bytecode: \n{}", bytecode);
         println!("ending_pc: {}", bytecode.ending_pc);
     }
