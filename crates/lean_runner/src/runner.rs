@@ -4,77 +4,11 @@ use whir_p3::poly::multilinear::MultilinearPoint;
 use p3_util::log2_ceil_usize;
 use p3_symmetric::Permutation;
 use p3_field::{ BasedVectorSpace, PrimeCharacteristicRing, dot_product, Field };
+use utils::ToUsize;
 
-use crate::*;
-use crate::lean_isa::*;
-use crate::error::RunnerError;
-use crate::profiler::profiling_report;
-use crate::stack_trace::pretty_stack_trace;
-use utils::{ ToUsize, get_poseidon16, get_poseidon24, pretty_integer, Poseidon16, Poseidon24};
+use lean_vm::*;
 
 const STACK_TRACE_INSTRUCTIONS: usize = 5000;
-
-impl MemOrConstant {
-    pub fn read_value(&self, memory: &Memory, fp: usize) -> Result<F, RunnerError> {
-        match self {
-            Self::Constant(c) => Ok(*c),
-            Self::MemoryAfterFp { offset } => memory.get(fp + *offset),
-        }
-    }
-
-    pub fn is_value_unknown(&self, memory: &Memory, fp: usize) -> bool {
-        self.read_value(memory, fp).is_err()
-    }
-
-    pub const fn memory_address(&self, fp: usize) -> Result<usize, RunnerError> {
-        match self {
-            Self::Constant(_) => Err(RunnerError::NotAPointer),
-            Self::MemoryAfterFp { offset } => Ok(fp + *offset),
-        }
-    }
-}
-
-impl MemOrFp {
-    pub fn read_value(&self, memory: &Memory, fp: usize) -> Result<F, RunnerError> {
-        match self {
-            Self::MemoryAfterFp { offset } => memory.get(fp + *offset),
-            Self::Fp => Ok(F::from_usize(fp)),
-        }
-    }
-
-    pub fn is_value_unknown(&self, memory: &Memory, fp: usize) -> bool {
-        self.read_value(memory, fp).is_err()
-    }
-
-    pub const fn memory_address(&self, fp: usize) -> Result<usize, RunnerError> {
-        match self {
-            Self::MemoryAfterFp { offset } => Ok(fp + *offset),
-            Self::Fp => Err(RunnerError::NotAPointer),
-        }
-    }
-}
-
-impl MemOrFpOrConstant {
-    pub fn read_value(&self, memory: &Memory, fp: usize) -> Result<F, RunnerError> {
-        match self {
-            Self::MemoryAfterFp { offset } => memory.get(fp + *offset),
-            Self::Fp => Ok(F::from_usize(fp)),
-            Self::Constant(c) => Ok(*c),
-        }
-    }
-
-    pub fn is_value_unknown(&self, memory: &Memory, fp: usize) -> bool {
-        self.read_value(memory, fp).is_err()
-    }
-
-    pub const fn memory_address(&self, fp: usize) -> Result<usize, RunnerError> {
-        match self {
-            Self::MemoryAfterFp { offset } => Ok(fp + *offset),
-            Self::Fp => Err(RunnerError::NotAPointer),
-            Self::Constant(_) => Err(RunnerError::NotAPointer),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct ExecutionHistory {
@@ -94,7 +28,7 @@ fn print_execution_error(
         &lines_history[lines_history.len().saturating_sub(STACK_TRACE_INSTRUCTIONS)..];
     println!(
         "\n{}",
-        pretty_stack_trace(source_code, latest_instructions, function_locations)
+        crate::stack_trace::pretty_stack_trace(source_code, latest_instructions, function_locations)
     );
     if !std_out.is_empty() {
         println!("╔══════════════════════════════════════════════════════════════╗");
@@ -198,10 +132,10 @@ pub fn build_public_memory(public_input: &[F]) -> Vec<F> {
 
     public_memory
         [POSEIDON_16_NULL_HASH_PTR * VECTOR_LEN..(POSEIDON_16_NULL_HASH_PTR + 2) * VECTOR_LEN]
-        .copy_from_slice(&get_poseidon16().permute([F::ZERO; 16]));
+        .copy_from_slice(&utils::get_poseidon16().permute([F::ZERO; 16]));
     public_memory
         [POSEIDON_24_NULL_HASH_PTR * VECTOR_LEN..(POSEIDON_24_NULL_HASH_PTR + 1) * VECTOR_LEN]
-        .copy_from_slice(&get_poseidon24().permute([F::ZERO; 24])[16..]);
+        .copy_from_slice(&utils::get_poseidon24().permute([F::ZERO; 24])[16..]);
     public_memory
 }
 
@@ -244,6 +178,10 @@ pub fn execute_bytecode_helper(
         }
 
         let instruction = &bytecode.instructions[state.pc];
+        //println!("fp: {}; exec pc: {}; instr: {}", state.fp, state.pc, instruction);
+        //if hints.len() > 0 {
+            //println!("hints: {:?}", hints);
+        //}
         execute_instruction(&mut state, instruction)?;
     }
 
@@ -287,7 +225,7 @@ fn print_execution_stats(
     profiler: bool,
 ) {
     if profiler {
-        let report = profiling_report(instruction_history, function_locations);
+        let report = crate::profiler::profiling_report(instruction_history, function_locations);
         println!("\n{report}");
     }
     if !std_out.is_empty() {
@@ -304,23 +242,23 @@ fn print_execution_stats(
     println!("║                                 STATS                                   ║");
     println!("╚═════════════════════════════════════════════════════════════════════════╝\n");
 
-    println!("CYCLES: {}", pretty_integer(state.debug_state.cpu_cycles));
-    println!("MEMORY: {}", pretty_integer(state.memory.0.len()));
+    println!("CYCLES: {}", utils::pretty_integer(state.debug_state.cpu_cycles));
+    println!("MEMORY: {}", utils::pretty_integer(state.memory.0.len()));
     println!();
 
     let runtime_memory_size = state.memory.0.len() - (PUBLIC_INPUT_START + public_input.len());
     println!(
         "Bytecode size: {}",
-        pretty_integer(bytecode.instructions.len())
+        utils::pretty_integer(bytecode.instructions.len())
     );
-    println!("Public input size: {}", pretty_integer(public_input.len()));
+    println!("Public input size: {}", utils::pretty_integer(public_input.len()));
     println!(
         "Private input size: {}",
-        pretty_integer(private_input.len())
+        utils::pretty_integer(private_input.len())
     );
     println!(
         "Runtime memory: {} ({:.2}% vec)",
-        pretty_integer(runtime_memory_size),
+        utils::pretty_integer(runtime_memory_size),
         (DIMENSION * (state.ap_vec - state.initial_ap_vec)) as f64 / runtime_memory_size as f64 * 100.0
     );
     let used_memory_cells = state.memory
@@ -339,21 +277,21 @@ fn print_execution_stats(
     if state.debug_state.poseidon16_calls + state.debug_state.poseidon24_calls > 0 {
         println!(
             "Poseidon2_16 calls: {}, Poseidon2_24 calls: {} (1 poseidon per {} instructions)",
-            pretty_integer(state.debug_state.poseidon16_calls),
-            pretty_integer(state.debug_state.poseidon24_calls),
+            utils::pretty_integer(state.debug_state.poseidon16_calls),
+            utils::pretty_integer(state.debug_state.poseidon24_calls),
             state.debug_state.cpu_cycles / (state.debug_state.poseidon16_calls + state.debug_state.poseidon24_calls)
         );
     }
     if state.debug_state.dot_product_ext_ext_calls > 0 {
         println!(
             "DotProduct calls: {}",
-            pretty_integer(state.debug_state.dot_product_ext_ext_calls)
+            utils::pretty_integer(state.debug_state.dot_product_ext_ext_calls)
         );
     }
     if state.debug_state.multilinear_eval_calls > 0 {
         println!(
             "MultilinearEval calls: {}",
-            pretty_integer(state.debug_state.multilinear_eval_calls)
+            utils::pretty_integer(state.debug_state.multilinear_eval_calls)
         );
     }
 
@@ -447,8 +385,8 @@ fn execute_hints(
                         *std_out += &format!(
                             "[CHECKPOINT {}] new CPU cycles: {}, new runtime memory: {} ({:.1}% vec)\n",
                             values[1],
-                            pretty_integer(state.debug_state.cpu_cycles - state.checkpoint_state.last_checkpoint_cpu_cycles),
-                            pretty_integer(new_no_vec_memory + new_vec_memory),
+                            utils::pretty_integer(state.debug_state.cpu_cycles - state.checkpoint_state.last_checkpoint_cpu_cycles),
+                            utils::pretty_integer(new_no_vec_memory + new_vec_memory),
                             new_vec_memory as f64 / (new_no_vec_memory + new_vec_memory) as f64
                                 * 100.0
                         );
@@ -683,8 +621,8 @@ struct State {
 }
 
 struct Precomputed {
-    poseidon_16: Poseidon16,
-    poseidon_24: Poseidon24,
+    poseidon_16: utils::Poseidon16,
+    poseidon_24: utils::Poseidon24,
 }
 
 struct DebugState {
@@ -776,8 +714,8 @@ impl State {
             ap_vec: initial_ap_vec,
             pending_range_checks: BTreeMap::new(),
             precomputed: Precomputed {
-                poseidon_16: get_poseidon16().clone(),
-                poseidon_24: get_poseidon24().clone(),
+                poseidon_16: utils::get_poseidon16().clone(),
+                poseidon_24: utils::get_poseidon24().clone(),
             },
             debug_state: DebugState::init(),
             checkpoint_state: CheckpointState::init(initial_ap, initial_ap_vec),

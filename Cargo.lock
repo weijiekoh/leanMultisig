@@ -410,6 +410,7 @@ name = "lean_compiler"
 version = "0.1.0"
 dependencies = [
  "air",
+ "lean_runner",
  "lean_vm",
  "lookup",
  "p3-air",
@@ -470,8 +471,15 @@ name = "lean_runner"
 version = "0.1.0"
 dependencies = [
  "lean_vm",
+ "p3-field",
+ "p3-symmetric",
+ "p3-util",
  "rand_chacha",
  "rayon",
+ "thiserror",
+ "tracing",
+ "utils",
+ "whir-p3",
 ]
 
 [[package]]

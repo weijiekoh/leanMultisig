@@ -54,15 +54,3 @@ auditble and less complex.
 It is necessary to affix metadata to each `range_check` hint to indicate which
 set of 3 opcodes will implement it. This is to make it clear that if one of the
 3 opcodes fails, the programmer can determine which range check failed.
-
-### Refactoring the crates
-
-We need to refactor the crates such that they adhere to the principles of 
-single responsibility and the separation of concerns.
-
-- `lean_compiler`: parse and convert program source code into bytecode
-  (including compiling range check hints into actual opcodes)
-
-- `lean_vm`: VM types (bytecode instructions, memory, state), sans execution
-
-- `lean_exe`: bytecode execution

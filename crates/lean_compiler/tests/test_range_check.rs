@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use lean_vm::*;
-use lean_vm::runner::{ExecutionHistory, execute_bytecode_helper};
+use lean_runner::{ExecutionHistory, execute_bytecode_helper, execute_bytecode};
 use p3_field::PrimeCharacteristicRing;
 use lean_compiler::{parse_program, compile_program};
 use lean_compiler::{Expression, SimpleExpr, Line, SimpleLine, simplify_program, compile_to_intermediate_bytecode, compile_to_low_level_bytecode};
@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 
-fn range_check_test_cases() -> BTreeSet<(usize, usize)> {
+fn critical_test_cases() -> BTreeSet<(usize, usize)> {
     let mut test_cases = BTreeSet::new();
 
     for t in 0..200 {
@@ -21,12 +21,15 @@ fn range_check_test_cases() -> BTreeSet<(usize, usize)> {
         }
     }
 
-    // Generate random test cases
+    test_cases
+}
+
+fn random_test_cases(num_test_cases: usize) -> BTreeSet<(usize, usize)> {
     let v_max = 16777215 * 2;
     let t_max = 65536;
     let mut rng = ChaCha20Rng::seed_from_u64(0);
     
-    let num_test_cases = 10000; //16777216 * 2;
+    let mut test_cases = BTreeSet::new();
 
     for _ in 0..num_test_cases / 2 {
         let t = rng.random_range(0..t_max) as usize;
@@ -44,7 +47,6 @@ fn range_check_test_cases() -> BTreeSet<(usize, usize)> {
         }
     }
 
-    println!("generated {} test cases", test_cases.len());
     test_cases
 }
 
@@ -79,7 +81,10 @@ fn test_compile_range_checks() {
     //println!("range_check_test_cases: {:?}", range_check_test_cases().len());
 
     // Run the tests in parallel
-    range_check_test_cases().par_iter().for_each(|(v, t)| {
+    let mut test_cases = critical_test_cases();
+    test_cases.extend(random_test_cases(1000));
+    println!("Running {} test cases", test_cases.len());
+    test_cases.par_iter().for_each(|(v, t)| {
         do_test_range_check(*v, *t, false);
     });
 }
@@ -88,18 +93,18 @@ fn do_test_range_check(v: usize, t: usize, verbose: bool) {
     let max_runner_memory_size: usize = 1 << 24;
 
     let program = range_check_program(v, t);
-    let (bytecode, function_locations) = compile_program(&program);
+    let (bytecode, function_locations) = compile_program(&program); // Range checks are automatically compiled now
     
     if verbose {
         println!("Range Check Test: v: {}, t: {} ==============", v, t);
-        println!("Old bytecode: \n{}", bytecode);
+        println!("Compiled bytecode: \n{}", bytecode);
         println!("ending_pc: {}", bytecode.ending_pc);
     }
 
-    // First execution
+    // Execute the bytecode with range checks already compiled
     let mut std_out = String::new();
     let mut instruction_history = ExecutionHistory::default();
-    let first_exec = execute_bytecode_helper(
+    let result = execute_bytecode_helper(
         &bytecode,
         &[],
         &[],
@@ -109,53 +114,26 @@ fn do_test_range_check(v: usize, t: usize, verbose: bool) {
         &mut instruction_history,
         false,
         &function_locations,
-    ).unwrap();
+    );
 
-    let new_bytecode = compile_range_checks(&first_exec, &bytecode);
-    if verbose {
-        println!("New bytecode: \n{}", new_bytecode.clone().unwrap());
-        println!("ending_pc: {}\n", bytecode.ending_pc);
-    }
-
-    match new_bytecode {
-        Ok(new_bytecode) => {
-            let result = execute_bytecode_helper(
-                &new_bytecode,
-                &[],
-                &[],
-                max_runner_memory_size / 2,
-                false,
-                &mut std_out,
-                &mut instruction_history,
-                false,
-                &function_locations,
-            );
-
-            if v >= 16777216 || v >= t {
-                if result.is_err() && verbose {
-                    println!("result: {}", result.as_ref().unwrap_err());
-                }
-                assert!(
-                    matches!(result, Err(RunnerError::OutOfMemory)),
-                    "range check failed to catch OOM"
-                );
-                if verbose {
-                    println!("Executed updated bytecode: OOM as expected");
-                }
-            } else {
-                if result.is_err() && verbose {
-                    println!("result: {}", result.as_ref().unwrap_err());
-                }
-                assert!(result.is_ok());
-                if verbose {
-                    println!("Executed updated bytecode: OK");
-                }
-            }
+    if v >= 16777216 || v >= t {
+        if result.is_err() && verbose {
+            println!("result: {}", result.as_ref().unwrap_err());
         }
-        Err(err) => {
-            if verbose {
-                println!("Failed to compile range checks: {}", err);
-            }
+        assert!(
+            matches!(result, Err(RunnerError::OutOfMemory)),
+            "range check failed to catch OOM"
+        );
+        if verbose {
+            println!("Executed bytecode: OOM as expected");
+        }
+    } else {
+        if result.is_err() && verbose {
+            println!("result: {}", result.as_ref().unwrap_err());
+        }
+        assert!(result.is_ok());
+        if verbose {
+            println!("Executed bytecode: OK");
         }
     }
 }
@@ -455,7 +433,7 @@ fn test_deref() {
     assert!(execution_result.is_ok());
 }
 
-fn range_check(v: usize, t: usize) -> Result<ExecutionResult, RunnerError> {
+fn range_check(v: usize, t: usize) -> Result<lean_runner::ExecutionResult, RunnerError> {
     let starting_frame_memory = 5;
     println!("v: {}; t: {}", v, t);
     let val = F::from_usize(v);

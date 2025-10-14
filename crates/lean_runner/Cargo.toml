@@ -7,11 +7,15 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
-#utils.workspace = true
-#rand.workspace = true
-#rayon.workspace = true
-#tracing.workspace = true
 lean_vm.workspace = true
+utils.workspace = true
+p3-field.workspace = true
+p3-symmetric.workspace = true
+p3-util.workspace = true
+whir-p3.workspace = true
+rayon.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 rayon = "1.11.0"
