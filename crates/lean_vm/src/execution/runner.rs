@@ -106,7 +106,7 @@ pub fn execute_bytecode(
 
 /// Helper function that performs the actual bytecode execution
 #[allow(clippy::too_many_arguments)] // TODO
-fn execute_bytecode_helper(
+pub fn execute_bytecode_helper(
     bytecode: &Bytecode,
     public_input: &[F],
     private_input: &[F],
